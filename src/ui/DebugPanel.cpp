@@ -6,7 +6,7 @@ namespace vox {
 void draw_debug_panel(App& app) {
     auto& c = app.config();
     ImGui::SetNextWindowSize(ImVec2(380.0f, 0.0f), ImGuiCond_FirstUseEver);
-    ImGui::Begin("metal-ocean");
+    ImGui::Begin("vox-ocean");
     ImGui::Text("frame dt: %.2f ms", app.clock().delta_seconds() * 1000.0);
 
     if (ImGui::CollapsingHeader("Cascades", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -40,6 +40,13 @@ void draw_debug_panel(App& app) {
     if (ImGui::CollapsingHeader("Debug view")) {
         const char* names[] = {"final","normal","folding","fresnel","reflection","refraction","sss"};
         ImGui::Combo("view", &app.debug_view, names, IM_ARRAYSIZE(names));
+    }
+    if (ImGui::CollapsingHeader("Voxels", ImGuiTreeNodeFlags_DefaultOpen)) {
+        auto& v = c.voxel;
+        ImGui::SliderInt("grid extent",    &v.grid_extent,   32,   512);
+        ImGui::SliderFloat("voxel size (m)",  &v.voxel_size_m,  0.1f, 2.0f);
+        ImGui::SliderFloat("height step (m)", &v.height_step_m, 0.05f, 1.0f);
+        ImGui::SliderFloat("base depth (m)",  &v.base_depth_m,  1.0f, 30.0f);
     }
     ImGui::End();
 }
