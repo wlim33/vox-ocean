@@ -18,6 +18,7 @@ private:
     void create_cubemap(const MetalContext& ctx, int size);
     void* pso_ = nullptr;
     void* pso_cube_ = nullptr;
+    void* dss_off_ = nullptr;   // depth write OFF, compare Always (sky never occludes)
     Texture cubemap_{};
     uint64_t last_config_hash_ = 0;
 };

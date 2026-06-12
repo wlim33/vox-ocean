@@ -14,12 +14,24 @@
 namespace vox {
 
 void SkyRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
+    // The main pass attaches a Depth32Float buffer (set in engine_attach_view),
+    // so the fullscreen sky PSO must declare the matching depth format or the
+    // pipeline assert-fails at draw. The sky is a background: it must never
+    // write or test depth, hence the write-off / compare-Always state below.
     RenderPSODesc d; d.vertex_fn = "sky_vs"; d.fragment_fn = "sky_fs";
+    d.depth_pixel_format = (unsigned)MTLPixelFormatDepth32Float;
     pso_ = cache.render_pso(ctx, d);
 
+    // The cubemap bake pass has no depth attachment, so leave depth_pixel_format = 0.
     RenderPSODesc d2; d2.vertex_fn = "sky_cube_vs"; d2.fragment_fn = "sky_cube_fs";
     d2.color_pixel_format = (unsigned)MTLPixelFormatRGBA16Float;
     pso_cube_ = cache.render_pso(ctx, d2);
+
+    id<MTLDevice> dev = (__bridge id<MTLDevice>)ctx.device;
+    MTLDepthStencilDescriptor* dd = [MTLDepthStencilDescriptor new];
+    dd.depthCompareFunction = MTLCompareFunctionAlways;
+    dd.depthWriteEnabled = NO;
+    dss_off_ = (__bridge_retained void*)[dev newDepthStencilStateWithDescriptor:dd];
 }
 
 void SkyRenderer::encode_full_screen(void* encoder, const OrbitCamera& cam, const Config& cfg) {
@@ -34,6 +46,7 @@ void SkyRenderer::encode_full_screen(void* encoder, const OrbitCamera& cam, cons
     u.camera_pos = (simd_float3){ cam.position().x, cam.position().y, cam.position().z };
 
     [enc setRenderPipelineState:(__bridge id<MTLRenderPipelineState>)pso_];
+    [enc setDepthStencilState:(__bridge id<MTLDepthStencilState>)dss_off_];
     [enc setFragmentBytes:&u length:sizeof(SkyUniforms) atIndex:0];
     [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 }

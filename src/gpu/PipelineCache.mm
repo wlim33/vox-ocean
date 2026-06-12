@@ -29,6 +29,18 @@ void* PipelineCache::render_pso(const MetalContext& ctx, const RenderPSODesc& d)
     desc.vertexFunction = vfn;
     desc.fragmentFunction = ffn;
     desc.colorAttachments[0].pixelFormat = (MTLPixelFormat)d.color_pixel_format;
+    if (d.depth_pixel_format) desc.depthAttachmentPixelFormat = (MTLPixelFormat)d.depth_pixel_format;
+    if (d.vertex_stride) {
+        MTLVertexDescriptor* vd = [MTLVertexDescriptor new];
+        for (int i = 0; i < 2; ++i) {
+            if (!d.attrs[i].format) continue;
+            vd.attributes[i].format = (MTLVertexFormat)d.attrs[i].format;
+            vd.attributes[i].offset = d.attrs[i].offset;
+            vd.attributes[i].bufferIndex = 0;
+        }
+        vd.layouts[0].stride = d.vertex_stride;
+        desc.vertexDescriptor = vd;
+    }
     if (d.blending) {
         desc.colorAttachments[0].blendingEnabled = YES;
         desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;

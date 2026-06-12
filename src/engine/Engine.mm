@@ -5,6 +5,7 @@
 #include "gpu/PipelineCache.h"
 #include "ocean/Simulation.h"
 #include "render/SkyRenderer.h"
+#include "render/VoxelRenderer.h"
 #include "ui/ImGuiBackend.h"
 #include "ui/DebugPanel.h"
 #import <MetalKit/MetalKit.h>
@@ -25,6 +26,7 @@ public:
     std::unique_ptr<App> app;
     Simulation sim;
     SkyRenderer sky;
+    VoxelRenderer voxels;
     ImGuiBackend imgui;
     // Swift owns the view; __weak so a torn-down view reads as nil in
     // engine_render instead of being kept alive (or dangling) by the engine.
@@ -57,6 +59,7 @@ Engine* engine_create(const char* config_path, const char* overrides) {
 
     e->sky.init(e->ctx, e->cache);
     e->sim.init(e->ctx, e->cache, e->app->config());
+    e->voxels.init(e->ctx, e->cache);
     // TODO(task-13): e->bench.start(e->app->config(), config_hash(e->app->config()));
     return e;
 }
@@ -105,10 +108,12 @@ void engine_render(Engine* e) {
 
     e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, e->app->config());
     e->sim.rebuild_if_dirty(e->ctx, e->app->config());
+    e->voxels.rebuild_if_dirty(e->ctx, e->app->config());
     float sim_time = (float)e->app->clock().total_seconds();
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
+    e->voxels.encode_voxelize((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count());
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
@@ -117,7 +122,7 @@ void engine_render(Engine* e) {
 
     id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
     e->sky.encode_full_screen((__bridge void*)enc, e->app->camera(), e->app->config());
-    // Task 11 inserts the voxel draw here.
+    e->voxels.encode_draw((__bridge void*)enc, e->app->camera(), e->app->config(), e->sky, e->frame_index);
     if (ui) e->imgui.render((__bridge void*)cb, (__bridge void*)rp, (__bridge void*)enc);
     [enc endEncoding];
 
