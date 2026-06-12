@@ -15,8 +15,6 @@
 #include <string>
 #include <vector>
 
-// TODO(task-13): bench harness wiring returns when src/bench is ported.
-
 namespace vox {
 
 class Engine {
@@ -71,6 +69,11 @@ void engine_attach_view(Engine* e, void* mtk_view) {
     e->view.clearColor = MTLClearColorMake(0.02, 0.05, 0.10, 1.0);
     e->imgui.init(e->ctx, (__bridge void*)e->view);
     e->imgui_ready = true;
+    // Seed the camera aspect; before layout drawableSize can be 0x0, in which
+    // case the first Resize event corrects it.
+    CGSize ds = e->view.drawableSize;
+    if (ds.width > 0 && ds.height > 0)
+        e->app->camera().set_aspect((float)(ds.width / ds.height));
 }
 
 void engine_resize(Engine* e, int w, int h) {
