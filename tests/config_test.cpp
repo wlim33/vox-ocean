@@ -85,3 +85,50 @@ TEST(Config, VoxelValuesAreClamped) {
     auto r2 = vox::apply_overrides(vox::load_config_from_string(""), {"voxel.grid_extent=-5"});
     EXPECT_EQ(r2.config.voxel.grid_extent, 8);
 }
+
+TEST(Config, VoxelWorldKnobsParse) {
+    auto r = vox::load_config_from_string(R"([voxel]
+height_cells = 96
+floor_seed = 1234
+[march]
+max_steps = 256
+render_scale = 0.5
+)");
+    EXPECT_EQ(r.config.voxel.height_cells, 96);
+    EXPECT_EQ(r.config.voxel.floor_seed, 1234);
+    EXPECT_EQ(r.config.march.max_steps, 256);
+    EXPECT_FLOAT_EQ(r.config.march.render_scale, 0.5f);
+}
+
+TEST(Config, MarchKnobsClampAndWarn) {
+    auto r = vox::load_config_from_string(R"([march]
+max_steps = 99999
+render_scale = 0.05
+)");
+    EXPECT_EQ(r.config.march.max_steps, 4096);
+    EXPECT_FLOAT_EQ(r.config.march.render_scale, 0.25f);
+    EXPECT_EQ(r.warnings.size(), 2u);
+}
+
+TEST(Config, VoxelWorldOverrides) {
+    auto r = vox::apply_overrides(vox::load_config_from_string(""),
+        {"voxel.height_cells=128", "voxel.floor_seed=42",
+         "march.max_steps=128", "march.render_scale=0.75"});
+    EXPECT_EQ(r.config.voxel.height_cells, 128);
+    EXPECT_EQ(r.config.voxel.floor_seed, 42);
+    EXPECT_EQ(r.config.march.max_steps, 128);
+    EXPECT_FLOAT_EQ(r.config.march.render_scale, 0.75f);
+}
+
+TEST(Config, HashCoversVoxelWorldKnobs) {
+    vox::Config a, b;
+    EXPECT_EQ(vox::config_hash(a), vox::config_hash(b));
+    b.voxel.height_cells = 128;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.march.render_scale = 0.5f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.voxel.floor_seed = 9;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.march.max_steps = 64;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+}

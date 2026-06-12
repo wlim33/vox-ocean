@@ -33,3 +33,9 @@ grid_extent   = 192
 voxel_size_m  = 0.5
 height_step_m = 0.25
 base_depth_m  = 10.0
+height_cells  = 64
+floor_seed    = 7
+
+[march]
+max_steps    = 512
+render_scale = 1.0

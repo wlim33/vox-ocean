@@ -35,6 +35,8 @@ struct ShadingConfig {
     glm::vec3 extinction_rgb   {0.9f, 0.5f, 0.3f};
     float sun_shininess        = 256.0f;
     glm::vec3 sun_color        {1.4f, 1.25f, 1.0f};
+    glm::vec3 sand_color       {0.76f, 0.70f, 0.50f};
+    glm::vec3 rock_color       {0.35f, 0.33f, 0.30f};
 };
 
 struct VoxelConfig {
@@ -42,6 +44,13 @@ struct VoxelConfig {
     float voxel_size_m  = 0.5f;  // world size of one voxel
     float height_step_m = 0.25f; // vertical quantization step
     float base_depth_m  = 10.0f; // diorama floor below y=0
+    int   height_cells  = 64;    // vertical cells above the diorama base
+    int   floor_seed    = 7;     // procedural ocean-floor seed
+};
+
+struct MarchConfig {
+    int   max_steps    = 512;   // DDA safety/perf lever
+    float render_scale = 1.0f;  // march-target resolution factor (iOS escape hatch)
 };
 
 struct SkyConfig {
@@ -71,6 +80,7 @@ struct Config {
 
     WaveConfig wave;
     VoxelConfig voxel;
+    MarchConfig march;
 
     SkyConfig sky;
     ShadingConfig shading;

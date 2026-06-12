@@ -14,7 +14,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "cascade_count",
     "max_in_flight_frames",
-    "cascades","wave","sky","shading","bench","voxel"
+    "cascades","wave","sky","shading","bench","voxel","march"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -55,6 +55,25 @@ void load_voxel(const toml::table& t, VoxelConfig& v, LoadResult& r) {
         if (val < 0.5f || val > 100.0f) r.warnings.push_back("voxel.base_depth_m out of [0.5,100.0], clamped");
         v.base_depth_m = clamp(val, 0.5f, 100.0f);
     }
+    if (auto n = t["height_cells"].value<int64_t>()) {
+        int val = (int)*n;
+        if (val < 16 || val > 512) r.warnings.push_back("voxel.height_cells out of [16,512], clamped");
+        v.height_cells = clamp(val, 16, 512);
+    }
+    if (auto n = t["floor_seed"].value<int64_t>()) v.floor_seed = (int)*n;
+}
+
+void load_march(const toml::table& t, MarchConfig& m, LoadResult& r) {
+    if (auto n = t["max_steps"].value<int64_t>()) {
+        int val = (int)*n;
+        if (val < 32 || val > 4096) r.warnings.push_back("march.max_steps out of [32,4096], clamped");
+        m.max_steps = clamp(val, 32, 4096);
+    }
+    if (auto n = t["render_scale"].value<double>()) {
+        float val = (float)*n;
+        if (val < 0.25f || val > 1.0f) r.warnings.push_back("march.render_scale out of [0.25,1.0], clamped");
+        m.render_scale = clamp(val, 0.25f, 1.0f);
+    }
 }
 
 } // namespace
@@ -80,6 +99,7 @@ LoadResult load_config_from_string(const std::string& text) {
 
     if (auto* w = tbl["wave"].as_table())  load_wave(*w, c.wave);
     if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel, r);
+    if (auto* mc = tbl["march"].as_table()) load_march(*mc, c.march, r);
     // sky, shading, cascades, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -123,6 +143,22 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 if (f < 0.5f || f > 100.0f) in.warnings.push_back("voxel.base_depth_m out of [0.5,100.0], clamped");
                 in.config.voxel.base_depth_m = clamp(f, 0.5f, 100.0f);
             }
+            else if (key == "voxel.height_cells") {
+                int n = std::stoi(val);
+                if (n < 16 || n > 512) in.warnings.push_back("voxel.height_cells out of [16,512], clamped");
+                in.config.voxel.height_cells = clamp(n, 16, 512);
+            }
+            else if (key == "voxel.floor_seed")  in.config.voxel.floor_seed = std::stoi(val);
+            else if (key == "march.max_steps") {
+                int n = std::stoi(val);
+                if (n < 32 || n > 4096) in.warnings.push_back("march.max_steps out of [32,4096], clamped");
+                in.config.march.max_steps = clamp(n, 32, 4096);
+            }
+            else if (key == "march.render_scale") {
+                float f = std::stof(val);
+                if (f < 0.25f || f > 1.0f) in.warnings.push_back("march.render_scale out of [0.25,1.0], clamped");
+                in.config.march.render_scale = clamp(f, 0.25f, 1.0f);
+            }
             else if (key == "bench.bench_mode")           in.config.bench.bench_mode    = (val == "true" || val == "1");
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
@@ -146,6 +182,11 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.voxel.voxel_size_m,  sizeof(c.voxel.voxel_size_m),  h);
     h = fnv1a64(&c.voxel.height_step_m, sizeof(c.voxel.height_step_m), h);
     h = fnv1a64(&c.voxel.base_depth_m,  sizeof(c.voxel.base_depth_m),  h);
+    h = fnv1a64(&c.voxel.height_cells,  sizeof(c.voxel.height_cells),  h);
+    h = fnv1a64(&c.voxel.floor_seed,    sizeof(c.voxel.floor_seed),    h);
+    // March
+    h = fnv1a64(&c.march.max_steps,    sizeof(c.march.max_steps),    h);
+    h = fnv1a64(&c.march.render_scale, sizeof(c.march.render_scale), h);
     // Grid / cascades
     h = fnv1a64(&c.cascade_count,       sizeof(c.cascade_count),       h);
     for (int i = 0; i < 4; ++i) {
