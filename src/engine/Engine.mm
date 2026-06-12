@@ -71,6 +71,8 @@ Engine* engine_create(const char* config_path, const char* overrides) {
     return e;
 }
 
+// Contract: only call at process teardown. In-flight completed handlers hold
+// a raw Engine*; destroying mid-session would require draining the queue first.
 void engine_destroy(Engine* e) { delete e; }
 
 void engine_attach_view(Engine* e, void* mtk_view) {
@@ -101,6 +103,8 @@ void engine_render(Engine* e) {
     MTKView* view = e->view;
     if (!view) return;
 
+    // Created once; not runtime-tunable. Recreate if max_in_flight_frames is
+    // ever exposed in the debug panel.
     if (!e->inflight)
         e->inflight = dispatch_semaphore_create(
             MAX(1, MIN(3, e->app->config().max_in_flight_frames)));
@@ -151,7 +155,8 @@ void engine_render(Engine* e) {
 
     // Completed handler runs on a background queue: capture POD by value and
     // the engine by raw pointer (it outlives the queue in practice). bench's
-    // record() and the semaphore signal are both safe to call off-thread.
+    // Handlers on one queue run serially, so out_ is single-threaded; the
+    // frame counter is atomic for the concurrent main-thread polls.
     double cpu_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - cpu_t0).count();
     dispatch_semaphore_t inflight = e->inflight;

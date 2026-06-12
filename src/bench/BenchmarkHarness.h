@@ -1,5 +1,6 @@
 #pragma once
 #include "core/Config.h"
+#include <atomic>
 #include <fstream>
 #include <string>
 #include <chrono>
@@ -26,7 +27,10 @@ private:
     std::ofstream out_;
     int  warmup_ = 60;
     int  measure_ = 600;
-    int  frame_idx_ = 0;
+    // Atomic: incremented by record() on the Metal completed-handler queue
+    // while the main thread polls current_frame()/should_exit(). Handlers on
+    // one queue are serialized, so out_ is only ever touched by one thread.
+    std::atomic<int> frame_idx_{0};
     uint64_t hash_ = 0;
 };
 }
