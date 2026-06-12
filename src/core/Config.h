@@ -30,7 +30,8 @@ struct WaveConfig {
 struct ShadingConfig {
     float foam_threshold = 0.15f;
     float foam_strength  = 1.0f;
-    float depth_fog_density = 0.05f;
+    // Tuned for M2's real water-path lengths: floor fades out around ~8m.
+    float depth_fog_density = 0.10f;
     glm::vec3 deep_water_color {0.01f, 0.06f, 0.10f};
     glm::vec3 extinction_rgb   {0.9f, 0.5f, 0.3f};
     float sun_shininess        = 256.0f;

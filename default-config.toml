@@ -19,7 +19,7 @@ turbidity          = 3.0
 [shading]
 foam_threshold     = 0.15
 foam_strength      = 1.0
-depth_fog_density  = 0.05
+depth_fog_density  = 0.10
 
 [bench]
 bench_mode      = false
