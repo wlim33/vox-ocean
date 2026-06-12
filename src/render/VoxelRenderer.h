@@ -18,6 +18,11 @@ public:
                          Cascade* const* cascades, int cascade_count);
     void encode_draw(void* render_encoder, const OrbitCamera& cam, const Config& cfg,
                      const SkyRenderer& sky, int frame_index);
+    // Ring slots are paced by MTKView's drawable acquisition (3 drawables):
+    // the CPU blocks for a free drawable before overwriting slot N%3, so a
+    // slot is never written while its 3-frames-ago GPU read is in flight.
+    // If RING ever diverges from maximumDrawableCount, add an explicit
+    // dispatch_semaphore (see config max_in_flight_frames).
     static constexpr int RING = 3;
 private:
     Buffer cube_vbo_{}, cube_ibo_{};

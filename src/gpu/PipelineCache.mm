@@ -20,6 +20,8 @@ void* PipelineCache::render_pso(const MetalContext& ctx, const RenderPSODesc& d)
         + "|d" + std::to_string(d.depth_pixel_format)
         + "|s" + std::to_string(d.vertex_stride)
         + "|b" + std::to_string(d.blending ? 1 : 0);
+    for (const auto& a : d.attrs)
+        key += "|a" + std::to_string(a.format) + ":" + std::to_string(a.offset);
     auto it = render_cache_.find(key);
     if (it != render_cache_.end()) return it->second;
 
