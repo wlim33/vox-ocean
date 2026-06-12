@@ -40,8 +40,7 @@ public:
     float column_center_x(int ix) const;
     float column_center_z(int iz) const { return column_center_x(iz); }
     float cell_bottom_y(int iy) const { return -p_.base_depth_m + iy * p_.height_step_m; }
-    // Floor quantization policy (anti-flicker, user decision) — unchanged
-    // from the v1 VoxelGrid.
+    // Floor quantization policy (anti-flicker, user decision).
     float quantize_height(float h) const;
     // Cells, counted up from the diorama base, that a water column of
     // (unquantized) surface height h fills. Clamped to [1, height_cells].
