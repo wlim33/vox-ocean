@@ -10,7 +10,10 @@ Real-time voxelized FFT ocean for macOS and iOS. Metal + SwiftUI,
 C++20 / Objective-C++ engine with direct Swift↔C++ interop.
 
 - Phillips spectrum with directional swell, Stockham radix-2 inverse FFT in compute
-- Compute voxelizer: displacement maps → floor-quantized water columns, one instanced draw
+- True voxel world: per-frame compute fills a 3D material grid (water, sand, rock)
+  from the displacement maps, floor-quantized; procedural seeded ocean floor
+- Ray-marched rendering: full-screen DDA through the grid, composited over the sky;
+  scalable march resolution (`march.render_scale`)
 - Finite diorama with Beer–Lambert depth-tinted side walls, Jacobian foam on crest voxels
 - Preetham sky baked to a cubemap; ACES tonemap
 
@@ -38,8 +41,9 @@ the ImGui panel. Settings load from `default-config.toml`; override with
 runs a deterministic camera orbit (60 warm-up + 600 measured frames) and
 writes per-frame CPU/GPU timings to `bench-<timestamp>.csv` (working
 directory on macOS, app Documents on iOS). The CSV header records the active
-hyperparameters: `voxel.grid_extent`, `voxel.voxel_size_m`,
-`voxel.height_step_m`, `voxel.base_depth_m`, `wave` cascade count and FFT size.
+hyperparameters: the `voxel` grid dimensions and floor seed, the `march`
+step budget and render scale, `wave.max_wavelength_m`, cascade count and
+FFT size.
 
 ## Tests
 
