@@ -69,6 +69,7 @@ void VoxelRenderer::rebuild_if_dirty(const MetalContext& ctx, const Config& cfg)
     destroy_texture(world_grid_);
     destroy_texture(surface_tex_);
     destroy_buffer(terrain_staging_);
+    destroy_buffer(ripple_zero_staging_);
 
     // terrain_grid_ is blit-uploaded once then read-only; world_grid_ is
     // compute-written each frame; surface_tex_ carries per-column water state.
@@ -85,6 +86,14 @@ void VoxelRenderer::rebuild_if_dirty(const MetalContext& ctx, const Config& cfg)
         ripple_[i] = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent, TexFormat::R32F);
     }
     ripple_phase_ = 0;
+
+    // Zero-fill staging buffer for the ripple ring; blitted into all three
+    // textures by encode_terrain_upload_if_dirty to avoid undefined Metal
+    // contents (NaN would propagate through the laplacian and never decay).
+    size_t ripple_bytes = (size_t)extent * (size_t)extent * sizeof(float);
+    ripple_zero_staging_ = make_buffer(ctx, ripple_bytes, true);
+    std::memset(ripple_zero_staging_.cpu_ptr, 0, ripple_bytes);
+    ripple_dirty_ = true;
 
     VoxelWorld world({ extent, hc, cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
                        cfg.voxel.base_depth_m });
@@ -108,23 +117,45 @@ void VoxelRenderer::rebuild_if_dirty(const MetalContext& ctx, const Config& cfg)
 }
 
 void VoxelRenderer::encode_terrain_upload_if_dirty(void* command_buffer) {
-    if (!terrain_dirty_) return;
+    if (!terrain_dirty_ && !ripple_dirty_) return;
     id<MTLCommandBuffer> cb = (__bridge id<MTLCommandBuffer>)command_buffer;
     int extent = built_extent_;
     int hc     = built_height_cells_;
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-    [blit copyFromBuffer:(__bridge id<MTLBuffer>)terrain_staging_.handle
-            sourceOffset:0
-       sourceBytesPerRow:(NSUInteger)extent
-     sourceBytesPerImage:(NSUInteger)extent * (NSUInteger)hc
-              sourceSize:MTLSizeMake((NSUInteger)extent, (NSUInteger)hc, (NSUInteger)extent)
-               toTexture:(__bridge id<MTLTexture>)terrain_grid_.handle
-        destinationSlice:0
-        destinationLevel:0
-       destinationOrigin:MTLOriginMake(0, 0, 0)];
+
+    if (terrain_dirty_) {
+        [blit copyFromBuffer:(__bridge id<MTLBuffer>)terrain_staging_.handle
+                sourceOffset:0
+           sourceBytesPerRow:(NSUInteger)extent
+         sourceBytesPerImage:(NSUInteger)extent * (NSUInteger)hc
+                  sourceSize:MTLSizeMake((NSUInteger)extent, (NSUInteger)hc, (NSUInteger)extent)
+                   toTexture:(__bridge id<MTLTexture>)terrain_grid_.handle
+            destinationSlice:0
+            destinationLevel:0
+           destinationOrigin:MTLOriginMake(0, 0, 0)];
+        terrain_dirty_ = false;
+    }
+
+    if (ripple_dirty_) {
+        NSUInteger row_bytes   = (NSUInteger)extent * sizeof(float);
+        NSUInteger image_bytes = (NSUInteger)extent * row_bytes;
+        MTLSize    size        = MTLSizeMake((NSUInteger)extent, (NSUInteger)extent, 1);
+        for (int i = 0; i < 3; ++i) {
+            [blit copyFromBuffer:(__bridge id<MTLBuffer>)ripple_zero_staging_.handle
+                    sourceOffset:0
+               sourceBytesPerRow:row_bytes
+             sourceBytesPerImage:image_bytes
+                      sourceSize:size
+                       toTexture:(__bridge id<MTLTexture>)ripple_[i].handle
+                destinationSlice:0
+                destinationLevel:0
+               destinationOrigin:MTLOriginMake(0, 0, 0)];
+        }
+        ripple_dirty_ = false;
+    }
+
     [blit endEncoding];
-    terrain_dirty_ = false;
 }
 
 void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, float dt) {
@@ -139,7 +170,7 @@ void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, floa
     if (cfg.ripple.rain_rate > 0.0f) {
         static thread_local std::mt19937 rng(0x5EAF00Du);   // fixed seed: bench determinism
         std::uniform_real_distribution<float> uni(0.0f, (float)extent);
-        rain_accum_ += cfg.ripple.rain_rate * dt;
+        rain_accum_ = std::min(rain_accum_ + cfg.ripple.rain_rate * dt, (float)MAX_SPLASHES);
         while (rain_accum_ >= 1.0f && count < MAX_SPLASHES) {
             rain_accum_ -= 1.0f;
             splashes[count++] = { uni(rng), uni(rng), 2.0f, -0.35f };

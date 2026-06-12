@@ -19,8 +19,9 @@ public:
     // Recreates grid textures + regenerates terrain when extent / height_cells
     // / floor_seed change.
     void rebuild_if_dirty(const MetalContext& ctx, const Config& cfg);
-    // Stages freshly generated terrain into the private 3D texture. Creates
-    // its own blit encoder; call BEFORE encode_world_fill in the frame.
+    // Stages freshly generated terrain and zeroes the ripple ring into their
+    // private textures. Creates its own blit encoder; call BEFORE
+    // encode_world_fill in the frame.
     void encode_terrain_upload_if_dirty(void* command_buffer);
     // Advances the ripple sim one fixed 1/60s step and injects this frame's
     // splashes (debug rain). Call before encode_world_fill.
@@ -42,6 +43,7 @@ private:
     Texture terrain_grid_{}, world_grid_{}, surface_tex_{}, march_target_{};
     // staged terrain lives until the next rebuild; the blit (encode_terrain_upload_if_dirty) may run a frame later than generation
     Buffer  terrain_staging_{};
+    Buffer  ripple_zero_staging_{};   // zeroed float buffer blitted into all three ripple_ textures after rebuild
     Buffer  fill_uniforms_[RING]{}, march_uniforms_[RING]{};
     Texture ripple_[3]{};            // wave-equation ping-pong ring (prev/cur/next)
     int     ripple_phase_ = 0;
@@ -52,6 +54,7 @@ private:
     int     built_extent_ = 0, built_height_cells_ = 0, built_seed_ = 0;
     int     target_w_ = 0, target_h_ = 0;
     bool    terrain_dirty_ = false;
+    bool    ripple_dirty_  = false;
     void*   pso_fill_ = nullptr;
     void*   pso_march_ = nullptr;
     void*   pso_composite_ = nullptr;
