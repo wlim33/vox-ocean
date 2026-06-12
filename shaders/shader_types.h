@@ -42,26 +42,6 @@ struct FftPassUniforms {
 
 #define MAX_CASCADES 4
 
-struct OceanSurfaceUniforms {
-    int   cascade_count;
-    float cascade_size[MAX_CASCADES];
-    float cascade_normal_weight[MAX_CASCADES];
-    vec3  sun_dir;
-    float _pad0;
-    vec3  sun_color;
-    float sun_shininess;
-    vec3  deep_water_color;
-    float depth_fog_density;
-    vec3  extinction_rgb;
-    float base_thickness_m;
-    vec3  sss_color;
-    float sss_strength;
-    float foam_threshold;
-    float foam_strength;
-    float displacement_range_m;
-    int   debug_view;
-};
-
 struct VoxelizeUniforms {
     int   grid_extent;
     float voxel_size_m;
@@ -81,7 +61,7 @@ struct VoxelSurfaceUniforms {
     int   grid_extent;
     float voxel_size_m;
     float base_depth_m;
-    float displacement_range_m;
+    float _spad_a;          // pad to 16-byte boundary before vec3
     vec3  sun_dir;          float _spad0;   // sun_dir must be unit length (normalized CPU-side)
     vec3  sun_color;        float sun_shininess;
     vec3  deep_water_color; float depth_fog_density;

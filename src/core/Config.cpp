@@ -12,9 +12,8 @@ template<typename T>
 T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 
 const std::vector<std::string> KNOWN_TOP_KEYS = {
-    "cascade_count","spectrum_precision","disp_normal_precision",
-    "displacement_range_m",
-    "max_in_flight_frames","target_fps_cap",
+    "cascade_count",
+    "max_in_flight_frames",
     "cascades","wave","sky","shading","bench","voxel"
 };
 
@@ -75,8 +74,6 @@ LoadResult load_config_from_string(const std::string& text) {
         if (n < 1 || n > 4) r.warnings.push_back("cascade_count out of [1,4], clamped");
         c.cascade_count = clamp(n, 1, 4);
     }
-    if (auto v = tbl["displacement_range_m"].value<double>())
-        c.displacement_range_m = clamp((float)*v, 1.0f, 30.0f);
     if (auto v = tbl["max_in_flight_frames"].value<int64_t>())
         c.max_in_flight_frames = clamp((int)*v, 1, 3);
 
@@ -148,28 +145,20 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.voxel.base_depth_m,  sizeof(c.voxel.base_depth_m),  h);
     // Grid / cascades
     h = fnv1a64(&c.cascade_count,       sizeof(c.cascade_count),       h);
-    h = fnv1a64(&c.displacement_range_m,sizeof(c.displacement_range_m),h);
     for (int i = 0; i < 4; ++i) {
-        h = fnv1a64(&c.cascades[i].size_m,       sizeof(float), h);
-        h = fnv1a64(&c.cascades[i].resolution,   sizeof(int),   h);
-        h = fnv1a64(&c.cascades[i].normal_weight,sizeof(float), h);
+        h = fnv1a64(&c.cascades[i].size_m,     sizeof(float), h);
+        h = fnv1a64(&c.cascades[i].resolution, sizeof(int),   h);
     }
-    // Precision
-    h = fnv1a64(&c.spectrum_precision,     sizeof(c.spectrum_precision),     h);
-    h = fnv1a64(&c.disp_normal_precision,  sizeof(c.disp_normal_precision),  h);
     // Sky
     h = fnv1a64(&c.sky.cubemap_resolution, sizeof(c.sky.cubemap_resolution), h);
     h = fnv1a64(&c.sky.sun_elevation_rad,  sizeof(c.sky.sun_elevation_rad),  h);
     h = fnv1a64(&c.sky.sun_azimuth_rad,    sizeof(c.sky.sun_azimuth_rad),    h);
     h = fnv1a64(&c.sky.turbidity,          sizeof(c.sky.turbidity),          h);
     // Shading
-    h = fnv1a64(&c.shading.foam_threshold, sizeof(c.shading.foam_threshold), h);
-    h = fnv1a64(&c.shading.foam_strength,  sizeof(c.shading.foam_strength),  h);
-    h = fnv1a64(&c.shading.sss_strength,   sizeof(c.shading.sss_strength),   h);
+    h = fnv1a64(&c.shading.foam_threshold,    sizeof(c.shading.foam_threshold),    h);
+    h = fnv1a64(&c.shading.foam_strength,     sizeof(c.shading.foam_strength),     h);
     h = fnv1a64(&c.shading.depth_fog_density, sizeof(c.shading.depth_fog_density), h);
-    h = fnv1a64(&c.shading.base_thickness_m,  sizeof(c.shading.base_thickness_m),  h);
     h = fnv1a64(&c.shading.sun_shininess,     sizeof(c.shading.sun_shininess),     h);
-    h = fnv1a64(&c.shading.tonemap,           sizeof(c.shading.tonemap),           h);
     // Bench (hash bench_mode + frame counts; skip output_path to avoid string pointer instability)
     h = fnv1a64(&c.bench.bench_mode,      sizeof(c.bench.bench_mode),      h);
     h = fnv1a64(&c.bench.warmup_frames,   sizeof(c.bench.warmup_frames),   h);
@@ -179,7 +168,6 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(c.bench.output_path.data(), c.bench.output_path.size(), h);
     // Frame controls
     h = fnv1a64(&c.max_in_flight_frames,  sizeof(c.max_in_flight_frames),  h);
-    h = fnv1a64(&c.target_fps_cap,        sizeof(c.target_fps_cap),        h);
     return h;
 }
 

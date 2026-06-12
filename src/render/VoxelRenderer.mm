@@ -139,7 +139,7 @@ void VoxelRenderer::encode_draw(void* render_encoder, const OrbitCamera& cam, co
     su.grid_extent = extent;
     su.voxel_size_m = cfg.voxel.voxel_size_m;
     su.base_depth_m = cfg.voxel.base_depth_m;
-    su.displacement_range_m = cfg.displacement_range_m;
+    su._spad_a = 0.0f;
     // sun_dir MUST be unit length (shader contract) — mirror SkyRenderer's
     // elevation/azimuth -> direction formula so sky and specular agree.
     float ce = std::cos(cfg.sky.sun_elevation_rad), se = std::sin(cfg.sky.sun_elevation_rad);

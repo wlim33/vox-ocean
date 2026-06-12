@@ -15,7 +15,6 @@ void draw_debug_panel(App& app) {
             ImGui::PushID(i);
             ImGui::Text("Cascade %d", i);
             ImGui::SliderFloat("size m", &c.cascades[i].size_m, 1.0f, 500.0f);
-            ImGui::SliderFloat("normal w", &c.cascades[i].normal_weight, 0.0f, 2.0f);
             ImGui::PopID();
         }
     }
@@ -34,7 +33,6 @@ void draw_debug_panel(App& app) {
     if (ImGui::CollapsingHeader("Shading")) {
         ImGui::SliderFloat("foam thresh",&c.shading.foam_threshold, 0.0f, 1.0f);
         ImGui::SliderFloat("foam str",   &c.shading.foam_strength,  0.0f, 4.0f);
-        ImGui::SliderFloat("sss str",    &c.shading.sss_strength,   0.0f, 4.0f);
         ImGui::SliderFloat("fog density",&c.shading.depth_fog_density, 0.0f, 0.5f);
     }
     if (ImGui::CollapsingHeader("Debug view")) {

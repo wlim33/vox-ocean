@@ -7,14 +7,11 @@
 
 namespace vox {
 
-enum class Precision { Fp16, Fp32 };
-enum class Tonemap { None, Reinhard, Aces };
 enum class CameraPath { Static, Orbit, Flyby };
 
 struct CascadeConfig {
     float size_m = 250.0f;
     int   resolution = 256;
-    float normal_weight = 1.0f;
 };
 
 struct WaveConfig {
@@ -29,15 +26,11 @@ struct WaveConfig {
 struct ShadingConfig {
     float foam_threshold = 0.15f;
     float foam_strength  = 1.0f;
-    float sss_strength   = 0.5f;
-    glm::vec3 sss_color  {0.1f, 0.55f, 0.45f};
     float depth_fog_density = 0.05f;
-    float base_thickness_m  = 4.0f;
     glm::vec3 deep_water_color {0.01f, 0.06f, 0.10f};
     glm::vec3 extinction_rgb   {0.9f, 0.5f, 0.3f};
     float sun_shininess        = 256.0f;
     glm::vec3 sun_color        {1.4f, 1.25f, 1.0f};
-    Tonemap tonemap = Tonemap::Aces;
 };
 
 struct VoxelConfig {
@@ -67,22 +60,18 @@ struct Config {
     // Patch sizes use coprime/irrational-ish ratios so the cascades don't
     // reinforce on a regular grid (which produces visible tile seams).
     std::array<CascadeConfig, 4> cascades {
-        CascadeConfig{271.0f, 256, 1.0f},
-        CascadeConfig{ 73.0f, 256, 1.0f},
-        CascadeConfig{ 17.0f, 256, 1.0f},
-        CascadeConfig{  3.7f, 256, 1.0f}};
-    Precision spectrum_precision = Precision::Fp32;
-    Precision disp_normal_precision = Precision::Fp16;
+        CascadeConfig{271.0f, 256},
+        CascadeConfig{ 73.0f, 256},
+        CascadeConfig{ 17.0f, 256},
+        CascadeConfig{  3.7f, 256}};
 
     WaveConfig wave;
-    float displacement_range_m = 8.0f;
     VoxelConfig voxel;
 
     SkyConfig sky;
     ShadingConfig shading;
 
     int max_in_flight_frames = 3;
-    int target_fps_cap = 0;
 
     BenchConfig bench;
 };
