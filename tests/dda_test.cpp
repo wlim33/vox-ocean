@@ -86,3 +86,78 @@ TEST(Dda, DiagonalTieBreakOrder) {
     ASSERT_TRUE(r.hit);
     EXPECT_EQ(r.steps, 10);
 }
+
+// ---- dda_march_transmit: the M2 see-through-water walk ----------------
+// CPU mirror of voxel_march.metal's three-phase march (to-first-hit, bend
+// once, transmit). Hand-derived expectations; tolerances absorb the 1e-4
+// entry nudges.
+
+TEST(DdaTransmit, AllAirBehavesLikeMiss) {
+    auto w = world(); auto g = empty_grid(w);
+    auto r = vox::dda_march_transmit({-5.0f, -0.5f, -0.5f}, {1, 0, 0}, w, g.data(), 64, 1.33f);
+    EXPECT_FALSE(r.hit);
+    EXPECT_EQ(r.entry_axis, -1);          // never touched water
+    EXPECT_FLOAT_EQ(r.water_dist, 0.0f);
+}
+
+TEST(DdaTransmit, StraightDownThroughWaterOntoSand) {
+    // Sand at iy=0, water iy=1..2 (surface y = 1), air iy=3. A vertical ray
+    // refracts straight-on (no bend), crosses exactly 2m of water.
+    auto w = world(); auto g = empty_grid(w);
+    for (int ix = 0; ix < 4; ++ix)
+        for (int iz = 0; iz < 4; ++iz) {
+            g[w.cell_index(ix, 0, iz)] = (uint8_t)vox::VoxMat::Sand;
+            g[w.cell_index(ix, 1, iz)] = (uint8_t)vox::VoxMat::Water;
+            g[w.cell_index(ix, 2, iz)] = (uint8_t)vox::VoxMat::Water;
+        }
+    auto r = vox::dda_march_transmit({0.5f, 10.0f, 0.5f}, {0, -1, 0}, w, g.data(), 64, 1.33f);
+    ASSERT_TRUE(r.hit);
+    EXPECT_EQ(r.ix, 2); EXPECT_EQ(r.iy, 0); EXPECT_EQ(r.iz, 2);   // sand under (0.5, ., 0.5)
+    EXPECT_EQ(r.entry_axis, 1);
+    EXPECT_NEAR(r.entry_t, 9.0f, 0.01f);   // y=10 down to surface y=1
+    EXPECT_NEAR(r.water_dist, 2.0f, 0.01f);
+}
+
+TEST(DdaTransmit, SideEntryStraightOnAccumulatesFullWidth) {
+    // Water everywhere iy=0..2; a horizontal ray entering the side wall
+    // straight-on doesn't bend, crosses the full 4m patch, exits sideways.
+    auto w = world(); auto g = empty_grid(w);
+    for (int ix = 0; ix < 4; ++ix)
+        for (int iz = 0; iz < 4; ++iz)
+            for (int iy = 0; iy < 3; ++iy)
+                g[w.cell_index(ix, iy, iz)] = (uint8_t)vox::VoxMat::Water;
+    auto r = vox::dda_march_transmit({-5.0f, 0.5f, -0.5f}, {1, 0, 0}, w, g.data(), 64, 1.33f);
+    EXPECT_FALSE(r.hit);                   // no opaque cell on the path
+    EXPECT_FALSE(r.exited_up);             // left through the far side wall
+    EXPECT_EQ(r.entry_axis, 0);
+    EXPECT_NEAR(r.water_dist, 4.0f, 0.01f);
+}
+
+TEST(DdaTransmit, ObliqueEntryBendsTowardNormal) {
+    // Sand iy=0, water iy=1..2 (surface y = 1). Ray dir (1,-2,0)/sqrt(5) hits
+    // the surface at (0.5, 1, -0.5). Snell with IOR 1.33: refracted dir
+    // (0.3363, -0.9418, 0); water depth 2m -> path 2/0.9418 = 2.124m; lands
+    // on sand at x = 0.5 + 0.3363*2.124 = 1.214 -> ix 3 (cell [1,2)).
+    auto w = world(); auto g = empty_grid(w);
+    for (int ix = 0; ix < 4; ++ix)
+        for (int iz = 0; iz < 4; ++iz) {
+            g[w.cell_index(ix, 0, iz)] = (uint8_t)vox::VoxMat::Sand;
+            g[w.cell_index(ix, 1, iz)] = (uint8_t)vox::VoxMat::Water;
+            g[w.cell_index(ix, 2, iz)] = (uint8_t)vox::VoxMat::Water;
+        }
+    auto r = vox::dda_march_transmit({-1.5f, 5.0f, -0.5f},
+                                     glm::normalize(glm::vec3(1, -2, 0)),
+                                     w, g.data(), 64, 1.33f);
+    ASSERT_TRUE(r.hit);
+    EXPECT_EQ(r.ix, 3); EXPECT_EQ(r.iy, 0); EXPECT_EQ(r.iz, 1);
+    EXPECT_EQ(r.entry_axis, 1);
+    EXPECT_NEAR(r.water_dist, 2.124f, 0.02f);
+    // IOR 1: same geometry, no bend — shallower underwater angle, so at
+    // least as far in x and a longer in-water path.
+    auto s = vox::dda_march_transmit({-1.5f, 5.0f, -0.5f},
+                                     glm::normalize(glm::vec3(1, -2.1f, 0)),
+                                     w, g.data(), 64, 1.0f);
+    ASSERT_TRUE(s.hit);
+    EXPECT_GT(s.ix, r.ix - 1);
+    EXPECT_GE(s.water_dist, r.water_dist - 0.1f);
+}

@@ -15,4 +15,24 @@ struct DdaHit {
 };
 DdaHit dda_march(glm::vec3 origin, glm::vec3 dir, const VoxelWorld& world,
                  const uint8_t* materials, int max_steps);
+
+// M2 see-through walk, CPU mirror of voxel_march.metal march_fs — keep in
+// lockstep. Phase 1: march to the first non-Air cell. If it is Water:
+// record the interface, bend the ray ONCE (refract, entering eta = 1/ior),
+// then transmit through the volume accumulating the metric distance spent
+// inside Water cells, until an opaque cell, the grid edge, or the step
+// budget ends the walk. Opaque = any material that is not Air or Water.
+struct TransmitResult {
+    bool  hit = false;            // ended on an opaque cell
+    int   ix = -1, iy = -1, iz = -1;   // that opaque cell
+    int   opaque_axis = -1;       // face axis the opaque cell was entered through
+    int   entry_axis = -1;        // axis of the FIRST water interface; -1 = never touched water
+    float entry_t = 0.0f;         // ray t at that interface (pre-bend parameterization)
+    float water_dist = 0.0f;      // metric distance traveled inside Water cells
+    bool  exited_up = false;      // left the grid moving upward (sky behind the water)
+    int   steps = 0;
+};
+TransmitResult dda_march_transmit(glm::vec3 origin, glm::vec3 dir,
+                                  const VoxelWorld& world, const uint8_t* materials,
+                                  int max_steps, float ior);
 }
