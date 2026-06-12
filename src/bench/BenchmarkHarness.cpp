@@ -42,6 +42,11 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " height_step_m=" << cfg.voxel.height_step_m
          << " base_depth_m=" << cfg.voxel.base_depth_m
          << " cascade_count=" << cfg.cascade_count
+         << " height_cells=" << cfg.voxel.height_cells
+         << " floor_seed=" << cfg.voxel.floor_seed
+         << " max_steps=" << cfg.march.max_steps
+         << " render_scale=" << cfg.march.render_scale
+         << " max_wavelength_m=" << cfg.wave.max_wavelength_m
          << " fft_size=" << cfg.cascades[0].resolution << '\n';
     out_ << "frame_idx,cpu_ms,gpu_total_ms,drawable_wait_ms,config_hash\n";
 }

@@ -42,10 +42,16 @@ void draw_debug_panel(App& app) {
     }
     if (ImGui::CollapsingHeader("Voxels", ImGuiTreeNodeFlags_DefaultOpen)) {
         auto& v = c.voxel;
-        ImGui::SliderInt("grid extent",    &v.grid_extent,   32,   512);
+        ImGui::SliderInt("grid extent",       &v.grid_extent,   32,   512);
         ImGui::SliderFloat("voxel size (m)",  &v.voxel_size_m,  0.1f, 2.0f);
         ImGui::SliderFloat("height step (m)", &v.height_step_m, 0.05f, 1.0f);
         ImGui::SliderFloat("base depth (m)",  &v.base_depth_m,  1.0f, 30.0f);
+        ImGui::SliderInt("height cells",      &v.height_cells,  16,   256);
+        ImGui::InputInt("floor seed",         &v.floor_seed);
+    }
+    if (ImGui::CollapsingHeader("March", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SliderInt("max steps",      &c.march.max_steps,    32, 4096);
+        ImGui::SliderFloat("render scale", &c.march.render_scale, 0.25f, 1.0f);
     }
     ImGui::End();
 }
