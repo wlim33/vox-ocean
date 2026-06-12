@@ -70,5 +70,5 @@ struct MarchUniforms {
     vec3  sand_color;        float foam_strength;
     vec3  rock_color;        float height_step_m;
     int   grid_extent;       int height_cells; float voxel_size_m; float base_depth_m;
-    int   max_steps;         float _mpad2, _mpad3, _mpad4;
+    int   max_steps;         float water_ior; float _mpad3, _mpad4;
 };

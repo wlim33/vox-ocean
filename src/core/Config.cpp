@@ -203,6 +203,7 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.shading.foam_strength,     sizeof(c.shading.foam_strength),     h);
     h = fnv1a64(&c.shading.depth_fog_density, sizeof(c.shading.depth_fog_density), h);
     h = fnv1a64(&c.shading.sun_shininess,     sizeof(c.shading.sun_shininess),     h);
+    h = fnv1a64(&c.shading.water_ior,         sizeof(c.shading.water_ior),         h);
     // Bench (hash bench_mode + frame counts; skip output_path to avoid string pointer instability)
     h = fnv1a64(&c.bench.bench_mode,      sizeof(c.bench.bench_mode),      h);
     h = fnv1a64(&c.bench.warmup_frames,   sizeof(c.bench.warmup_frames),   h);

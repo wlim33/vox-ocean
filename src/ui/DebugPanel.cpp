@@ -35,6 +35,7 @@ void draw_debug_panel(App& app) {
         ImGui::SliderFloat("foam thresh",&c.shading.foam_threshold, 0.0f, 1.0f);
         ImGui::SliderFloat("foam str",   &c.shading.foam_strength,  0.0f, 4.0f);
         ImGui::SliderFloat("fog density",&c.shading.depth_fog_density, 0.0f, 0.5f);
+        ImGui::SliderFloat("water ior",  &c.shading.water_ior, 1.0f, 1.6f);
     }
     if (ImGui::CollapsingHeader("Debug view")) {
         const char* names[] = {"final","normal","folding","fresnel","reflection","refraction","sss"};

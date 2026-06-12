@@ -35,6 +35,7 @@ struct ShadingConfig {
     glm::vec3 extinction_rgb   {0.9f, 0.5f, 0.3f};
     float sun_shininess        = 256.0f;
     glm::vec3 sun_color        {1.4f, 1.25f, 1.0f};
+    float water_ior = 1.33f;   // refraction index at the water surface (1.0 = no bend)
     glm::vec3 sand_color       {0.76f, 0.70f, 0.50f};
     glm::vec3 rock_color       {0.35f, 0.33f, 0.30f};
 };

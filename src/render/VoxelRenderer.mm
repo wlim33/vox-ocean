@@ -199,7 +199,8 @@ void VoxelRenderer::encode_march(void* command_buffer, const OrbitCamera& cam, c
     u.voxel_size_m = cfg.voxel.voxel_size_m;
     u.base_depth_m = cfg.voxel.base_depth_m;
     u.max_steps = cfg.march.max_steps;
-    u._mpad2 = u._mpad3 = u._mpad4 = 0.0f;
+    u.water_ior = cfg.shading.water_ior;
+    u._mpad3 = u._mpad4 = 0.0f;
     std::memcpy(march_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
     MTLRenderPassDescriptor* rp = [MTLRenderPassDescriptor renderPassDescriptor];

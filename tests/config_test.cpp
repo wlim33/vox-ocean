@@ -132,3 +132,10 @@ TEST(Config, HashCoversVoxelWorldKnobs) {
     b = a; b.march.max_steps = 64;
     EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
 }
+
+TEST(Config, HashCoversWaterIor) {
+    vox::Config a, b;
+    EXPECT_EQ(vox::config_hash(a), vox::config_hash(b));
+    b.shading.water_ior = 1.5f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+}
