@@ -26,7 +26,9 @@ public:
     Simulation sim;
     SkyRenderer sky;
     ImGuiBackend imgui;
-    MTKView* view = nil;           // not owned: Swift owns the view
+    // Swift owns the view; __weak so a torn-down view reads as nil in
+    // engine_render instead of being kept alive (or dangling) by the engine.
+    __weak MTKView* view = nil;
     int frame_index = 0;
     bool imgui_ready = false;
 };

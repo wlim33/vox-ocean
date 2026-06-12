@@ -9,8 +9,13 @@ final class EngineRenderer: NSObject, MTKViewDelegate {
         var overrides: [String] = []
         var args = CommandLine.arguments.dropFirst().makeIterator()
         while let a = args.next() {
-            if a == "--config", let v = args.next() { configPath = v }
-            else if a == "--set", let v = args.next() { overrides.append(v) }
+            if a == "--config" {
+                if let v = args.next() { configPath = v }
+                else { FileHandle.standardError.write(Data("--config requires a path\n".utf8)) }
+            } else if a == "--set" {
+                if let v = args.next() { overrides.append(v) }
+                else { FileHandle.standardError.write(Data("--set requires key=value\n".utf8)) }
+            }
         }
         engine = vox.engine_create(configPath, overrides.joined(separator: "\n"))
     }

@@ -19,5 +19,6 @@ struct MetalSurface: NSViewRepresentable {
         DispatchQueue.main.async { v.window?.makeFirstResponder(v) }
         return v
     }
+    // No SwiftUI state flows into the view; the engine drives itself per frame.
     func updateNSView(_ v: InteractiveMTKView, context: Context) {}
 }
