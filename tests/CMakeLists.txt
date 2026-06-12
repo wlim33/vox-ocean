@@ -41,5 +41,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/bench/BenchPaths.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    floor_gen_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/voxel/FloorGen.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
