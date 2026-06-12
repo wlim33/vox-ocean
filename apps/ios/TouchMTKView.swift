@@ -12,6 +12,9 @@ final class TouchMTKView: MTKView {
         renderer?.push(event(.MouseDown))
     }
     override func touchesMoved(_ touches: Set<UITouch>, with: UIEvent?) {
+        // Single-finger only: during pinch onset both this and the recognizer
+        // fire, and a two-finger "first" touch would kick the orbit.
+        guard touches.count == 1 else { return }
         guard let p = touches.first?.location(in: self), let l = last else { return }
         var e = event(.MouseMove); e.x = Float(p.x - l.x); e.y = Float(p.y - l.y)
         renderer?.push(e); last = p

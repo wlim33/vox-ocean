@@ -53,7 +53,7 @@ void ImGuiBackend::begin_frame(void* mtkview) {
     CGFloat scale = v.contentScaleFactor;
     io.DisplaySize = ImVec2((float)bounds.width, (float)bounds.height);
     io.DisplayFramebufferScale = ImVec2((float)scale, (float)scale);
-    double now = CFAbsoluteTimeGetCurrent();
+    double now = CACurrentMediaTime();   // monotonic; wall-clock jumps would feed ImGui a negative dt
     double dt = (g_last_time > 0.0) ? (now - g_last_time) : (1.0 / 60.0);
     if (dt < 1.0 / 1000.0) dt = 1.0 / 1000.0;
     io.DeltaTime = (float)dt;
