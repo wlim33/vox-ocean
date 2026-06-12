@@ -139,3 +139,45 @@ TEST(Config, HashCoversWaterIor) {
     b.shading.water_ior = 1.5f;
     EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
 }
+
+TEST(Config, RippleKnobsParse) {
+    auto r = vox::load_config_from_string(R"([ripple]
+wave_speed_mps = 3.0
+damping = 0.98
+rain_rate = 25.0
+foam = 1.5
+)");
+    EXPECT_FLOAT_EQ(r.config.ripple.wave_speed_mps, 3.0f);
+    EXPECT_FLOAT_EQ(r.config.ripple.damping, 0.98f);
+    EXPECT_FLOAT_EQ(r.config.ripple.rain_rate, 25.0f);
+    EXPECT_FLOAT_EQ(r.config.ripple.foam, 1.5f);
+}
+
+TEST(Config, RippleKnobsClampAndWarn) {
+    auto r = vox::load_config_from_string(R"([ripple]
+wave_speed_mps = 100.0
+damping = 0.5
+rain_rate = -3.0
+)");
+    EXPECT_FLOAT_EQ(r.config.ripple.wave_speed_mps, 20.0f);
+    EXPECT_FLOAT_EQ(r.config.ripple.damping, 0.80f);
+    EXPECT_FLOAT_EQ(r.config.ripple.rain_rate, 0.0f);
+    EXPECT_EQ(r.warnings.size(), 3u);
+}
+
+TEST(Config, RippleOverridesAndHash) {
+    auto r = vox::apply_overrides(vox::load_config_from_string(""),
+        {"ripple.wave_speed_mps=2.5", "ripple.rain_rate=10"});
+    EXPECT_FLOAT_EQ(r.config.ripple.wave_speed_mps, 2.5f);
+    EXPECT_FLOAT_EQ(r.config.ripple.rain_rate, 10.0f);
+
+    vox::Config a, b;
+    b.ripple.wave_speed_mps = 9.0f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.ripple.damping = 0.9f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.ripple.rain_rate = 5.0f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.ripple.foam = 2.0f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+}

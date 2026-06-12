@@ -54,6 +54,12 @@ void draw_debug_panel(App& app) {
         ImGui::SliderInt("max steps",      &c.march.max_steps,    32, 4096);
         ImGui::SliderFloat("render scale", &c.march.render_scale, 0.25f, 1.0f);
     }
+    if (ImGui::CollapsingHeader("Ripple", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SliderFloat("wave speed",   &c.ripple.wave_speed_mps, 0.1f, 20.0f);
+        ImGui::SliderFloat("damping",      &c.ripple.damping,        0.80f, 1.0f);
+        ImGui::SliderFloat("rain rate",    &c.ripple.rain_rate,      0.0f, 200.0f);
+        ImGui::SliderFloat("ripple foam",  &c.ripple.foam,           0.0f, 4.0f);
+    }
     ImGui::End();
 }
 }

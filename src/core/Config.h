@@ -55,6 +55,14 @@ struct MarchConfig {
     float render_scale = 1.0f;  // march-target resolution factor (iOS escape hatch)
 };
 
+struct RippleConfig {
+    // Interactive surface ripples (2D wave equation), summed with the FFT.
+    float wave_speed_mps = 6.0f;   // propagation speed c
+    float damping        = 0.995f; // per-step energy retention
+    float rain_rate      = 0.0f;   // debug splashes per second (0 = off)
+    float foam           = 0.5f;   // ripple amplitude -> foam coupling
+};
+
 struct SkyConfig {
     int cubemap_resolution = 128;
     float sun_elevation_rad = 0.7f;
@@ -83,6 +91,7 @@ struct Config {
     WaveConfig wave;
     VoxelConfig voxel;
     MarchConfig march;
+    RippleConfig ripple;
 
     SkyConfig sky;
     ShadingConfig shading;
