@@ -116,10 +116,11 @@ void VoxelRenderer::encode_terrain_upload_if_dirty(void* command_buffer) {
 }
 
 void VoxelRenderer::encode_world_fill(void* compute_encoder, const Config& cfg,
-                                      Cascade* const* cascades, int cascade_count) {
+                                      Cascade* const* cascades, int cascade_count,
+                                      int frame_index) {
     if (!world_grid_.handle) return;
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
-    int slot = fill_frame_ % RING;
+    int slot = frame_index % RING;
     int extent = cfg.voxel.grid_extent;
     int n = std::min(cascade_count, MAX_CASCADES);
 
@@ -149,8 +150,6 @@ void VoxelRenderer::encode_world_fill(void* compute_encoder, const Config& cfg,
     NSUInteger groups = (NSUInteger)((extent + 15) / 16);
     MTLSize grid = MTLSizeMake(groups, groups, 1);
     [ce dispatchThreadgroups:grid threadsPerThreadgroup:tg];
-
-    fill_frame_++;
 }
 
 void VoxelRenderer::ensure_march_target(const MetalContext& ctx, int drawable_w, int drawable_h,

@@ -23,7 +23,7 @@ public:
     // its own blit encoder; call BEFORE encode_world_fill in the frame.
     void encode_terrain_upload_if_dirty(void* command_buffer);
     void encode_world_fill(void* compute_encoder, const Config& cfg,
-                           Cascade* const* cascades, int cascade_count);
+                           Cascade* const* cascades, int cascade_count, int frame_index);
     // (Re)sizes the offscreen march target to drawable * march.render_scale.
     void ensure_march_target(const MetalContext& ctx, int drawable_w, int drawable_h,
                              const Config& cfg);
@@ -37,9 +37,9 @@ public:
     static constexpr int RING = 3;
 private:
     Texture terrain_grid_{}, world_grid_{}, surface_tex_{}, march_target_{};
+    // staged terrain lives until the next rebuild; the blit (encode_terrain_upload_if_dirty) may run a frame later than generation
     Buffer  terrain_staging_{};
     Buffer  fill_uniforms_[RING]{}, march_uniforms_[RING]{};
-    int     fill_frame_ = 0;
     int     built_extent_ = 0, built_height_cells_ = 0, built_seed_ = 0;
     int     target_w_ = 0, target_h_ = 0;
     bool    terrain_dirty_ = false;

@@ -142,7 +142,7 @@ void engine_render(Engine* e) {
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
-    e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count());
+    e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->frame_index);
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
