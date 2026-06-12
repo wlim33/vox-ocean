@@ -62,6 +62,7 @@ Engine* engine_create(const char* config_path, const char* overrides) {
 void engine_destroy(Engine* e) { delete e; }
 
 void engine_attach_view(Engine* e, void* mtk_view) {
+    if (e->imgui_ready) return;  // one-shot: re-attach would double-init ImGui
     e->view = (__bridge MTKView*)mtk_view;
     e->view.device = (__bridge id<MTLDevice>)e->ctx.device;
     e->view.colorPixelFormat = MTLPixelFormatBGRA8Unorm_sRGB;
