@@ -13,7 +13,13 @@ static void die(const char* msg, NSError* err) {
 }
 
 void* PipelineCache::render_pso(const MetalContext& ctx, const RenderPSODesc& d) {
-    std::string key = d.vertex_fn + "|" + d.fragment_fn;
+    // Key covers every field that shapes the PSO, so same-named functions with
+    // different state (depth format, vertex layout, blending) don't collide.
+    std::string key = d.vertex_fn + "|" + d.fragment_fn
+        + "|c" + std::to_string(d.color_pixel_format)
+        + "|d" + std::to_string(d.depth_pixel_format)
+        + "|s" + std::to_string(d.vertex_stride)
+        + "|b" + std::to_string(d.blending ? 1 : 0);
     auto it = render_cache_.find(key);
     if (it != render_cache_.end()) return it->second;
 
