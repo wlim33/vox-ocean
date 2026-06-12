@@ -64,3 +64,36 @@ TEST(Ripple, StableAtDefaultsLongRun) {
         EXPECT_LE(std::abs(v), 1.0f);
     }
 }
+
+TEST(Ripple, BorderBandAbsorbsReflections) {
+    // Impulse 4 cells from the wall, no bulk damping: with the absorbing
+    // band, far less energy reflects back into the interior than the
+    // Neumann edges alone would return. Pins the ramp the MSL port must
+    // reproduce (reviewer measured ~5.6x reduction; assert >2x headroom).
+    auto prev = zeros(), cur = zeros(), next = zeros();
+    cur[at(4, 16)] = 1.0f;
+    for (int s = 0; s < 60; ++s) {
+        vox::ripple_step(prev, cur, next, N, 0.04f, 1.0f);
+        std::swap(prev, cur); std::swap(cur, next);
+    }
+    double interior = 0.0;
+    for (int x = 16; x < N; ++x) interior += std::abs(cur[at(x, 16)]);
+    // Measured: ~0.042; threshold is 2x headroom (0.090). Neumann alone returns
+    // ~0.23, so the absorbing band gives >5x reduction as the reviewer found.
+    EXPECT_LT(interior, 0.090);
+}
+
+TEST(Ripple, GoldenStateAfterTenSteps) {
+    // Exact-state oracle for the MSL port: center impulse, 10 default-knob
+    // steps; values derived from this (reviewed) implementation. A wrong
+    // coefficient that preserves symmetry still fails here.
+    auto prev = zeros(), cur = zeros(), next = zeros();
+    cur[at(16, 16)] = 1.0f;
+    for (int s = 0; s < 10; ++s) {
+        vox::ripple_step(prev, cur, next, N, 0.04f, 0.995f);
+        std::swap(prev, cur); std::swap(cur, next);
+    }
+    EXPECT_NEAR(cur[at(16, 16)], -0.731804f, 1e-5f);
+    EXPECT_NEAR(cur[at(18, 16)],  0.456030f, 1e-5f);
+    EXPECT_NEAR(cur[at(16, 20)],  0.005804f, 1e-5f);
+}
