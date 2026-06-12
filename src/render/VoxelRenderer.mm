@@ -176,9 +176,14 @@ void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, floa
     int slot = ripple_phase_ % RING;
     int extent = cfg.voxel.grid_extent;
 
-    // Debug rain: fixed seed so bench runs are reproducible frame-for-frame.
     RippleSplash* splashes = (RippleSplash*)splash_buf_[slot].cpu_ptr;
     int count = 0;
+    // Entity splashes (boat wake) first: the debug rain must never starve
+    // them out of the MAX_SPLASHES budget.
+    for (int i = 0; i < extra_count && count < MAX_SPLASHES; ++i)
+        splashes[count++] = extra[i];
+
+    // Debug rain: fixed seed so bench runs are reproducible frame-for-frame.
     if (cfg.ripple.rain_rate > 0.0f) {
         static thread_local std::mt19937 rng(0x5EAF00Du);   // fixed seed: bench determinism
         std::uniform_real_distribution<float> uni(0.0f, (float)extent);
@@ -188,9 +193,6 @@ void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, floa
             splashes[count++] = { uni(rng), uni(rng), 2.0f, -0.35f };
         }
     }
-
-    for (int i = 0; i < extra_count && count < MAX_SPLASHES; ++i)
-        splashes[count++] = extra[i];
 
     RippleUniforms u{};
     u.grid_extent  = extent;
