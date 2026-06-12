@@ -12,8 +12,9 @@ C++20 / Objective-C++ engine with direct Swift↔C++ interop.
 - Phillips spectrum with directional swell, Stockham radix-2 inverse FFT in compute
 - True voxel world: per-frame compute fills a 3D material grid (water, sand, rock)
   from the displacement maps, floor-quantized; procedural seeded ocean floor
-- Ray-marched rendering: full-screen DDA through the grid, composited over the sky;
-  scalable march resolution (`march.render_scale`)
+- Ray-marched rendering: full-screen DDA through the grid, refraction +
+  Beer–Lambert transmission through the water volume, composited over the
+  sky; scalable march resolution (`march.render_scale`)
 - Finite diorama with Beer–Lambert depth-tinted side walls, Jacobian foam on crest voxels
 - Preetham sky baked to a cubemap; ACES tonemap
 
