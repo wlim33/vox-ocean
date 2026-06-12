@@ -24,6 +24,7 @@ namespace vox {
 void VoxelRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
     pso_fill_ = cache.compute_pso(ctx, "world_fill");
     pso_ripple_ = cache.compute_pso(ctx, "ripple_step");
+    pso_stamp_ = cache.compute_pso(ctx, "stamp_cells");
 
     // March pass: fullscreen triangle into the offscreen target (no depth, no
     // blend — misses write alpha 0 so the composite shows the sky).
@@ -54,6 +55,8 @@ void VoxelRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
         march_uniforms_[i] = make_buffer(ctx, sizeof(MarchUniforms), true);
         ripple_uniforms_[i] = make_buffer(ctx, sizeof(RippleUniforms), true);
         splash_buf_[i]      = make_buffer(ctx, sizeof(RippleSplash) * MAX_SPLASHES, true);
+        stamp_uniforms_[i]  = make_buffer(ctx, sizeof(StampUniforms), true);
+        stamp_cells_[i]     = make_buffer(ctx, sizeof(uint32_t) * MAX_STAMP_CELLS, true);
     }
 }
 
@@ -86,6 +89,14 @@ void VoxelRenderer::rebuild_if_dirty(const MetalContext& ctx, const Config& cfg)
         ripple_[i] = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent, TexFormat::R32F);
     }
     ripple_phase_ = 0;
+
+    // Surface readback ring: CPU-readable buffers for water_height_at.
+    // Zeroed so the boat reads height 0 until real data lands.
+    for (int i = 0; i < RING; ++i) {
+        destroy_buffer(surface_readback_[i]);
+        surface_readback_[i] = make_buffer(ctx, (size_t)extent * extent * 2 * sizeof(float), true);
+        std::memset(surface_readback_[i].cpu_ptr, 0, surface_readback_[i].size);
+    }
 
     // Zero-fill staging buffer for the ripple ring; blitted into all three
     // textures by encode_terrain_upload_if_dirty to avoid undefined Metal
@@ -158,7 +169,8 @@ void VoxelRenderer::encode_terrain_upload_if_dirty(void* command_buffer) {
     [blit endEncoding];
 }
 
-void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, float dt) {
+void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, float dt,
+                                   const RippleSplash* extra, int extra_count) {
     if (!ripple_[0].handle) return;
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
     int slot = ripple_phase_ % RING;
@@ -176,6 +188,9 @@ void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, floa
             splashes[count++] = { uni(rng), uni(rng), 2.0f, -0.35f };
         }
     }
+
+    for (int i = 0; i < extra_count && count < MAX_SPLASHES; ++i)
+        splashes[count++] = extra[i];
 
     RippleUniforms u{};
     u.grid_extent  = extent;
@@ -314,6 +329,57 @@ void VoxelRenderer::encode_composite(void* render_encoder) {
     [enc setDepthStencilState:(__bridge id<MTLDepthStencilState>)dss_off_];
     [enc setFragmentTexture:(__bridge id<MTLTexture>)march_target_.handle atIndex:0];
     [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+}
+
+void VoxelRenderer::encode_stamp(void* compute_encoder, const Config& cfg,
+                                 const uint32_t* cells, int count, int frame_index) {
+    if (!world_grid_.handle || count <= 0) return;
+    id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
+    int slot = frame_index % RING;
+    int n = std::min(count, MAX_STAMP_CELLS);
+
+    StampUniforms u{};
+    u.grid_extent  = cfg.voxel.grid_extent;
+    u.height_cells = cfg.voxel.height_cells;
+    u.count        = n;
+    u.material     = MAT_BOAT;
+    std::memcpy(stamp_uniforms_[slot].cpu_ptr, &u, sizeof(u));
+    std::memcpy(stamp_cells_[slot].cpu_ptr, cells, (size_t)n * sizeof(uint32_t));
+
+    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_stamp_];
+    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_uniforms_[slot].handle offset:0 atIndex:0];
+    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_cells_[slot].handle offset:0 atIndex:1];
+    [ce setTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:0];
+    [ce dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
+}
+
+void VoxelRenderer::encode_surface_readback(void* blit_encoder, const Config& cfg,
+                                            int frame_index) {
+    if (!surface_tex_.handle) return;
+    id<MTLBlitCommandEncoder> blit = (__bridge id<MTLBlitCommandEncoder>)blit_encoder;
+    int slot = frame_index % RING;
+    int extent = cfg.voxel.grid_extent;
+    [blit copyFromTexture:(__bridge id<MTLTexture>)surface_tex_.handle
+              sourceSlice:0 sourceLevel:0
+             sourceOrigin:MTLOriginMake(0, 0, 0)
+               sourceSize:MTLSizeMake(extent, extent, 1)
+                 toBuffer:(__bridge id<MTLBuffer>)surface_readback_[slot].handle
+        destinationOffset:0
+   destinationBytesPerRow:(NSUInteger)extent * 2 * sizeof(float)
+ destinationBytesPerImage:(NSUInteger)extent * extent * 2 * sizeof(float)];
+}
+
+float VoxelRenderer::water_height_at(float x, float z, const Config& cfg,
+                                     int frame_index) const {
+    int slot = frame_index % RING;   // written 3 frames ago: complete (in-flight <= 3)
+    if (!surface_readback_[slot].cpu_ptr) return 0.0f;
+    int extent = cfg.voxel.grid_extent;
+    float half = 0.5f * extent * cfg.voxel.voxel_size_m;
+    int ix = std::clamp((int)std::floor((x + half) / cfg.voxel.voxel_size_m), 0, extent - 1);
+    int iz = std::clamp((int)std::floor((z + half) / cfg.voxel.voxel_size_m), 0, extent - 1);
+    const float* buf = (const float*)surface_readback_[slot].cpu_ptr;
+    return buf[((size_t)iz * extent + ix) * 2];   // RG32F: .r = water top_y
 }
 
 }

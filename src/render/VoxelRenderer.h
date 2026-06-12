@@ -1,6 +1,7 @@
 #pragma once
 #include "gpu/Buffer.h"
 #include "gpu/Texture.h"
+#include "shader_types.h"
 #include <cstdint>
 namespace vox {
 struct MetalContext;
@@ -25,7 +26,20 @@ public:
     void encode_terrain_upload_if_dirty(void* command_buffer);
     // Advances the ripple sim one fixed 1/60s step and injects this frame's
     // splashes (debug rain). Call before encode_world_fill.
-    void encode_ripple(void* compute_encoder, const Config& cfg, float dt);
+    // Extra splashes (e.g. the boat's wake) are appended to this frame's
+    // rain; both go through the same splash buffer.
+    void encode_ripple(void* compute_encoder, const Config& cfg, float dt,
+                       const RippleSplash* extra = nullptr, int extra_count = 0);
+    // Stamp entity cells into the world grid. Call AFTER encode_world_fill.
+    void encode_stamp(void* compute_encoder, const Config& cfg,
+                      const uint32_t* cells, int count, int frame_index);
+    // Copies surface_tex into a CPU-readable ring. Call in the blit phase.
+    void encode_surface_readback(void* blit_encoder, const Config& cfg,
+                                 int frame_index);
+    // Water surface height at world (x,z), from the readback slot written 3
+    // frames ago (guaranteed complete by the in-flight pacing). Returns 0
+    // until the first readback lands.
+    float water_height_at(float x, float z, const Config& cfg, int frame_index) const;
     void encode_world_fill(void* compute_encoder, const Config& cfg,
                            Cascade* const* cascades, int cascade_count, int frame_index);
     // (Re)sizes the offscreen march target to drawable * march.render_scale.
@@ -50,6 +64,9 @@ private:
     Buffer  ripple_uniforms_[RING]{}, splash_buf_[RING]{};
     float   rain_accum_ = 0.0f;
     void*   pso_ripple_ = nullptr;
+    Buffer  stamp_uniforms_[RING]{}, stamp_cells_[RING]{};
+    Buffer  surface_readback_[RING]{};
+    void*   pso_stamp_ = nullptr;
     int     ripple_front_() const { return (ripple_phase_ + 1) % 3; }   // freshly written field
     int     built_extent_ = 0, built_height_cells_ = 0, built_seed_ = 0;
     int     target_w_ = 0, target_h_ = 0;
