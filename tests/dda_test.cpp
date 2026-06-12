@@ -63,3 +63,26 @@ TEST(Dda, DiagonalTraversal) {
     ASSERT_TRUE(r.hit);
     EXPECT_EQ(r.ix, 3); EXPECT_EQ(r.iy, 3); EXPECT_EQ(r.iz, 3);
 }
+
+TEST(Dda, HitsFirstSolidAlongNegX) {
+    // Pins the negative-direction stepping branch (step = -1 boundary pick).
+    auto w = world(); auto g = empty_grid(w);
+    g[w.cell_index(1, 1, 1)] = (uint8_t)vox::VoxMat::Rock;
+    auto r = vox::dda_march({5.0f, -0.5f, -0.5f}, {-1, 0, 0}, w, g.data(), 64);
+    ASSERT_TRUE(r.hit);
+    EXPECT_EQ(r.ix, 1); EXPECT_EQ(r.iy, 1); EXPECT_EQ(r.iz, 1);
+    EXPECT_EQ(r.face_axis, 0);
+    EXPECT_NEAR(r.t, 5.0f, 0.01f);   // cell ix=1 entered at x = 0 from above
+    EXPECT_EQ(r.steps, 3);
+}
+
+TEST(Dda, DiagonalTieBreakOrder) {
+    // Pins the simultaneous-boundary advance order (x-before-y-before-z via
+    // strict < tie-breaks): cells visited on a perfect diagonal is exactly 10.
+    auto w = world(); auto g = empty_grid(w);
+    g[w.cell_index(3, 3, 3)] = (uint8_t)vox::VoxMat::Rock;
+    auto r = vox::dda_march({-3.0f, -3.0f, -3.0f},
+                            glm::normalize(glm::vec3(1, 1, 1)), w, g.data(), 64);
+    ASSERT_TRUE(r.hit);
+    EXPECT_EQ(r.steps, 10);
+}
