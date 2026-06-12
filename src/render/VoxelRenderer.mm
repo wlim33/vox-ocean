@@ -5,8 +5,12 @@
 #import "core/Config.h"
 #import "gpu/MetalContext.h"
 #import "gpu/PipelineCache.h"
+#import "voxel/VoxelWorld.h"
+#import "voxel/FloorGen.h"
 #import "shader_types.h"
 #import <Metal/Metal.h>
+#include <glm/gtc/matrix_inverse.hpp>
+#include <glm/mat4x4.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -15,100 +19,130 @@
 
 namespace vox {
 
-struct CubeVert { float px, py, pz, nx, ny, nz; };
-
-static void push_face(std::vector<CubeVert>& v, std::vector<uint16_t>& idx,
-                      float ox, float oy, float oz,
-                      float e1x, float e1y, float e1z,
-                      float e2x, float e2y, float e2z,
-                      float nx, float ny, float nz) {
-    uint16_t base = (uint16_t)v.size();
-    v.push_back({ox,         oy,         oz,         nx, ny, nz});
-    v.push_back({ox+e1x,     oy+e1y,     oz+e1z,     nx, ny, nz});
-    v.push_back({ox+e1x+e2x, oy+e1y+e2y, oz+e1z+e2z, nx, ny, nz});
-    v.push_back({ox+e2x,     oy+e2y,     oz+e2z,     nx, ny, nz});
-    for (uint16_t i : {(uint16_t)0,(uint16_t)1,(uint16_t)2,(uint16_t)0,(uint16_t)2,(uint16_t)3})
-        idx.push_back(base + i);
-}
-
 void VoxelRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
-    // Unit column [0,1]^3, 5 faces (no bottom: the orbit camera never sees it),
-    // 4 verts + 6 indices per face = 30 indices. Per-face normals.
-    std::vector<CubeVert> verts;
-    std::vector<uint16_t> indices;
-    // top (+y), -x, +x, -z, +z
-    push_face(verts, indices, 0,1,0,  1,0,0,  0,0,1,   0, 1, 0);
-    push_face(verts, indices, 0,0,0,  0,0,1,  0,1,0,  -1, 0, 0);
-    push_face(verts, indices, 1,0,1,  0,0,-1, 0,1,0,   1, 0, 0);
-    push_face(verts, indices, 1,0,0,  -1,0,0, 0,1,0,   0, 0,-1);
-    push_face(verts, indices, 0,0,1,  1,0,0,  0,1,0,   0, 0, 1);
-    index_count_ = (int)indices.size();
+    pso_fill_ = cache.compute_pso(ctx, "world_fill");
 
-    cube_vbo_ = make_buffer(ctx, verts.size() * sizeof(CubeVert), true);
-    cube_ibo_ = make_buffer(ctx, indices.size() * sizeof(uint16_t), true);
-    std::memcpy(cube_vbo_.cpu_ptr, verts.data(), verts.size() * sizeof(CubeVert));
-    std::memcpy(cube_ibo_.cpu_ptr, indices.data(), indices.size() * sizeof(uint16_t));
+    // March pass: fullscreen triangle into the offscreen target (no depth, no
+    // blend — misses write alpha 0 so the composite shows the sky).
+    RenderPSODesc md;
+    md.vertex_fn = "march_vs";
+    md.fragment_fn = "march_fs";
+    md.depth_pixel_format = 0;   // offscreen march pass has no depth attachment
+    md.blending = false;
+    pso_march_ = cache.render_pso(ctx, md);
 
-    // Render PSO: stage_in pos(0)/normal(1), color BGRA8Unorm_sRGB, depth Depth32Float.
-    RenderPSODesc d;
-    d.vertex_fn = "voxel_vs";
-    d.fragment_fn = "voxel_fs";
-    d.depth_pixel_format = (unsigned)MTLPixelFormatDepth32Float;
-    d.attrs[0] = { (unsigned)MTLVertexFormatFloat3, 0 };
-    d.attrs[1] = { (unsigned)MTLVertexFormatFloat3, 12 };
-    d.vertex_stride = (unsigned)sizeof(CubeVert);   // 24
-    pso_draw_ = cache.render_pso(ctx, d);
-
-    pso_voxelize_ = cache.compute_pso(ctx, "voxelize");
+    // Composite into the drawable pass — which owns a depth buffer, so the PSO
+    // must declare Depth32Float. Alpha-blend over the sky.
+    RenderPSODesc cd;
+    cd.vertex_fn = "march_composite_vs";
+    cd.fragment_fn = "march_composite_fs";
+    cd.depth_pixel_format = (unsigned)MTLPixelFormatDepth32Float;
+    cd.blending = true;
+    pso_composite_ = cache.render_pso(ctx, cd);
 
     id<MTLDevice> dev = (__bridge id<MTLDevice>)ctx.device;
     MTLDepthStencilDescriptor* dd = [MTLDepthStencilDescriptor new];
-    dd.depthCompareFunction = MTLCompareFunctionLess;
-    dd.depthWriteEnabled = YES;
-    dss_ = (__bridge_retained void*)[dev newDepthStencilStateWithDescriptor:dd];
+    dd.depthCompareFunction = MTLCompareFunctionAlways;
+    dd.depthWriteEnabled = NO;
+    dss_off_ = (__bridge_retained void*)[dev newDepthStencilStateWithDescriptor:dd];
 
     for (int i = 0; i < RING; ++i) {
-        vox_uniforms_[i]  = make_buffer(ctx, sizeof(VoxelizeUniforms), true);
-        draw_uniforms_[i] = make_buffer(ctx, sizeof(VoxelSurfaceUniforms), true);
-        cam_buf_[i]       = make_buffer(ctx, sizeof(CameraUniforms), true);
+        fill_uniforms_[i]  = make_buffer(ctx, sizeof(WorldFillUniforms), true);
+        march_uniforms_[i] = make_buffer(ctx, sizeof(MarchUniforms), true);
     }
 }
 
 void VoxelRenderer::rebuild_if_dirty(const MetalContext& ctx, const Config& cfg) {
     int extent = cfg.voxel.grid_extent;
-    if (extent == instance_extent_ && instances_.handle) return;
-    destroy_buffer(instances_);
-    size_t bytes = (size_t)extent * (size_t)extent * sizeof(VoxelInstance);
-    // storageModePrivate: the GPU both writes (voxelize) and reads (draw) this.
-    instances_ = make_buffer(ctx, bytes, false);
-    instance_extent_ = extent;
+    int hc     = cfg.voxel.height_cells;
+    int seed   = cfg.voxel.floor_seed;
+    if (extent == built_extent_ && hc == built_height_cells_ && seed == built_seed_
+        && world_grid_.handle)
+        return;
+
+    destroy_texture(terrain_grid_);
+    destroy_texture(world_grid_);
+    destroy_texture(surface_tex_);
+    destroy_buffer(terrain_staging_);
+
+    // terrain_grid_ is blit-uploaded once then read-only; world_grid_ is
+    // compute-written each frame; surface_tex_ carries per-column water state.
+    terrain_grid_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
+                                    TexFormat::R8Uint, /*storage_write=*/false);
+    world_grid_   = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
+                                    TexFormat::R8Uint, /*storage_write=*/true);
+    surface_tex_  = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent,
+                                    TexFormat::RG32F);
+
+    VoxelWorld world({ extent, hc, cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
+                       cfg.voxel.base_depth_m });
+    std::vector<FloorColumn> floor = generate_floor({ extent, hc, (uint32_t)seed });
+
+    size_t cells = (size_t)world.cells();
+    terrain_staging_ = make_buffer(ctx, cells, true);
+    uint8_t* dst = (uint8_t*)terrain_staging_.cpu_ptr;
+    std::memset(dst, (int)VoxMat::Air, cells);
+    for (int iz = 0; iz < extent; ++iz)
+        for (int ix = 0; ix < extent; ++ix) {
+            const FloorColumn& fc = floor[(size_t)iz * extent + ix];
+            for (int iy = 0; iy < fc.height && iy < hc; ++iy)
+                dst[world.cell_index(ix, iy, iz)] = fc.material;
+        }
+
+    built_extent_ = extent;
+    built_height_cells_ = hc;
+    built_seed_ = seed;
+    terrain_dirty_ = true;
 }
 
-void VoxelRenderer::encode_voxelize(void* compute_encoder, const Config& cfg,
-                                    Cascade* const* cascades, int cascade_count) {
-    if (!instances_.handle) return;
+void VoxelRenderer::encode_terrain_upload_if_dirty(void* command_buffer) {
+    if (!terrain_dirty_) return;
+    id<MTLCommandBuffer> cb = (__bridge id<MTLCommandBuffer>)command_buffer;
+    int extent = built_extent_;
+    int hc     = built_height_cells_;
+
+    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+    [blit copyFromBuffer:(__bridge id<MTLBuffer>)terrain_staging_.handle
+            sourceOffset:0
+       sourceBytesPerRow:(NSUInteger)extent
+     sourceBytesPerImage:(NSUInteger)extent * (NSUInteger)hc
+              sourceSize:MTLSizeMake((NSUInteger)extent, (NSUInteger)hc, (NSUInteger)extent)
+               toTexture:(__bridge id<MTLTexture>)terrain_grid_.handle
+        destinationSlice:0
+        destinationLevel:0
+       destinationOrigin:MTLOriginMake(0, 0, 0)];
+    [blit endEncoding];
+    terrain_dirty_ = false;
+}
+
+void VoxelRenderer::encode_world_fill(void* compute_encoder, const Config& cfg,
+                                      Cascade* const* cascades, int cascade_count) {
+    if (!world_grid_.handle) return;
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
-    int slot = frame_index_ % RING;
+    int slot = fill_frame_ % RING;
     int extent = cfg.voxel.grid_extent;
     int n = std::min(cascade_count, MAX_CASCADES);
 
-    VoxelizeUniforms u{};
-    u.grid_extent  = extent;
-    u.voxel_size_m = cfg.voxel.voxel_size_m;
+    WorldFillUniforms u{};
+    u.grid_extent   = extent;
+    u.height_cells  = cfg.voxel.height_cells;
+    u.voxel_size_m  = cfg.voxel.voxel_size_m;
     u.height_step_m = cfg.voxel.height_step_m;
-    u.base_depth_m = cfg.voxel.base_depth_m;
+    u.base_depth_m  = cfg.voxel.base_depth_m;
     u.cascade_count = n;
-    u._vpad0 = u._vpad1 = u._vpad2 = 0.0f;
+    u._wpad0 = u._wpad1 = 0.0f;
     for (int i = 0; i < MAX_CASCADES; ++i)
         u.cascade_size[i] = i < n ? cfg.cascades[i].size_m : 0.0f;
-    std::memcpy(vox_uniforms_[slot].cpu_ptr, &u, sizeof(u));
+    std::memcpy(fill_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
-    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_voxelize_];
-    [ce setBuffer:(__bridge id<MTLBuffer>)vox_uniforms_[slot].handle offset:0 atIndex:0];
-    [ce setBuffer:(__bridge id<MTLBuffer>)instances_.handle offset:0 atIndex:1];
+    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_fill_];
+    [ce setBuffer:(__bridge id<MTLBuffer>)fill_uniforms_[slot].handle offset:0 atIndex:0];
+    [ce setTexture:(__bridge id<MTLTexture>)terrain_grid_.handle atIndex:0];
+    [ce setTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:1];
+    [ce setTexture:(__bridge id<MTLTexture>)surface_tex_.handle atIndex:2];
     for (int i = 0; i < n; ++i) {
-        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->displacement_handle() atIndex:i];
-        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->normal_handle() atIndex:MAX_CASCADES + i];
+        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->displacement_handle() atIndex:3 + i];
+        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->normal_handle() atIndex:3 + MAX_CASCADES + i];
     }
 
     MTLSize tg = MTLSizeMake(16, 16, 1);
@@ -116,62 +150,82 @@ void VoxelRenderer::encode_voxelize(void* compute_encoder, const Config& cfg,
     MTLSize grid = MTLSizeMake(groups, groups, 1);
     [ce dispatchThreadgroups:grid threadsPerThreadgroup:tg];
 
-    frame_index_++;
+    fill_frame_++;
 }
 
-void VoxelRenderer::encode_draw(void* render_encoder, const OrbitCamera& cam, const Config& cfg,
-                                const SkyRenderer& sky, int frame_index) {
-    if (!instances_.handle) return;
-    id<MTLRenderCommandEncoder> enc = (__bridge id<MTLRenderCommandEncoder>)render_encoder;
+void VoxelRenderer::ensure_march_target(const MetalContext& ctx, int drawable_w, int drawable_h,
+                                        const Config& cfg) {
+    float s = cfg.march.render_scale;
+    int w = std::max(1, (int)(drawable_w * s));
+    int h = std::max(1, (int)(drawable_h * s));
+    if (march_target_.handle && w == target_w_ && h == target_h_) return;
+    destroy_texture(march_target_);
+    march_target_ = make_texture_2d(ctx, (uint32_t)w, (uint32_t)h,
+                                    TexFormat::BGRA8Unorm_sRGB,
+                                    /*storage_write=*/false, /*render_target=*/true);
+    target_w_ = w;
+    target_h_ = h;
+}
+
+void VoxelRenderer::encode_march(void* command_buffer, const OrbitCamera& cam, const Config& cfg,
+                                 const SkyRenderer& sky, int frame_index) {
+    if (!world_grid_.handle || !march_target_.handle) return;
+    id<MTLCommandBuffer> cb = (__bridge id<MTLCommandBuffer>)command_buffer;
     int slot = frame_index % RING;
-    int extent = cfg.voxel.grid_extent;
 
-    CameraUniforms cu;
-    auto v = cam.view(); auto p = cam.proj(); auto vp = cam.view_proj();
-    std::memcpy(&cu.view, &v[0][0], 64);
-    std::memcpy(&cu.proj, &p[0][0], 64);
-    std::memcpy(&cu.view_proj, &vp[0][0], 64);
-    cu.position = (simd_float3){ cam.position().x, cam.position().y, cam.position().z };
-    cu._pad = 0.0f;
-    std::memcpy(cam_buf_[slot].cpu_ptr, &cu, sizeof(cu));
-
-    VoxelSurfaceUniforms su{};
-    su.grid_extent = extent;
-    su.voxel_size_m = cfg.voxel.voxel_size_m;
-    su.base_depth_m = cfg.voxel.base_depth_m;
-    su._spad_a = 0.0f;
+    MarchUniforms u{};
+    glm::mat4 inv_vp = glm::inverse(cam.view_proj());
+    std::memcpy(&u.inv_view_proj, &inv_vp[0][0], 64);
+    u.camera_pos = (simd_float3){ cam.position().x, cam.position().y, cam.position().z };
+    u._mpad0 = 0.0f;
     // sun_dir MUST be unit length (shader contract) — mirror SkyRenderer's
     // elevation/azimuth -> direction formula so sky and specular agree.
     float ce = std::cos(cfg.sky.sun_elevation_rad), se = std::sin(cfg.sky.sun_elevation_rad);
     float ca = std::cos(cfg.sky.sun_azimuth_rad),   sa = std::sin(cfg.sky.sun_azimuth_rad);
     simd_float3 sun = { ce * sa, se, ce * ca };
-    su.sun_dir = simd_normalize(sun);
-    su.sun_color = (simd_float3){ cfg.shading.sun_color.x, cfg.shading.sun_color.y, cfg.shading.sun_color.z };
-    su.sun_shininess = cfg.shading.sun_shininess;
-    su.deep_water_color = (simd_float3){ cfg.shading.deep_water_color.x, cfg.shading.deep_water_color.y, cfg.shading.deep_water_color.z };
-    su.depth_fog_density = cfg.shading.depth_fog_density;
-    su.extinction_rgb = (simd_float3){ cfg.shading.extinction_rgb.x, cfg.shading.extinction_rgb.y, cfg.shading.extinction_rgb.z };
-    su.foam_threshold = cfg.shading.foam_threshold;
-    su.foam_strength = cfg.shading.foam_strength;
-    su.height_step_m = cfg.voxel.height_step_m;
-    std::memcpy(draw_uniforms_[slot].cpu_ptr, &su, sizeof(su));
+    u.sun_dir = simd_normalize(sun);
+    u._mpad1 = 0.0f;
+    u.sun_color = (simd_float3){ cfg.shading.sun_color.x, cfg.shading.sun_color.y, cfg.shading.sun_color.z };
+    u.sun_shininess = cfg.shading.sun_shininess;
+    u.deep_water_color = (simd_float3){ cfg.shading.deep_water_color.x, cfg.shading.deep_water_color.y, cfg.shading.deep_water_color.z };
+    u.depth_fog_density = cfg.shading.depth_fog_density;
+    u.extinction_rgb = (simd_float3){ cfg.shading.extinction_rgb.x, cfg.shading.extinction_rgb.y, cfg.shading.extinction_rgb.z };
+    u.foam_threshold = cfg.shading.foam_threshold;
+    u.sand_color = (simd_float3){ cfg.shading.sand_color.x, cfg.shading.sand_color.y, cfg.shading.sand_color.z };
+    u.foam_strength = cfg.shading.foam_strength;
+    u.rock_color = (simd_float3){ cfg.shading.rock_color.x, cfg.shading.rock_color.y, cfg.shading.rock_color.z };
+    u.height_step_m = cfg.voxel.height_step_m;
+    u.grid_extent = cfg.voxel.grid_extent;
+    u.height_cells = cfg.voxel.height_cells;
+    u.voxel_size_m = cfg.voxel.voxel_size_m;
+    u.base_depth_m = cfg.voxel.base_depth_m;
+    u.max_steps = cfg.march.max_steps;
+    u._mpad2 = u._mpad3 = u._mpad4 = 0.0f;
+    std::memcpy(march_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
-    [enc setRenderPipelineState:(__bridge id<MTLRenderPipelineState>)pso_draw_];
-    [enc setDepthStencilState:(__bridge id<MTLDepthStencilState>)dss_];
-    [enc setVertexBuffer:(__bridge id<MTLBuffer>)cube_vbo_.handle offset:0 atIndex:0];
-    [enc setVertexBuffer:(__bridge id<MTLBuffer>)cam_buf_[slot].handle offset:0 atIndex:1];
-    [enc setVertexBuffer:(__bridge id<MTLBuffer>)draw_uniforms_[slot].handle offset:0 atIndex:2];
-    [enc setVertexBuffer:(__bridge id<MTLBuffer>)instances_.handle offset:0 atIndex:3];
-    [enc setFragmentBuffer:(__bridge id<MTLBuffer>)cam_buf_[slot].handle offset:0 atIndex:1];
-    [enc setFragmentBuffer:(__bridge id<MTLBuffer>)draw_uniforms_[slot].handle offset:0 atIndex:2];
-    [enc setFragmentTexture:(__bridge id<MTLTexture>)sky.cubemap_handle() atIndex:0];
+    MTLRenderPassDescriptor* rp = [MTLRenderPassDescriptor renderPassDescriptor];
+    rp.colorAttachments[0].texture = (__bridge id<MTLTexture>)march_target_.handle;
+    rp.colorAttachments[0].loadAction = MTLLoadActionClear;
+    rp.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
+    rp.colorAttachments[0].storeAction = MTLStoreActionStore;
 
-    [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-                    indexCount:index_count_
-                     indexType:MTLIndexTypeUInt16
-                   indexBuffer:(__bridge id<MTLBuffer>)cube_ibo_.handle
-             indexBufferOffset:0
-                 instanceCount:(NSUInteger)extent * (NSUInteger)extent];
+    id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
+    [enc setRenderPipelineState:(__bridge id<MTLRenderPipelineState>)pso_march_];
+    [enc setFragmentBuffer:(__bridge id<MTLBuffer>)march_uniforms_[slot].handle offset:0 atIndex:0];
+    [enc setFragmentTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:0];
+    [enc setFragmentTexture:(__bridge id<MTLTexture>)surface_tex_.handle atIndex:1];
+    [enc setFragmentTexture:(__bridge id<MTLTexture>)sky.cubemap_handle() atIndex:2];
+    [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [enc endEncoding];
+}
+
+void VoxelRenderer::encode_composite(void* render_encoder) {
+    if (!march_target_.handle) return;
+    id<MTLRenderCommandEncoder> enc = (__bridge id<MTLRenderCommandEncoder>)render_encoder;
+    [enc setRenderPipelineState:(__bridge id<MTLRenderPipelineState>)pso_composite_];
+    [enc setDepthStencilState:(__bridge id<MTLDepthStencilState>)dss_off_];
+    [enc setFragmentTexture:(__bridge id<MTLTexture>)march_target_.handle atIndex:0];
+    [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 }
 
 }

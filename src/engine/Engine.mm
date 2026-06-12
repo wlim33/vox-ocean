@@ -134,20 +134,27 @@ void engine_render(Engine* e) {
     e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, e->app->config());
     e->sim.rebuild_if_dirty(e->ctx, e->app->config());
     e->voxels.rebuild_if_dirty(e->ctx, e->app->config());
+    CGSize dsz = view.drawableSize;
+    e->voxels.ensure_march_target(e->ctx, (int)dsz.width, (int)dsz.height,
+                                  e->app->config());
+    e->voxels.encode_terrain_upload_if_dirty((__bridge void*)cb);
     float sim_time = (float)e->app->clock().total_seconds();
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
-    e->voxels.encode_voxelize((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count());
+    e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count());
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
     e->sim.encode_mipgen((__bridge void*)blit, e->app->config());
     [blit endEncoding];
 
+    e->voxels.encode_march((__bridge void*)cb, e->app->camera(), e->app->config(),
+                           e->sky, e->frame_index);
+
     id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
     e->sky.encode_full_screen((__bridge void*)enc, e->app->camera(), e->app->config());
-    e->voxels.encode_draw((__bridge void*)enc, e->app->camera(), e->app->config(), e->sky, e->frame_index);
+    e->voxels.encode_composite((__bridge void*)enc);
     if (ui) e->imgui.render((__bridge void*)cb, (__bridge void*)rp, (__bridge void*)enc);
     [enc endEncoding];
 

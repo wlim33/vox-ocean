@@ -1,5 +1,6 @@
 #pragma once
 #include "gpu/Buffer.h"
+#include "gpu/Texture.h"
 #include <cstdint>
 namespace vox {
 struct MetalContext;
@@ -9,31 +10,42 @@ struct Config;
 class  Cascade;
 class  SkyRenderer;
 
+// Owns the voxel world: static terrain, the per-frame material-grid build
+// (compute), and the ray-marched draw (offscreen march pass + composite into
+// the drawable pass).
 class VoxelRenderer {
 public:
     void init(const MetalContext& ctx, PipelineCache& cache);
-    // Recreates the instance buffer when voxel.grid_extent changes.
+    // Recreates grid textures + regenerates terrain when extent / height_cells
+    // / floor_seed change.
     void rebuild_if_dirty(const MetalContext& ctx, const Config& cfg);
-    void encode_voxelize(void* compute_encoder, const Config& cfg,
-                         Cascade* const* cascades, int cascade_count);
-    void encode_draw(void* render_encoder, const OrbitCamera& cam, const Config& cfg,
-                     const SkyRenderer& sky, int frame_index);
-    // Ring slots are paced by MTKView's drawable acquisition (3 drawables):
-    // the CPU blocks for a free drawable before overwriting slot N%3, so a
-    // slot is never written while its 3-frames-ago GPU read is in flight.
-    // The engine additionally gates frames with a dispatch_semaphore sized to
-    // config max_in_flight_frames (clamped to [1,3]), so in-flight frames are
-    // bounded even when that knob is below maximumDrawableCount.
+    // Stages freshly generated terrain into the private 3D texture. Creates
+    // its own blit encoder; call BEFORE encode_world_fill in the frame.
+    void encode_terrain_upload_if_dirty(void* command_buffer);
+    void encode_world_fill(void* compute_encoder, const Config& cfg,
+                           Cascade* const* cascades, int cascade_count);
+    // (Re)sizes the offscreen march target to drawable * march.render_scale.
+    void ensure_march_target(const MetalContext& ctx, int drawable_w, int drawable_h,
+                             const Config& cfg);
+    // Ray-march into the offscreen target: own render pass on the command buffer.
+    void encode_march(void* command_buffer, const OrbitCamera& cam, const Config& cfg,
+                      const SkyRenderer& sky, int frame_index);
+    // Blend the march target over the sky in the drawable pass.
+    void encode_composite(void* render_encoder);
+    // Uniform ring paced by drawable acquisition + the engine's in-flight
+    // semaphore, exactly as in v1 (see git history for the full contract).
     static constexpr int RING = 3;
 private:
-    Buffer cube_vbo_{}, cube_ibo_{};
-    Buffer instances_{};
-    Buffer vox_uniforms_[RING]{}, draw_uniforms_[RING]{}, cam_buf_[RING]{};
-    int    instance_extent_ = 0;
-    int    index_count_ = 0;
-    int    frame_index_ = 0;   // advanced by encode_voxelize; draw reuses the same slot
-    void*  pso_voxelize_ = nullptr;
-    void*  pso_draw_ = nullptr;
-    void*  dss_ = nullptr;     // depth Less, write on
+    Texture terrain_grid_{}, world_grid_{}, surface_tex_{}, march_target_{};
+    Buffer  terrain_staging_{};
+    Buffer  fill_uniforms_[RING]{}, march_uniforms_[RING]{};
+    int     fill_frame_ = 0;
+    int     built_extent_ = 0, built_height_cells_ = 0, built_seed_ = 0;
+    int     target_w_ = 0, target_h_ = 0;
+    bool    terrain_dirty_ = false;
+    void*   pso_fill_ = nullptr;
+    void*   pso_march_ = nullptr;
+    void*   pso_composite_ = nullptr;
+    void*   dss_off_ = nullptr;   // depth Always, write OFF (drawable pass has a depth buffer)
 };
 }
