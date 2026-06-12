@@ -26,7 +26,7 @@ struct TransmitResult {
     bool  hit = false;            // ended on an opaque cell
     int   ix = -1, iy = -1, iz = -1;   // that opaque cell
     int   opaque_axis = -1;       // face axis the opaque cell was entered through
-    int   entry_axis = -1;        // axis of the FIRST water interface; -1 = never touched water
+    int   entry_axis = -1;        // axis of the FIRST water interface; -1 = never touched water. Only meaningful for rays originating outside the grid.
     float entry_t = 0.0f;         // ray t at that interface (pre-bend parameterization)
     float water_dist = 0.0f;      // metric distance traveled inside Water cells
     bool  exited_up = false;      // left the grid moving upward (sky behind the water)

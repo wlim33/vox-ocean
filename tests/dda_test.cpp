@@ -114,6 +114,7 @@ TEST(DdaTransmit, StraightDownThroughWaterOntoSand) {
     ASSERT_TRUE(r.hit);
     EXPECT_EQ(r.ix, 2); EXPECT_EQ(r.iy, 0); EXPECT_EQ(r.iz, 2);   // sand under (0.5, ., 0.5)
     EXPECT_EQ(r.entry_axis, 1);
+    EXPECT_EQ(r.opaque_axis, 1);          // sand entered from above
     EXPECT_NEAR(r.entry_t, 9.0f, 0.01f);   // y=10 down to surface y=1
     EXPECT_NEAR(r.water_dist, 2.0f, 0.01f);
 }
@@ -151,6 +152,8 @@ TEST(DdaTransmit, ObliqueEntryBendsTowardNormal) {
     ASSERT_TRUE(r.hit);
     EXPECT_EQ(r.ix, 3); EXPECT_EQ(r.iy, 0); EXPECT_EQ(r.iz, 1);
     EXPECT_EQ(r.entry_axis, 1);
+    EXPECT_EQ(r.opaque_axis, 1);
+    EXPECT_NEAR(r.entry_t, 4.472f, 0.02f);   // |(0.5,1)-( -1.5,5)| = sqrt(20)
     EXPECT_NEAR(r.water_dist, 2.124f, 0.02f);
     // IOR 1: same geometry, no bend — shallower underwater angle, so at
     // least as far in x and a longer in-water path.
@@ -158,6 +161,41 @@ TEST(DdaTransmit, ObliqueEntryBendsTowardNormal) {
                                      glm::normalize(glm::vec3(1, -2.1f, 0)),
                                      w, g.data(), 64, 1.0f);
     ASSERT_TRUE(s.hit);
-    EXPECT_GT(s.ix, r.ix - 1);
-    EXPECT_GE(s.water_dist, r.water_dist - 0.1f);
+    // No bend: unit dir (0.4300,-0.9029,0); 2m water depth -> path 2.215m,
+    // landing x = 0.405 + 0.4300*2.215 = 1.357 -> ix 3.
+    EXPECT_EQ(s.ix, 3);
+    EXPECT_NEAR(s.water_dist, 2.215f, 0.02f);
+}
+
+TEST(DdaTransmit, UpwardExitSamplesSky) {
+    // Water slab iy=2 only (y in [0,1]); ray enters its side wall tilted up,
+    // refraction flattens the tilt (sin 0.1961 -> 0.1475), it leaves the slab
+    // top after 0.678m of water and eventually exits the grid still rising.
+    auto w = world(); auto g = empty_grid(w);
+    for (int ix = 0; ix < 4; ++ix)
+        for (int iz = 0; iz < 4; ++iz)
+            g[w.cell_index(ix, 2, iz)] = (uint8_t)vox::VoxMat::Water;
+    auto r = vox::dda_march_transmit({-5.0f, 0.3f, -0.5f},
+                                     glm::normalize(glm::vec3(1, 0.2f, 0)),
+                                     w, g.data(), 64, 1.33f);
+    EXPECT_FALSE(r.hit);
+    EXPECT_EQ(r.entry_axis, 0);
+    EXPECT_TRUE(r.exited_up);
+    EXPECT_NEAR(r.water_dist, 0.678f, 0.03f);
+}
+
+TEST(DdaTransmit, BudgetExhaustionMidWaterIsPartial) {
+    // Water everywhere iy=0..2; straight-on side entry, budget of 4 steps:
+    // 1 step finds water, 3 transmit steps cross 3m before the budget ends.
+    auto w = world(); auto g = empty_grid(w);
+    for (int ix = 0; ix < 4; ++ix)
+        for (int iz = 0; iz < 4; ++iz)
+            for (int iy = 0; iy < 3; ++iy)
+                g[w.cell_index(ix, iy, iz)] = (uint8_t)vox::VoxMat::Water;
+    auto r = vox::dda_march_transmit({-5.0f, 0.5f, -0.5f}, {1, 0, 0}, w, g.data(), 4, 1.33f);
+    EXPECT_FALSE(r.hit);                  // degraded path: budget, not geometry
+    EXPECT_EQ(r.entry_axis, 0);
+    EXPECT_FALSE(r.exited_up);
+    EXPECT_EQ(r.steps, 4);
+    EXPECT_NEAR(r.water_dist, 3.0f, 0.05f);
 }
