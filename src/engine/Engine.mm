@@ -1,6 +1,8 @@
 #include "engine/Engine.h"
 #include "core/App.h"
 #include "core/InputBridge.h"
+#include "entity/Boat.h"
+#include "voxel/VoxelWorld.h"
 #include "gpu/MetalContext.h"
 #include "gpu/PipelineCache.h"
 #include "ocean/Simulation.h"
@@ -31,6 +33,7 @@ public:
     VoxelRenderer voxels;
     ImGuiBackend imgui;
     BenchmarkHarness bench;
+    Boat boat;
     // Bounds CPU frames-in-flight to config.max_in_flight_frames; created
     // lazily on the first render. signaled in the command-buffer completed
     // handler so the CPU blocks once that many frames are still on the GPU.
@@ -140,15 +143,39 @@ void engine_render(Engine* e) {
     e->voxels.encode_terrain_upload_if_dirty((__bridge void*)cb);
     float sim_time = (float)e->app->clock().total_seconds();
 
+    const Config& cfg = e->app->config();
+    std::vector<RippleSplash> wake;
+    std::vector<uint32_t> boat_cells_scratch;
+    if (cfg.entity.boat_enabled) {
+        float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
+        float dt = (float)e->app->clock().delta_seconds();
+        e->boat.update(dt, sim_time,
+            [&](float x, float z) { return e->voxels.water_height_at(x, z, cfg, e->frame_index); },
+            cfg.entity.boat_speed_mps, half, cfg.voxel.voxel_size_m);
+        glm::vec2 st = e->boat.stern_world(cfg.voxel.voxel_size_m);
+        wake.push_back({ (st.x + half) / cfg.voxel.voxel_size_m,
+                         (st.y + half) / cfg.voxel.voxel_size_m,
+                         1.5f, -cfg.entity.wake_amp });
+        VoxelWorld w({cfg.voxel.grid_extent, cfg.voxel.height_cells,
+                      cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
+                      cfg.voxel.base_depth_m});
+        boat_cells_scratch = boat_cells(e->boat.state(), w);
+    }
+
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
     e->voxels.encode_ripple((__bridge void*)ce, e->app->config(),
-                            (float)e->app->clock().delta_seconds());
+                            (float)e->app->clock().delta_seconds(),
+                            wake.data(), (int)wake.size());
     e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->frame_index);
+    e->voxels.encode_stamp((__bridge void*)ce, e->app->config(),
+                           boat_cells_scratch.data(), (int)boat_cells_scratch.size(),
+                           e->frame_index);
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
     e->sim.encode_mipgen((__bridge void*)blit, e->app->config());
+    e->voxels.encode_surface_readback((__bridge void*)blit, e->app->config(), e->frame_index);
     [blit endEncoding];
 
     e->voxels.encode_march((__bridge void*)cb, e->app->camera(), e->app->config(),
