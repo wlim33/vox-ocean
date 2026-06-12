@@ -17,6 +17,8 @@ C++20 / Objective-C++ engine with direct Swift↔C++ interop.
   sky; scalable march resolution (`march.render_scale`)
 - Interactive ripple layer: damped wave-equation sim summed with the FFT,
   splash injection (`ripple.rain_rate`), absorbing diorama borders
+- Autonomous voxel boat: hull stamped into the grid, buoyancy from the live
+  surface heights, deterministic wandering course, stern wake in the ripple layer
 - Finite diorama with volumetric Beer–Lambert attenuation along the in-water path, Jacobian foam on crest voxels
 - Preetham sky baked to a cubemap; ACES tonemap
 
