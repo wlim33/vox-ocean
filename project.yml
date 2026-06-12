@@ -1,0 +1,61 @@
+name: vox-ocean
+options:
+  bundleIdPrefix: dev.wlim
+  deploymentTarget:
+    macOS: "13.0"
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    SWIFT_OBJC_INTEROP_MODE: objcxx
+    SWIFT_OBJC_BRIDGING_HEADER: apps/shared/Bridging.h
+    CLANG_CXX_LANGUAGE_STANDARD: c++20
+    CLANG_ENABLE_OBJC_ARC: YES
+    HEADER_SEARCH_PATHS:
+      - $(SRCROOT)/src
+      - $(SRCROOT)/shaders
+      - $(SRCROOT)/third_party/glm
+      - $(SRCROOT)/third_party/tomlplusplus/include
+      - $(SRCROOT)/third_party/imgui
+      - $(SRCROOT)/third_party/imgui/backends
+    MTL_HEADER_SEARCH_PATHS: $(SRCROOT)/shaders
+targets:
+  vox-ocean-mac:
+    type: application
+    platform: macOS
+    info:
+      path: apps/mac/Info.plist
+      properties:
+        CFBundleName: vox-ocean
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "0.1"
+        LSMinimumSystemVersion: "13.0"
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
+    sources:
+      - apps/mac
+      - apps/shared
+      - src
+      - shaders
+      - path: default-config.toml
+        buildPhase: resources
+      - path: third_party/imgui
+        buildPhase: sources
+        includes:
+          - imgui.cpp
+          - imgui_draw.cpp
+          - imgui_tables.cpp
+          - imgui_widgets.cpp
+          - imgui_demo.cpp
+          - backends/imgui_impl_metal.mm
+          - backends/imgui_impl_osx.mm
+    dependencies:
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: AppKit.framework
+      - sdk: QuartzCore.framework
+      - sdk: GameController.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.wlim.vox-ocean
