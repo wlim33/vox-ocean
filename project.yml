@@ -60,3 +60,41 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.wlim.vox-ocean
+  vox-ocean-ios:
+    type: application
+    platform: iOS
+    info:
+      path: apps/ios/Info.plist
+      properties:
+        CFBundleName: vox-ocean
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "0.1"
+        UILaunchScreen: {}
+    sources:
+      - apps/ios
+      - apps/shared
+      - path: src
+        excludes: ["bench/BenchPaths.cpp"]
+      - shaders
+      - path: default-config.toml
+        buildPhase: resources
+      - path: third_party/imgui
+        buildPhase: sources
+        includes:
+          - imgui.cpp
+          - imgui_draw.cpp
+          - imgui_tables.cpp
+          - imgui_widgets.cpp
+          - imgui_demo.cpp
+          - backends/imgui_impl_metal.mm
+    dependencies:
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: UIKit.framework
+      - sdk: QuartzCore.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.wlim.vox-ocean-ios
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGNING_ALLOWED: NO
