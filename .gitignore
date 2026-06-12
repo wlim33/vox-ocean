@@ -1,0 +1,17 @@
+# build artifacts
+build/
+DerivedData/
+*.xcuserdatad/
+xcuserdata/
+out/
+.DS_Store
+*.swp
+bench-*.csv
+compile_commands.json
+.cache/
+imgui.ini
+
+# assistant/local files — never tracked in the public repo
+CLAUDE.md
+.claude/
+docs/superpowers/
