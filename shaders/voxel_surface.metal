@@ -51,7 +51,8 @@ fragment float4 voxel_fs(
     constexpr sampler cube_smp(filter::linear, address::clamp_to_edge);
     float3 n = in.normal;
     float3 V = normalize(cam.position - in.world_pos);
-    float3 sun = normalize(S.sun_dir);
+    float3 sun = S.sun_dir;   // unit length by contract (see shader_types.h)
+    float foam = saturate(S.foam_strength * (S.foam_threshold - in.fold_min));
     float3 color;
 
     if (n.y > 0.5) {
@@ -63,7 +64,6 @@ fragment float4 voxel_fs(
                           + S.sun_color * pow(max(dot(R, sun), 0.0), S.sun_shininess);
         float3 refraction = S.deep_water_color;
         color = mix(refraction, reflection, F);
-        float foam = saturate(S.foam_strength * (S.foam_threshold - in.fold_min));
         color = mix(color, float3(1.0), foam);
     } else {
         // Side face: Beer-Lambert depth-tinted water volume down to the
@@ -73,9 +73,8 @@ fragment float4 voxel_fs(
         float3 absorb = exp(-S.depth_fog_density * depth * S.extinction_rgb);
         float lambert = 0.35 + 0.65 * max(dot(n, sun), 0.0);
         color = S.deep_water_color * absorb * lambert;
-        // Foam bleeds one step down from a foamy crest.
-        float foam = saturate(S.foam_strength * (S.foam_threshold - in.fold_min));
-        float crest = saturate(1.0 - depth / max(S.voxel_size_m, 1e-3));
+        // Foam bleeds one quantization step down from a foamy crest.
+        float crest = saturate(1.0 - depth / max(S.height_step_m, 1e-3));
         color = mix(color, float3(0.9), foam * crest);
     }
     return float4(aces_tonemap(color), 1.0);
