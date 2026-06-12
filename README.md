@@ -15,6 +15,8 @@ C++20 / Objective-C++ engine with direct Swift↔C++ interop.
 - Ray-marched rendering: full-screen DDA through the grid, refraction +
   Beer–Lambert transmission through the water volume, composited over the
   sky; scalable march resolution (`march.render_scale`)
+- Interactive ripple layer: damped wave-equation sim summed with the FFT,
+  splash injection (`ripple.rain_rate`), absorbing diorama borders
 - Finite diorama with volumetric Beer–Lambert attenuation along the in-water path, Jacobian foam on crest voxels
 - Preetham sky baked to a cubemap; ACES tonemap
 
