@@ -61,3 +61,30 @@ struct OceanSurfaceUniforms {
     float displacement_range_m;
     int   debug_view;
 };
+
+struct VoxelizeUniforms {
+    int   grid_extent;
+    float voxel_size_m;
+    float height_step_m;
+    float base_depth_m;
+    int   cascade_count;
+    float _vpad0, _vpad1, _vpad2;
+    float cascade_size[MAX_CASCADES];
+};
+
+struct VoxelInstance {   // column xz derives from instance_id — keep this tiny
+    float top_y;
+    float fold_min;
+};
+
+struct VoxelSurfaceUniforms {
+    int   grid_extent;
+    float voxel_size_m;
+    float base_depth_m;
+    float displacement_range_m;
+    vec3  sun_dir;          float _spad0;
+    vec3  sun_color;        float sun_shininess;
+    vec3  deep_water_color; float depth_fog_density;
+    vec3  extinction_rgb;   float foam_threshold;
+    float foam_strength;    float _spad1, _spad2, _spad3;
+};
