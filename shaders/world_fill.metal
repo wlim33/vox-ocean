@@ -13,6 +13,7 @@ kernel void world_fill(
     texture2d<float, access::write> surface            [[texture(2)]],
     array<texture2d<float>, MAX_CASCADES> disp_tex     [[texture(3)]],
     array<texture2d<float>, MAX_CASCADES> normal_tex   [[texture(3 + MAX_CASCADES)]],
+    texture2d<float, access::read> ripple              [[texture(3 + 2 * MAX_CASCADES)]],
     uint2 gid [[thread_position_in_grid]])
 {
     if ((int)gid.x >= U.grid_extent || (int)gid.y >= U.grid_extent) return;
@@ -32,6 +33,9 @@ kernel void world_fill(
         // level(0): one canonical sample per column.
         fold_min = min(fold_min, normal_tex[i].sample(smp, uv, level(0)).w);
     }
+    // Interactive ripple layer: summed with the FFT before quantization.
+    float ripple_h = ripple.read(gid).x;
+    h += ripple_h;
     // Mirror of VoxelWorld::quantize_height / water_top_cell (floor policy).
     float top = floor(h / U.height_step_m) * U.height_step_m;
     top = max(top, -U.base_depth_m + U.height_step_m);
@@ -44,5 +48,6 @@ kernel void world_fill(
         world.write(uint4(m, 0, 0, 0), uint3(gid.x, iy, gid.y));
     }
     // Per-column water surface height + folding for the marcher's shading.
-    surface.write(float4(top, fold_min, 0.0, 0.0), gid);
+    // Ripple amplitude lowers fold_min so impacts read as foam in the marcher.
+    surface.write(float4(top, fold_min - U.ripple_foam * abs(ripple_h), 0.0, 0.0), gid);
 }

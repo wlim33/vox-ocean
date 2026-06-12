@@ -7,6 +7,7 @@
 #import "gpu/PipelineCache.h"
 #import "voxel/VoxelWorld.h"
 #import "voxel/FloorGen.h"
+#import "voxel/Ripple.h"
 #import "shader_types.h"
 #import <Metal/Metal.h>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -15,12 +16,14 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <random>
 #include <vector>
 
 namespace vox {
 
 void VoxelRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
     pso_fill_ = cache.compute_pso(ctx, "world_fill");
+    pso_ripple_ = cache.compute_pso(ctx, "ripple_step");
 
     // March pass: fullscreen triangle into the offscreen target (no depth, no
     // blend — misses write alpha 0 so the composite shows the sky).
@@ -49,6 +52,8 @@ void VoxelRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
     for (int i = 0; i < RING; ++i) {
         fill_uniforms_[i]  = make_buffer(ctx, sizeof(WorldFillUniforms), true);
         march_uniforms_[i] = make_buffer(ctx, sizeof(MarchUniforms), true);
+        ripple_uniforms_[i] = make_buffer(ctx, sizeof(RippleUniforms), true);
+        splash_buf_[i]      = make_buffer(ctx, sizeof(RippleSplash) * MAX_SPLASHES, true);
     }
 }
 
@@ -73,6 +78,13 @@ void VoxelRenderer::rebuild_if_dirty(const MetalContext& ctx, const Config& cfg)
                                     TexFormat::R8Uint, /*storage_write=*/true);
     surface_tex_  = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent,
                                     TexFormat::RG32F);
+
+    // Ripple ping-pong ring is sized by extent only; reset phase on rebuild.
+    for (int i = 0; i < 3; ++i) {
+        destroy_texture(ripple_[i]);
+        ripple_[i] = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent, TexFormat::R32F);
+    }
+    ripple_phase_ = 0;
 
     VoxelWorld world({ extent, hc, cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
                        cfg.voxel.base_depth_m });
@@ -115,6 +127,47 @@ void VoxelRenderer::encode_terrain_upload_if_dirty(void* command_buffer) {
     terrain_dirty_ = false;
 }
 
+void VoxelRenderer::encode_ripple(void* compute_encoder, const Config& cfg, float dt) {
+    if (!ripple_[0].handle) return;
+    id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
+    int slot = ripple_phase_ % RING;
+    int extent = cfg.voxel.grid_extent;
+
+    // Debug rain: fixed seed so bench runs are reproducible frame-for-frame.
+    RippleSplash* splashes = (RippleSplash*)splash_buf_[slot].cpu_ptr;
+    int count = 0;
+    if (cfg.ripple.rain_rate > 0.0f) {
+        static thread_local std::mt19937 rng(0x5EAF00Du);   // fixed seed: bench determinism
+        std::uniform_real_distribution<float> uni(0.0f, (float)extent);
+        rain_accum_ += cfg.ripple.rain_rate * dt;
+        while (rain_accum_ >= 1.0f && count < MAX_SPLASHES) {
+            rain_accum_ -= 1.0f;
+            splashes[count++] = { uni(rng), uni(rng), 2.0f, -0.35f };
+        }
+    }
+
+    RippleUniforms u{};
+    u.grid_extent  = extent;
+    // Fixed dt = 1/60 per frame (stability + bench determinism); the real
+    // frame dt only drives the rain accumulator above.
+    u.k            = ripple_k(cfg.ripple.wave_speed_mps, 1.0f / 60.0f, cfg.voxel.voxel_size_m);
+    u.damping      = cfg.ripple.damping;
+    u.splash_count = count;
+    std::memcpy(ripple_uniforms_[slot].cpu_ptr, &u, sizeof(u));
+
+    int prev = ripple_phase_ % 3, curr = (ripple_phase_ + 1) % 3, nxt = (ripple_phase_ + 2) % 3;
+    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_ripple_];
+    [ce setBuffer:(__bridge id<MTLBuffer>)ripple_uniforms_[slot].handle offset:0 atIndex:0];
+    [ce setBuffer:(__bridge id<MTLBuffer>)splash_buf_[slot].handle offset:0 atIndex:1];
+    [ce setTexture:(__bridge id<MTLTexture>)ripple_[prev].handle atIndex:0];
+    [ce setTexture:(__bridge id<MTLTexture>)ripple_[curr].handle atIndex:1];
+    [ce setTexture:(__bridge id<MTLTexture>)ripple_[nxt].handle atIndex:2];
+    MTLSize tg = MTLSizeMake(16, 16, 1);
+    NSUInteger groups = (NSUInteger)((extent + 15) / 16);
+    [ce dispatchThreadgroups:MTLSizeMake(groups, groups, 1) threadsPerThreadgroup:tg];
+    ripple_phase_++;
+}
+
 void VoxelRenderer::encode_world_fill(void* compute_encoder, const Config& cfg,
                                       Cascade* const* cascades, int cascade_count,
                                       int frame_index) {
@@ -131,7 +184,7 @@ void VoxelRenderer::encode_world_fill(void* compute_encoder, const Config& cfg,
     u.height_step_m = cfg.voxel.height_step_m;
     u.base_depth_m  = cfg.voxel.base_depth_m;
     u.cascade_count = n;
-    u.ripple_foam = 0.0f; u._wpad1 = 0.0f;
+    u.ripple_foam = cfg.ripple.foam; u._wpad1 = 0.0f;
     for (int i = 0; i < MAX_CASCADES; ++i)
         u.cascade_size[i] = i < n ? cfg.cascades[i].size_m : 0.0f;
     std::memcpy(fill_uniforms_[slot].cpu_ptr, &u, sizeof(u));
@@ -145,6 +198,8 @@ void VoxelRenderer::encode_world_fill(void* compute_encoder, const Config& cfg,
         [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->displacement_handle() atIndex:3 + i];
         [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->normal_handle() atIndex:3 + MAX_CASCADES + i];
     }
+    [ce setTexture:(__bridge id<MTLTexture>)ripple_[ripple_front_()].handle
+           atIndex:3 + 2 * MAX_CASCADES];
 
     MTLSize tg = MTLSizeMake(16, 16, 1);
     NSUInteger groups = (NSUInteger)((extent + 15) / 16);

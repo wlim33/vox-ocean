@@ -142,6 +142,8 @@ void engine_render(Engine* e) {
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
+    e->voxels.encode_ripple((__bridge void*)ce, e->app->config(),
+                            (float)e->app->clock().delta_seconds());
     e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->frame_index);
     [ce endEncoding];
 
