@@ -46,5 +46,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/voxel/FloorGen.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    dda_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/voxel/Dda.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
