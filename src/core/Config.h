@@ -40,6 +40,13 @@ struct ShadingConfig {
     Tonemap tonemap = Tonemap::Aces;
 };
 
+struct VoxelConfig {
+    int   grid_extent   = 192;   // columns per diorama side
+    float voxel_size_m  = 0.5f;  // world size of one voxel
+    float height_step_m = 0.25f; // vertical quantization step
+    float base_depth_m  = 10.0f; // diorama floor below y=0
+};
+
 struct SkyConfig {
     int cubemap_resolution = 128;
     float sun_elevation_rad = 0.7f;
@@ -68,9 +75,8 @@ struct Config {
     Precision disp_normal_precision = Precision::Fp16;
 
     WaveConfig wave;
-    int grid_cols = 256;
-    int grid_rows = 256;
     float displacement_range_m = 8.0f;
+    VoxelConfig voxel;
 
     SkyConfig sky;
     ShadingConfig shading;

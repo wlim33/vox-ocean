@@ -13,9 +13,9 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "cascade_count","spectrum_precision","disp_normal_precision",
-    "grid_cols","grid_rows","displacement_range_m",
+    "displacement_range_m",
     "max_in_flight_frames","target_fps_cap",
-    "cascades","wave","sky","shading","bench"
+    "cascades","wave","sky","shading","bench","voxel"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -32,6 +32,13 @@ void load_wave(const toml::table& t, WaveConfig& w) {
     if (auto v = t["choppiness"].value<double>())     w.choppiness     = (float)*v;
     if (auto v = t["swell"].value<double>())          w.swell          = (float)*v;
     if (auto v = t["amplitude"].value<double>())      w.amplitude      = (float)*v;
+}
+
+void load_voxel(const toml::table& t, VoxelConfig& v) {
+    if (auto n = t["grid_extent"].value<int64_t>())    v.grid_extent   = (int)*n;
+    if (auto n = t["voxel_size_m"].value<double>())    v.voxel_size_m  = (float)*n;
+    if (auto n = t["height_step_m"].value<double>())   v.height_step_m = (float)*n;
+    if (auto n = t["base_depth_m"].value<double>())    v.base_depth_m  = (float)*n;
 }
 
 } // namespace
@@ -52,14 +59,13 @@ LoadResult load_config_from_string(const std::string& text) {
         if (n < 1 || n > 4) r.warnings.push_back("cascade_count out of [1,4], clamped");
         c.cascade_count = clamp(n, 1, 4);
     }
-    if (auto v = tbl["grid_cols"].value<int64_t>()) c.grid_cols = clamp((int)*v, 32, 1024);
-    if (auto v = tbl["grid_rows"].value<int64_t>()) c.grid_rows = clamp((int)*v, 32, 1024);
     if (auto v = tbl["displacement_range_m"].value<double>())
         c.displacement_range_m = clamp((float)*v, 1.0f, 30.0f);
     if (auto v = tbl["max_in_flight_frames"].value<int64_t>())
         c.max_in_flight_frames = clamp((int)*v, 1, 3);
 
-    if (auto* w = tbl["wave"].as_table()) load_wave(*w, c.wave);
+    if (auto* w = tbl["wave"].as_table())  load_wave(*w, c.wave);
+    if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel);
     // sky, shading, cascades, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -76,15 +82,21 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
         if (eq == std::string::npos) { in.warnings.push_back("bad --set " + s); continue; }
         std::string key = s.substr(0, eq);
         std::string val = s.substr(eq + 1);
-        if (key == "wave.wind_speed_mps")        in.config.wave.wind_speed_mps = std::stof(val);
-        else if (key == "wave.amplitude")        in.config.wave.amplitude      = std::stof(val);
-        else if (key == "wave.choppiness")       in.config.wave.choppiness     = std::stof(val);
-        else if (key == "wave.swell")            in.config.wave.swell          = std::stof(val);
-        else if (key == "cascade_count")         in.config.cascade_count = std::stoi(val);
-        else if (key == "grid_cols")             in.config.grid_cols = std::stoi(val);
-        else if (key == "grid_rows")             in.config.grid_rows = std::stoi(val);
-        else if (key == "bench.bench_mode")      in.config.bench.bench_mode = (val == "true" || val == "1");
-        else in.warnings.push_back("unknown override key: " + key);
+        try {
+            if      (key == "wave.wind_speed_mps")        in.config.wave.wind_speed_mps = std::stof(val);
+            else if (key == "wave.amplitude")             in.config.wave.amplitude      = std::stof(val);
+            else if (key == "wave.choppiness")            in.config.wave.choppiness     = std::stof(val);
+            else if (key == "wave.swell")                 in.config.wave.swell          = std::stof(val);
+            else if (key == "cascade_count")              in.config.cascade_count       = std::stoi(val);
+            else if (key == "voxel.grid_extent")          in.config.voxel.grid_extent   = std::stoi(val);
+            else if (key == "voxel.voxel_size_m")         in.config.voxel.voxel_size_m  = std::stof(val);
+            else if (key == "voxel.height_step_m")        in.config.voxel.height_step_m = std::stof(val);
+            else if (key == "voxel.base_depth_m")         in.config.voxel.base_depth_m  = std::stof(val);
+            else if (key == "bench.bench_mode")           in.config.bench.bench_mode    = (val == "true" || val == "1");
+            else in.warnings.push_back("unknown override key: " + key);
+        } catch (const std::exception&) {
+            in.warnings.push_back("invalid value for " + key + ": " + val);
+        }
     }
     return in;
 }
@@ -97,10 +109,13 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.wave.choppiness,     sizeof(c.wave.choppiness),     h);
     h = fnv1a64(&c.wave.swell,          sizeof(c.wave.swell),          h);
     h = fnv1a64(&c.wave.amplitude,      sizeof(c.wave.amplitude),      h);
+    // Voxel
+    h = fnv1a64(&c.voxel.grid_extent,   sizeof(c.voxel.grid_extent),   h);
+    h = fnv1a64(&c.voxel.voxel_size_m,  sizeof(c.voxel.voxel_size_m),  h);
+    h = fnv1a64(&c.voxel.height_step_m, sizeof(c.voxel.height_step_m), h);
+    h = fnv1a64(&c.voxel.base_depth_m,  sizeof(c.voxel.base_depth_m),  h);
     // Grid / cascades
     h = fnv1a64(&c.cascade_count,       sizeof(c.cascade_count),       h);
-    h = fnv1a64(&c.grid_cols,           sizeof(c.grid_cols),           h);
-    h = fnv1a64(&c.grid_rows,           sizeof(c.grid_rows),           h);
     h = fnv1a64(&c.displacement_range_m,sizeof(c.displacement_range_m),h);
     for (int i = 0; i < 4; ++i) {
         h = fnv1a64(&c.cascades[i].size_m,       sizeof(float), h);
