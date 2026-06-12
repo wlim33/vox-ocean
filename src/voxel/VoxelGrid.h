@@ -1,5 +1,7 @@
 #pragma once
+#include <cassert>
 namespace vox {
+// extent = columns per axis; preconditions: all fields > 0 (Config layer clamps upstream).
 struct VoxelGridParams {
     int   extent;
     float voxel_size_m;
@@ -9,7 +11,11 @@ struct VoxelGridParams {
 // CPU mirror of shaders/voxelize.metal — keep the math in lockstep.
 class VoxelGrid {
 public:
-    explicit VoxelGrid(VoxelGridParams p) : p_(p) {}
+    explicit VoxelGrid(VoxelGridParams p) : p_(p) {
+        assert(p_.extent > 0);
+        assert(p_.voxel_size_m > 0.0f);
+        assert(p_.height_step_m > 0.0f);
+    }
     int   columns() const { return p_.extent * p_.extent; }
     float patch_size_m() const { return p_.extent * p_.voxel_size_m; }
     float column_center_x(int ix) const;
