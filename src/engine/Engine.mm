@@ -8,6 +8,8 @@
 #include "render/VoxelRenderer.h"
 #include "ui/ImGuiBackend.h"
 #include "ui/DebugPanel.h"
+#include "bench/BenchmarkHarness.h"
+#include "bench/BenchCameraPath.h"
 #import <MetalKit/MetalKit.h>
 #include <chrono>
 #include <fstream>
@@ -28,6 +30,11 @@ public:
     SkyRenderer sky;
     VoxelRenderer voxels;
     ImGuiBackend imgui;
+    BenchmarkHarness bench;
+    // Bounds CPU frames-in-flight to config.max_in_flight_frames; created
+    // lazily on the first render. signaled in the command-buffer completed
+    // handler so the CPU blocks once that many frames are still on the GPU.
+    dispatch_semaphore_t inflight = nil;
     // Swift owns the view; __weak so a torn-down view reads as nil in
     // engine_render instead of being kept alive (or dangling) by the engine.
     __weak MTKView* view = nil;
@@ -60,7 +67,7 @@ Engine* engine_create(const char* config_path, const char* overrides) {
     e->sky.init(e->ctx, e->cache);
     e->sim.init(e->ctx, e->cache, e->app->config());
     e->voxels.init(e->ctx, e->cache);
-    // TODO(task-13): e->bench.start(e->app->config(), config_hash(e->app->config()));
+    e->bench.start(e->app->config(), config_hash(e->app->config()));
     return e;
 }
 
@@ -88,18 +95,32 @@ void engine_resize(Engine* e, int w, int h) {
 }
 
 void engine_push_input(Engine* e, InputEvent ev) { e->input.push(ev); }
-bool engine_bench_should_exit(Engine* e) { (void)e; return false; }  // TODO(task-13)
+bool engine_bench_should_exit(Engine* e) { return e->bench.should_exit(); }
 
 void engine_render(Engine* e) {
     MTKView* view = e->view;
     if (!view) return;
+
+    if (!e->inflight)
+        e->inflight = dispatch_semaphore_create(
+            MAX(1, MIN(3, e->app->config().max_in_flight_frames)));
+    dispatch_semaphore_wait(e->inflight, DISPATCH_TIME_FOREVER);
+
     id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>)e->ctx.queue;
     id<MTLCommandBuffer> cb = [queue commandBuffer];
 
+    // Drawable acquisition can block on a free drawable; bracket it to measure
+    // the stall so a CPU-bound vs. present-bound frame is distinguishable.
+    auto wait_t0 = std::chrono::steady_clock::now();
     MTLRenderPassDescriptor* rp = view.currentRenderPassDescriptor;
-    if (!rp) { [cb commit]; return; }
+    double wait_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - wait_t0).count();
+    if (!rp) { [cb commit]; dispatch_semaphore_signal(e->inflight); return; }
 
-    // TODO(task-13): bench camera path + frame timing record.
+    auto cpu_t0 = std::chrono::steady_clock::now();
+    if (e->bench.active())
+        apply_bench_path(e->app->camera(), e->app->config().bench.camera_path,
+                         e->bench.current_frame());
     e->app->handle_input(e->input);
     e->app->update();
 
@@ -127,6 +148,18 @@ void engine_render(Engine* e) {
     [enc endEncoding];
 
     if (view.currentDrawable) [cb presentDrawable:view.currentDrawable];
+
+    // Completed handler runs on a background queue: capture POD by value and
+    // the engine by raw pointer (it outlives the queue in practice). bench's
+    // record() and the semaphore signal are both safe to call off-thread.
+    double cpu_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - cpu_t0).count();
+    dispatch_semaphore_t inflight = e->inflight;
+    [cb addCompletedHandler:^(id<MTLCommandBuffer> b) {
+        double gpu_ms = (b.GPUEndTime - b.GPUStartTime) * 1000.0;
+        e->bench.record({ e->bench.current_frame(), cpu_ms, gpu_ms, wait_ms });
+        dispatch_semaphore_signal(inflight);
+    }];
     [cb commit];
     e->frame_index++;
 }

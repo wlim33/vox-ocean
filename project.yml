@@ -36,7 +36,8 @@ targets:
     sources:
       - apps/mac
       - apps/shared
-      - src
+      - path: src
+        excludes: ["bench/BenchPaths_ios.mm"]
       - shaders
       - path: default-config.toml
         buildPhase: resources

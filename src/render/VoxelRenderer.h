@@ -21,8 +21,9 @@ public:
     // Ring slots are paced by MTKView's drawable acquisition (3 drawables):
     // the CPU blocks for a free drawable before overwriting slot N%3, so a
     // slot is never written while its 3-frames-ago GPU read is in flight.
-    // If RING ever diverges from maximumDrawableCount, add an explicit
-    // dispatch_semaphore (see config max_in_flight_frames).
+    // The engine additionally gates frames with a dispatch_semaphore sized to
+    // config max_in_flight_frames (clamped to [1,3]), so in-flight frames are
+    // bounded even when that knob is below maximumDrawableCount.
     static constexpr int RING = 3;
 private:
     Buffer cube_vbo_{}, cube_ibo_{};

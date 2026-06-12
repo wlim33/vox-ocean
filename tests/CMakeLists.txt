@@ -35,5 +35,11 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/ocean/Spectrum.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    bench_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/bench/BenchmarkHarness.cpp
+    ${CMAKE_SOURCE_DIR}/src/bench/BenchPaths.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
