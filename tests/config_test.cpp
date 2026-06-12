@@ -76,3 +76,12 @@ TEST(Config, MalformedOverrideValueWarnsInsteadOfThrowing) {
     EXPECT_EQ(r.config.voxel.grid_extent, 192);   // unchanged
     EXPECT_FALSE(r.warnings.empty());
 }
+
+TEST(Config, VoxelValuesAreClamped) {
+    auto r = vox::load_config_from_string("[voxel]\ngrid_extent = 0\nvoxel_size_m = 0.0\n");
+    EXPECT_EQ(r.config.voxel.grid_extent, 8);
+    EXPECT_FLOAT_EQ(r.config.voxel.voxel_size_m, 0.05f);
+    EXPECT_FALSE(r.warnings.empty());
+    auto r2 = vox::apply_overrides(vox::load_config_from_string(""), {"voxel.grid_extent=-5"});
+    EXPECT_EQ(r2.config.voxel.grid_extent, 8);
+}

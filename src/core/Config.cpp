@@ -34,11 +34,27 @@ void load_wave(const toml::table& t, WaveConfig& w) {
     if (auto v = t["amplitude"].value<double>())      w.amplitude      = (float)*v;
 }
 
-void load_voxel(const toml::table& t, VoxelConfig& v) {
-    if (auto n = t["grid_extent"].value<int64_t>())    v.grid_extent   = (int)*n;
-    if (auto n = t["voxel_size_m"].value<double>())    v.voxel_size_m  = (float)*n;
-    if (auto n = t["height_step_m"].value<double>())   v.height_step_m = (float)*n;
-    if (auto n = t["base_depth_m"].value<double>())    v.base_depth_m  = (float)*n;
+void load_voxel(const toml::table& t, VoxelConfig& v, LoadResult& r) {
+    if (auto n = t["grid_extent"].value<int64_t>()) {
+        int val = (int)*n;
+        if (val < 8 || val > 1024) r.warnings.push_back("voxel.grid_extent out of [8,1024], clamped");
+        v.grid_extent = clamp(val, 8, 1024);
+    }
+    if (auto n = t["voxel_size_m"].value<double>()) {
+        float val = (float)*n;
+        if (val < 0.05f || val > 10.0f) r.warnings.push_back("voxel.voxel_size_m out of [0.05,10.0], clamped");
+        v.voxel_size_m = clamp(val, 0.05f, 10.0f);
+    }
+    if (auto n = t["height_step_m"].value<double>()) {
+        float val = (float)*n;
+        if (val < 0.01f || val > 10.0f) r.warnings.push_back("voxel.height_step_m out of [0.01,10.0], clamped");
+        v.height_step_m = clamp(val, 0.01f, 10.0f);
+    }
+    if (auto n = t["base_depth_m"].value<double>()) {
+        float val = (float)*n;
+        if (val < 0.5f || val > 100.0f) r.warnings.push_back("voxel.base_depth_m out of [0.5,100.0], clamped");
+        v.base_depth_m = clamp(val, 0.5f, 100.0f);
+    }
 }
 
 } // namespace
@@ -65,7 +81,7 @@ LoadResult load_config_from_string(const std::string& text) {
         c.max_in_flight_frames = clamp((int)*v, 1, 3);
 
     if (auto* w = tbl["wave"].as_table())  load_wave(*w, c.wave);
-    if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel);
+    if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel, r);
     // sky, shading, cascades, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -88,10 +104,26 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
             else if (key == "wave.choppiness")            in.config.wave.choppiness     = std::stof(val);
             else if (key == "wave.swell")                 in.config.wave.swell          = std::stof(val);
             else if (key == "cascade_count")              in.config.cascade_count       = std::stoi(val);
-            else if (key == "voxel.grid_extent")          in.config.voxel.grid_extent   = std::stoi(val);
-            else if (key == "voxel.voxel_size_m")         in.config.voxel.voxel_size_m  = std::stof(val);
-            else if (key == "voxel.height_step_m")        in.config.voxel.height_step_m = std::stof(val);
-            else if (key == "voxel.base_depth_m")         in.config.voxel.base_depth_m  = std::stof(val);
+            else if (key == "voxel.grid_extent") {
+                int n = std::stoi(val);
+                if (n < 8 || n > 1024) in.warnings.push_back("voxel.grid_extent out of [8,1024], clamped");
+                in.config.voxel.grid_extent = clamp(n, 8, 1024);
+            }
+            else if (key == "voxel.voxel_size_m") {
+                float f = std::stof(val);
+                if (f < 0.05f || f > 10.0f) in.warnings.push_back("voxel.voxel_size_m out of [0.05,10.0], clamped");
+                in.config.voxel.voxel_size_m = clamp(f, 0.05f, 10.0f);
+            }
+            else if (key == "voxel.height_step_m") {
+                float f = std::stof(val);
+                if (f < 0.01f || f > 10.0f) in.warnings.push_back("voxel.height_step_m out of [0.01,10.0], clamped");
+                in.config.voxel.height_step_m = clamp(f, 0.01f, 10.0f);
+            }
+            else if (key == "voxel.base_depth_m") {
+                float f = std::stof(val);
+                if (f < 0.5f || f > 100.0f) in.warnings.push_back("voxel.base_depth_m out of [0.5,100.0], clamped");
+                in.config.voxel.base_depth_m = clamp(f, 0.5f, 100.0f);
+            }
             else if (key == "bench.bench_mode")           in.config.bench.bench_mode    = (val == "true" || val == "1");
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
