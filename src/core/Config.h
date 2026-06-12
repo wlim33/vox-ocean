@@ -39,6 +39,7 @@ struct ShadingConfig {
     float water_ior = 1.33f;   // refraction index at the water surface (1.0 = no bend)
     glm::vec3 sand_color       {0.76f, 0.70f, 0.50f};
     glm::vec3 rock_color       {0.35f, 0.33f, 0.30f};
+    glm::vec3 boat_color       {0.45f, 0.30f, 0.18f};
 };
 
 struct VoxelConfig {
@@ -61,6 +62,12 @@ struct RippleConfig {
     float damping        = 0.995f; // per-step energy retention
     float rain_rate      = 0.0f;   // debug splashes per second (0 = off)
     float foam           = 0.5f;   // ripple amplitude -> foam coupling
+};
+
+struct EntityConfig {
+    bool  boat_enabled   = true;
+    float boat_speed_mps = 1.5f;   // cruise speed, clamp [0,5]
+    float wake_amp       = 0.25f;  // stern splash amplitude (m), clamp [0,2]
 };
 
 struct SkyConfig {
@@ -92,6 +99,7 @@ struct Config {
     VoxelConfig voxel;
     MarchConfig march;
     RippleConfig ripple;
+    EntityConfig entity;
 
     SkyConfig sky;
     ShadingConfig shading;

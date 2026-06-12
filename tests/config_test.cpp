@@ -181,3 +181,28 @@ TEST(Config, RippleOverridesAndHash) {
     b = a; b.ripple.foam = 2.0f;
     EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
 }
+
+TEST(Config, EntityKnobsParseClampOverrideHash) {
+    auto r = vox::load_config_from_string(R"([entity]
+boat_enabled = false
+boat_speed_mps = 2.5
+wake_amp = 0.5
+)");
+    EXPECT_FALSE(r.config.entity.boat_enabled);
+    EXPECT_FLOAT_EQ(r.config.entity.boat_speed_mps, 2.5f);
+    EXPECT_FLOAT_EQ(r.config.entity.wake_amp, 0.5f);
+
+    auto o = vox::apply_overrides(vox::load_config_from_string(""),
+        {"entity.boat_enabled=false", "entity.boat_speed_mps=9"});
+    EXPECT_FALSE(o.config.entity.boat_enabled);
+    EXPECT_FLOAT_EQ(o.config.entity.boat_speed_mps, 5.0f);   // clamped [0,5]
+    EXPECT_EQ(o.warnings.size(), 1u);
+
+    vox::Config a, b;
+    b.entity.boat_enabled = false;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.entity.boat_speed_mps = 3.0f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.entity.wake_amp = 1.0f;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+}

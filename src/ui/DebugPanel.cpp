@@ -60,6 +60,11 @@ void draw_debug_panel(App& app) {
         ImGui::SliderFloat("rain rate",    &c.ripple.rain_rate,      0.0f, 200.0f);
         ImGui::SliderFloat("ripple foam",  &c.ripple.foam,           0.0f, 4.0f);
     }
+    if (ImGui::CollapsingHeader("Entity", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("boat", &c.entity.boat_enabled);
+        ImGui::SliderFloat("boat speed", &c.entity.boat_speed_mps, 0.0f, 5.0f);
+        ImGui::SliderFloat("wake amp",   &c.entity.wake_amp,       0.0f, 2.0f);
+    }
     ImGui::End();
 }
 }

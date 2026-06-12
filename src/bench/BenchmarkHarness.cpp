@@ -50,6 +50,8 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " ripple_wave_speed=" << cfg.ripple.wave_speed_mps
          << " ripple_damping=" << cfg.ripple.damping
          << " ripple_rain_rate=" << cfg.ripple.rain_rate
+         << " boat_enabled=" << cfg.entity.boat_enabled
+         << " boat_speed=" << cfg.entity.boat_speed_mps
          << " fft_size=" << cfg.cascades[0].resolution << '\n';
     out_ << "frame_idx,cpu_ms,gpu_total_ms,drawable_wait_ms,config_hash\n";
 }

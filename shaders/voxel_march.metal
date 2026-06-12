@@ -74,7 +74,9 @@ static float3 face_normal(int axis, float3 d) {
 
 static float3 terrain_color(uint mat, float3 n, float3 sun,
                             constant MarchUniforms& U) {
-    float3 base = (mat == MAT_ROCK) ? U.rock_color : U.sand_color;
+    float3 base = (mat == MAT_ROCK) ? U.rock_color
+                : (mat == MAT_BOAT) ? U.boat_color
+                : U.sand_color;
     return base * (0.35 + 0.65 * max(dot(n, sun), 0.0));
 }
 

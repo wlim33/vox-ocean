@@ -14,7 +14,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "cascade_count",
     "max_in_flight_frames",
-    "cascades","wave","sky","shading","bench","voxel","march","ripple"
+    "cascades","wave","sky","shading","bench","voxel","march","ripple","entity"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -76,6 +76,20 @@ void load_march(const toml::table& t, MarchConfig& m, LoadResult& r) {
     }
 }
 
+void load_entity(const toml::table& t, EntityConfig& e, LoadResult& r) {
+    if (auto v = t["boat_enabled"].value<bool>()) e.boat_enabled = *v;
+    if (auto v = t["boat_speed_mps"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 5.0f) r.warnings.push_back("entity.boat_speed_mps out of [0,5], clamped");
+        e.boat_speed_mps = clamp(val, 0.0f, 5.0f);
+    }
+    if (auto v = t["wake_amp"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 2.0f) r.warnings.push_back("entity.wake_amp out of [0,2], clamped");
+        e.wake_amp = clamp(val, 0.0f, 2.0f);
+    }
+}
+
 void load_ripple(const toml::table& t, RippleConfig& rp, LoadResult& r) {
     if (auto v = t["wave_speed_mps"].value<double>()) {
         float val = (float)*v;
@@ -120,6 +134,7 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel, r);
     if (auto* mc = tbl["march"].as_table()) load_march(*mc, c.march, r);
     if (auto* rp = tbl["ripple"].as_table()) load_ripple(*rp, c.ripple, r);
+    if (auto* en = tbl["entity"].as_table()) load_entity(*en, c.entity, r);
     // sky, shading, cascades, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -196,6 +211,17 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 in.config.ripple.rain_rate = clamp(f, 0.0f, 200.0f);
             }
             else if (key == "ripple.foam") in.config.ripple.foam = clamp(std::stof(val), 0.0f, 4.0f);
+            else if (key == "entity.boat_enabled") in.config.entity.boat_enabled = (val == "true" || val == "1");
+            else if (key == "entity.boat_speed_mps") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 5.0f) in.warnings.push_back("entity.boat_speed_mps out of [0,5], clamped");
+                in.config.entity.boat_speed_mps = clamp(f, 0.0f, 5.0f);
+            }
+            else if (key == "entity.wake_amp") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 2.0f) in.warnings.push_back("entity.wake_amp out of [0,2], clamped");
+                in.config.entity.wake_amp = clamp(f, 0.0f, 2.0f);
+            }
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
             in.warnings.push_back("invalid value for " + key + ": " + val);
@@ -228,6 +254,10 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.ripple.damping,        sizeof(c.ripple.damping),        h);
     h = fnv1a64(&c.ripple.rain_rate,      sizeof(c.ripple.rain_rate),      h);
     h = fnv1a64(&c.ripple.foam,           sizeof(c.ripple.foam),           h);
+    // Entity
+    h = fnv1a64(&c.entity.boat_enabled,   sizeof(c.entity.boat_enabled),   h);
+    h = fnv1a64(&c.entity.boat_speed_mps, sizeof(c.entity.boat_speed_mps), h);
+    h = fnv1a64(&c.entity.wake_amp,       sizeof(c.entity.wake_amp),       h);
     // Grid / cascades
     h = fnv1a64(&c.cascade_count,       sizeof(c.cascade_count),       h);
     for (int i = 0; i < 4; ++i) {

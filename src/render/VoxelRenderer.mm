@@ -287,6 +287,8 @@ void VoxelRenderer::encode_march(void* command_buffer, const OrbitCamera& cam, c
     u.max_steps = cfg.march.max_steps;
     u.water_ior = cfg.shading.water_ior;
     u._mpad3 = u._mpad4 = 0.0f;
+    u.boat_color = (simd_float3){ cfg.shading.boat_color.x, cfg.shading.boat_color.y, cfg.shading.boat_color.z };
+    u._mpad5 = 0.0f;
     std::memcpy(march_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
     MTLRenderPassDescriptor* rp = [MTLRenderPassDescriptor renderPassDescriptor];
