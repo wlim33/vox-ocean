@@ -49,6 +49,30 @@ struct FftPassUniforms {
 #define MAT_SAND  2
 #define MAT_ROCK  3
 
+struct WorldFillUniforms {
+    int   grid_extent;
+    int   height_cells;
+    float voxel_size_m;
+    float height_step_m;
+    float base_depth_m;
+    int   cascade_count;
+    float _wpad0, _wpad1;
+    float cascade_size[MAX_CASCADES];
+};
+
+struct MarchUniforms {
+    mat4  inv_view_proj;
+    vec3  camera_pos;        float _mpad0;
+    vec3  sun_dir;           float _mpad1;    // unit length (normalized CPU-side)
+    vec3  sun_color;         float sun_shininess;
+    vec3  deep_water_color;  float depth_fog_density;
+    vec3  extinction_rgb;    float foam_threshold;
+    vec3  sand_color;        float foam_strength;
+    vec3  rock_color;        float height_step_m;
+    int   grid_extent;       int height_cells; float voxel_size_m; float base_depth_m;
+    int   max_steps;         float _mpad2, _mpad3, _mpad4;
+};
+
 struct VoxelizeUniforms {
     int   grid_extent;
     float voxel_size_m;

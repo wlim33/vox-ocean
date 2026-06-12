@@ -12,6 +12,7 @@ static MTLPixelFormat pf(TexFormat f) {
         case TexFormat::RGBA8Unorm_sRGB: return MTLPixelFormatRGBA8Unorm_sRGB;
         case TexFormat::BGRA8Unorm_sRGB: return MTLPixelFormatBGRA8Unorm_sRGB;
         case TexFormat::R32F:            return MTLPixelFormatR32Float;
+        case TexFormat::R8Uint:          return MTLPixelFormatR8Uint;
     }
 }
 
@@ -39,6 +40,19 @@ Texture make_texture_cube(const MetalContext& ctx, uint32_t s, TexFormat f) {
     d.storageMode = MTLStorageModePrivate;
     id<MTLTexture> t = [dev newTextureWithDescriptor:d];
     return { (__bridge_retained void*)t, s, s, f };
+}
+
+Texture make_texture_3d(const MetalContext& ctx, uint32_t w, uint32_t h, uint32_t depth,
+                        TexFormat f, bool storage_write) {
+    id<MTLDevice> dev = (__bridge id<MTLDevice>)ctx.device;
+    MTLTextureDescriptor* d = [MTLTextureDescriptor new];
+    d.textureType = MTLTextureType3D;
+    d.pixelFormat = pf(f);
+    d.width = w; d.height = h; d.depth = depth;
+    d.usage = MTLTextureUsageShaderRead | (storage_write ? MTLTextureUsageShaderWrite : 0);
+    d.storageMode = MTLStorageModePrivate;   // CPU uploads go via staging-buffer blit
+    id<MTLTexture> t = [dev newTextureWithDescriptor:d];
+    return { (__bridge_retained void*)t, w, h, f, depth };
 }
 
 void destroy_texture(Texture& t) {
