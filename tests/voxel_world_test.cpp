@@ -68,3 +68,12 @@ TEST(VoxelWorld, CellIndexMatchesUploadLayout) {
     EXPECT_EQ(w.cell_index(0, 0, 1), 4 * 48);
     EXPECT_EQ(w.cell_index(1, 2, 3), (3 * 48 + 2) * 4 + 1);
 }
+
+TEST(VoxelWorld, DecodeCellIndexRoundTrips) {
+    auto w = make();   // mirror of the stamp_cells kernel decode
+    int ix, iy, iz;
+    w.decode_cell_index(w.cell_index(1, 2, 3), ix, iy, iz);
+    EXPECT_EQ(ix, 1); EXPECT_EQ(iy, 2); EXPECT_EQ(iz, 3);
+    w.decode_cell_index(w.cell_index(3, 47, 0), ix, iy, iz);
+    EXPECT_EQ(ix, 3); EXPECT_EQ(iy, 47); EXPECT_EQ(iz, 0);
+}

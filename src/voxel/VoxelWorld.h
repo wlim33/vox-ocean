@@ -50,6 +50,13 @@ public:
     int   cell_index(int ix, int iy, int iz) const {
         return (iz * p_.height_cells + iy) * p_.extent + ix;
     }
+    // Inverse of cell_index — lockstep mirror of the decode in
+    // shaders/stamp.metal's stamp_cells kernel.
+    void decode_cell_index(int i, int& ix, int& iy, int& iz) const {
+        ix = i % p_.extent;
+        iy = (i / p_.extent) % p_.height_cells;
+        iz = i / (p_.extent * p_.height_cells);
+    }
     const VoxelWorldParams& params() const { return p_; }
 private:
     VoxelWorldParams p_;
