@@ -19,9 +19,15 @@ kernel void voxelize(
 
     float h = 0.0;
     float fold_min = 1.0;
-    for (int i = 0; i < U.cascade_count; ++i) {
+    int n = min(U.cascade_count, MAX_CASCADES);
+    for (int i = 0; i < n; ++i) {
         float2 uv = xz / U.cascade_size[i];
-        h += disp_tex[i].sample(smp, uv, level(0)).y;   // vertical displacement only
+        // disp layout (post_fft.metal): .y = vertical h; .x/.z = horizontal
+        // choppiness, ignored — voxel columns are axis-aligned.
+        h += disp_tex[i].sample(smp, uv, level(0)).y;
+        // level(0): one canonical sample per column. normal_tex has mips, but
+        // a pre-filtered Jacobian would smear foam across voxel boundaries;
+        // accept per-texel noise when voxel_size_m >> texel size.
         fold_min = min(fold_min, normal_tex[i].sample(smp, uv, level(0)).w);
     }
     // Mirror of VoxelGrid::quantize_height (floor policy)
