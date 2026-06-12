@@ -56,8 +56,23 @@ struct WorldFillUniforms {
     float height_step_m;
     float base_depth_m;
     int   cascade_count;
-    float _wpad0, _wpad1;
+    float ripple_foam, _wpad1;
     float cascade_size[MAX_CASCADES];
+};
+
+#define MAX_SPLASHES 64
+
+struct RippleUniforms {
+    int   grid_extent;
+    float k;             // (c*dt/dx)^2, CFL-clamped CPU-side (ripple_k)
+    float damping;
+    int   splash_count;
+};
+
+struct RippleSplash {   // injected into the ripple field this frame
+    float x, z;          // texel coords (column indices, fractional OK)
+    float radius;        // texels
+    float amp;           // meters; negative = depression (raindrop)
 };
 
 struct MarchUniforms {

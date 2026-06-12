@@ -131,7 +131,7 @@ void VoxelRenderer::encode_world_fill(void* compute_encoder, const Config& cfg,
     u.height_step_m = cfg.voxel.height_step_m;
     u.base_depth_m  = cfg.voxel.base_depth_m;
     u.cascade_count = n;
-    u._wpad0 = u._wpad1 = 0.0f;
+    u.ripple_foam = 0.0f; u._wpad1 = 0.0f;
     for (int i = 0; i < MAX_CASCADES; ++i)
         u.cascade_size[i] = i < n ? cfg.cascades[i].size_m : 0.0f;
     std::memcpy(fill_uniforms_[slot].cpu_ptr, &u, sizeof(u));
