@@ -16,8 +16,8 @@ target_sources(vox-ocean-tests PRIVATE
 )
 
 target_sources(vox-ocean-tests PRIVATE
-    voxel_grid_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/voxel/VoxelGrid.cpp
+    voxel_world_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/voxel/VoxelWorld.cpp
 )
 
 target_sources(vox-ocean-tests PRIVATE

@@ -42,6 +42,13 @@ struct FftPassUniforms {
 
 #define MAX_CASCADES 4
 
+// Material IDs stored in the world grid (r8Uint texture3d).
+// Lockstep mirror of vox::VoxMat in src/voxel/VoxelWorld.h.
+#define MAT_AIR   0
+#define MAT_WATER 1
+#define MAT_SAND  2
+#define MAT_ROCK  3
+
 struct VoxelizeUniforms {
     int   grid_extent;
     float voxel_size_m;

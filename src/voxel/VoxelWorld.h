@@ -1,0 +1,52 @@
+#pragma once
+#include <cassert>
+#include <cstdint>
+namespace vox {
+
+// Material IDs stored in the world grid (one byte per cell).
+// Lockstep mirror of the MAT_* constants in shaders/shader_types.h
+// (static_asserted in voxel_world_test.cpp).
+enum class VoxMat : uint8_t { Air = 0, Water = 1, Sand = 2, Rock = 3 };
+
+// extent = columns per axis; height_cells = vertical cells above the diorama
+// base. Cells are voxel_size_m wide and height_step_m tall (non-cubic OK).
+// Preconditions: all fields > 0 (Config layer clamps upstream).
+struct VoxelWorldParams {
+    int   extent;
+    int   height_cells;
+    float voxel_size_m;
+    float height_step_m;
+    float base_depth_m;
+};
+
+// CPU mirror of the grid math in shaders/world_fill.metal and
+// shaders/voxel_march.metal — keep in lockstep.
+class VoxelWorld {
+public:
+    explicit VoxelWorld(VoxelWorldParams p) : p_(p) {
+        assert(p_.extent > 0 && p_.height_cells > 0);
+        assert(p_.voxel_size_m > 0.0f && p_.height_step_m > 0.0f);
+    }
+    int   columns() const { return p_.extent * p_.extent; }
+    int   cells()   const { return columns() * p_.height_cells; }
+    float patch_size_m() const { return p_.extent * p_.voxel_size_m; }
+    float world_top_y()  const { return -p_.base_depth_m + p_.height_cells * p_.height_step_m; }
+    float column_center_x(int ix) const;
+    float column_center_z(int iz) const { return column_center_x(iz); }
+    float cell_bottom_y(int iy) const { return -p_.base_depth_m + iy * p_.height_step_m; }
+    // Floor quantization policy (anti-flicker, user decision) — unchanged
+    // from the v1 VoxelGrid.
+    float quantize_height(float h) const;
+    // Cells, counted up from the diorama base, that a water column of
+    // (unquantized) surface height h fills. Clamped to [1, height_cells].
+    int   water_top_cell(float h) const;
+    // Linear index matching the 3D-texture upload layout: x fastest, then y,
+    // then z (bytesPerRow = extent, bytesPerImage = extent * height_cells).
+    int   cell_index(int ix, int iy, int iz) const {
+        return (iz * p_.height_cells + iy) * p_.extent + ix;
+    }
+    const VoxelWorldParams& params() const { return p_; }
+private:
+    VoxelWorldParams p_;
+};
+}
