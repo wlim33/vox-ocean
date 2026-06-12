@@ -20,5 +20,20 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/voxel/VoxelGrid.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    fft_reference_test.cpp
+    support/cpu_fft_reference.cpp
+)
+target_include_directories(vox-ocean-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# GPU/CPU parity: executes the butterfly schedule shared with shaders/fft.metal.
+target_sources(vox-ocean-tests PRIVATE fft_parity_test.cpp)
+target_include_directories(vox-ocean-tests PRIVATE ${CMAKE_SOURCE_DIR}/shaders)
+
+target_sources(vox-ocean-tests PRIVATE
+    spectrum_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/ocean/Spectrum.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
