@@ -17,9 +17,72 @@ static float3 aces_tonemap(float3 x) {
     return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
 }
 
-// Full-screen DDA through the material grid. CPU mirror: src/voxel/Dda.cpp —
-// keep the traversal in lockstep. Misses write alpha 0 so the composite pass
-// shows the sky underneath.
+// Restartable DDA core. CPU mirror: src/voxel/Dda.cpp (DdaState) — keep in
+// lockstep. Restartability is what lets refraction re-aim the ray mid-walk.
+struct DdaState {
+    float3 d;
+    int3   idx, stp;
+    float3 t_max, t_delta;
+    float  t_cur;
+    int    axis;
+    int    enter_axis;
+};
+
+struct GridDims { float3 bmin, bmax, cell; int3 dims; };
+
+static bool dda_init(thread DdaState& S, float3 origin, float3 dir, GridDims G) {
+    float tmin = 0.0, tmax = 1e30;
+    S.enter_axis = -1;
+    for (int a = 0; a < 3; ++a) {
+        S.d[a] = abs(dir[a]) > 1e-8 ? dir[a] : (dir[a] >= 0.0 ? 1e-8 : -1e-8);
+        float t0 = (G.bmin[a] - origin[a]) / S.d[a];
+        float t1 = (G.bmax[a] - origin[a]) / S.d[a];
+        if (t0 > t1) { float tt = t0; t0 = t1; t1 = tt; }
+        if (t0 > tmin) { tmin = t0; S.enter_axis = a; }
+        tmax = min(tmax, t1);
+    }
+    if (tmin > tmax) return false;
+
+    float3 pos = origin + dir * (tmin + 1e-4);
+    for (int a = 0; a < 3; ++a) {
+        S.idx[a] = clamp((int)floor((pos[a] - G.bmin[a]) / G.cell[a]), 0, G.dims[a] - 1);
+        S.stp[a] = S.d[a] > 0.0 ? 1 : -1;
+        float next = G.bmin[a] + (float)(S.idx[a] + (S.stp[a] > 0 ? 1 : 0)) * G.cell[a];
+        S.t_max[a]   = (next - origin[a]) / S.d[a];
+        S.t_delta[a] = G.cell[a] / abs(S.d[a]);
+    }
+    S.axis  = S.enter_axis < 0 ? 1 : S.enter_axis;
+    S.t_cur = tmin;
+    return true;
+}
+
+static bool dda_step(thread DdaState& S, GridDims G) {
+    S.axis = (S.t_max.x < S.t_max.y) ? (S.t_max.x < S.t_max.z ? 0 : 2)
+                                     : (S.t_max.y < S.t_max.z ? 1 : 2);
+    S.t_cur = S.t_max[S.axis];
+    S.idx[S.axis] += S.stp[S.axis];
+    if (S.idx[S.axis] < 0 || S.idx[S.axis] >= G.dims[S.axis]) return false;
+    S.t_max[S.axis] += S.t_delta[S.axis];
+    return true;
+}
+
+static float3 face_normal(int axis, float3 d) {
+    float3 n = float3(0.0);
+    n[axis] = d[axis] > 0.0 ? -1.0 : 1.0;
+    return n;
+}
+
+static float3 terrain_color(uint mat, float3 n, float3 sun,
+                            constant MarchUniforms& U) {
+    float3 base = (mat == MAT_ROCK) ? U.rock_color : U.sand_color;
+    return base * (0.35 + 0.65 * max(dot(n, sun), 0.0));
+}
+
+// See-through water marcher: phase 1 march to first hit, phase 2 bend once
+// at the water interface, phase 3 transmit accumulating Beer-Lambert path.
+// CPU mirror of the walk: src/voxel/Dda.cpp dda_march_transmit — keep in
+// lockstep. Misses (no water, no hit) write alpha 0 so the composite pass
+// shows the full-resolution sky underneath.
 fragment float4 march_fs(
     MarchVOut in                          [[stage_in]],
     constant MarchUniforms& U             [[buffer(0)]],
@@ -29,103 +92,96 @@ fragment float4 march_fs(
 {
     constexpr sampler cube_smp(filter::linear, address::clamp_to_edge);
 
-    // Unproject this pixel's near/far points for the primary ray.
     float4 p0 = U.inv_view_proj * float4(in.ndc, 0.0, 1.0);
     float4 p1 = U.inv_view_proj * float4(in.ndc, 1.0, 1.0);
     float3 dir = normalize(p1.xyz / p1.w - p0.xyz / p0.w);
     float3 org = U.camera_pos;
 
     float half_patch = 0.5 * U.grid_extent * U.voxel_size_m;
-    float3 bmin = float3(-half_patch, -U.base_depth_m, -half_patch);
-    float3 bmax = float3( half_patch,
-                          -U.base_depth_m + U.height_cells * U.height_step_m,
-                           half_patch);
-    float3 cell = float3(U.voxel_size_m, U.height_step_m, U.voxel_size_m);
-    int3   dims = int3(U.grid_extent, U.height_cells, U.grid_extent);
+    GridDims G;
+    G.bmin = float3(-half_patch, -U.base_depth_m, -half_patch);
+    G.bmax = float3( half_patch,
+                     -U.base_depth_m + U.height_cells * U.height_step_m,
+                      half_patch);
+    G.cell = float3(U.voxel_size_m, U.height_step_m, U.voxel_size_m);
+    G.dims = int3(U.grid_extent, U.height_cells, U.grid_extent);
 
-    // Slab test (epsilon-pinned directions, mirrors Dda.cpp).
-    float tmin = 0.0, tmax = 1e30;
-    int enter_axis = -1;
-    float3 d;
-    for (int a = 0; a < 3; ++a) {
-        d[a] = abs(dir[a]) > 1e-8 ? dir[a] : (dir[a] >= 0.0 ? 1e-8 : -1e-8);
-        float t0 = (bmin[a] - org[a]) / d[a];
-        float t1 = (bmax[a] - org[a]) / d[a];
-        if (t0 > t1) { float tt = t0; t0 = t1; t1 = tt; }
-        if (t0 > tmin) { tmin = t0; enter_axis = a; }
-        tmax = min(tmax, t1);
-    }
-    if (tmin > tmax) return float4(0.0);   // miss: sky shows through
+    DdaState S;
+    if (!dda_init(S, org, dir, G)) return float4(0.0);
 
-    float3 pos = org + dir * (tmin + 1e-4);
-    int3 idx;
-    for (int a = 0; a < 3; ++a)
-        idx[a] = clamp((int)floor((pos[a] - bmin[a]) / cell[a]), 0, dims[a] - 1);
-
-    int3   stp;
-    float3 t_max, t_delta;
-    for (int a = 0; a < 3; ++a) {
-        stp[a]     = d[a] > 0.0 ? 1 : -1;
-        float next = bmin[a] + (float)(idx[a] + (stp[a] > 0 ? 1 : 0)) * cell[a];
-        t_max[a]   = (next - org[a]) / d[a];
-        t_delta[a] = cell[a] / abs(d[a]);
-    }
-
-    int   axis  = enter_axis < 0 ? 1 : enter_axis;
-    float t_cur = tmin;
-    uint  mat   = MAT_AIR;
-    for (int s = 0; s < U.max_steps; ++s) {
-        mat = world.read(uint3(idx)).r;
+    // Phase 1: march to the first non-air cell.
+    uint mat = MAT_AIR;
+    int steps = 0;
+    while (steps < U.max_steps) {
+        steps++;
+        mat = world.read(uint3(S.idx)).r;
         if (mat != MAT_AIR) break;
-        axis = (t_max.x < t_max.y) ? (t_max.x < t_max.z ? 0 : 2)
-                                   : (t_max.y < t_max.z ? 1 : 2);
-        t_cur = t_max[axis];
-        idx[axis] += stp[axis];
-        if (idx[axis] < 0 || idx[axis] >= dims[axis]) return float4(0.0);
-        t_max[axis] += t_delta[axis];
+        if (!dda_step(S, G)) return float4(0.0);
     }
-    if (mat == MAT_AIR) return float4(0.0);   // step budget exhausted
+    if (mat == MAT_AIR) return float4(0.0);
 
-    // Face normal comes free from the DDA step axis.
-    float3 n = float3(0.0);
-    n[axis] = d[axis] > 0.0 ? -1.0 : 1.0;
-    float3 wp  = org + dir * t_cur;
-    float3 V   = normalize(org - wp);
     float3 sun = U.sun_dir;   // unit length by contract (see shader_types.h)
 
-    float4 surf = surface.read(uint2(idx.x, idx.z));   // (water top_y, fold_min)
-    float  foam = saturate(U.foam_strength * (U.foam_threshold - surf.y));
-    float3 color;
+    if (mat != MAT_WATER) {
+        // Dry terrain (island above the waterline).
+        float3 color = terrain_color(mat, face_normal(S.axis, S.d), sun, U);
+        return float4(aces_tonemap(color), 1.0);
+    }
 
-    if (mat == MAT_WATER) {
-        if (axis == 1 && n.y > 0.5) {
-            // Top face: water optics, flat-shaded per voxel (as v1).
-            float  nv = max(dot(n, V), 0.0);
-            float  F  = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
-            float3 R  = reflect(-V, n);
-            float3 reflection = sky_cube.sample(cube_smp, R).rgb
-                              + U.sun_color * pow(max(dot(R, sun), 0.0), U.sun_shininess);
-            color = mix(U.deep_water_color, reflection, F);
-            color = mix(color, float3(1.0), foam);
-        } else {
-            // Side face: Beer-Lambert depth tint (user decision), with the
-            // one-step crest foam bleed carried over from v1.
-            float depth = max(surf.x - wp.y, 0.0);
-            float3 absorb = exp(-U.depth_fog_density * depth * U.extinction_rgb);
-            float lambert = 0.35 + 0.65 * max(dot(n, sun), 0.0);
-            color = U.deep_water_color * absorb * lambert;
-            float crest = saturate(1.0 - depth / max(U.height_step_m, 1e-3));
-            color = mix(color, float3(0.9), foam * crest);
-        }
+    // Phase 2: water interface — surface terms with the pre-bend ray.
+    int    entry_axis = S.axis;
+    float3 n_entry    = face_normal(entry_axis, S.d);
+    float3 entry_p    = org + dir * S.t_cur;
+    int2   entry_col  = int2(S.idx.x, S.idx.z);
+    float3 V  = normalize(org - entry_p);
+    float  nv = max(dot(n_entry, V), 0.0);
+    float  F  = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
+    float3 R  = reflect(-V, n_entry);
+    float3 reflection = sky_cube.sample(cube_smp, R).rgb
+                      + U.sun_color * pow(max(dot(R, sun), 0.0), U.sun_shininess);
+
+    float3 rdir = refract(dir, n_entry, 1.0 / U.water_ior);
+    if (dot(rdir, rdir) < 1e-6) rdir = dir;   // degenerate guard
+    rdir = normalize(rdir);
+    DdaState W;
+    bool walking = dda_init(W, entry_p + rdir * 1e-4, rdir, G);
+
+    // Phase 3: transmit through the volume.
+    float water_dist = 0.0;
+    uint  end_mat = MAT_AIR;
+    int   end_axis = 1;
+    bool  exited_up = false;
+    while (walking && steps < U.max_steps) {
+        steps++;
+        uint m = world.read(uint3(W.idx)).r;
+        if (m != MAT_AIR && m != MAT_WATER) { end_mat = m; end_axis = W.axis; break; }
+        float t_enter = W.t_cur;
+        bool alive = dda_step(W, G);
+        if (m == MAT_WATER) water_dist += W.t_cur - t_enter;
+        if (!alive) { exited_up = rdir.y > 0.0; break; }
+    }
+
+    // Background behind the water along the refracted path.
+    float3 bg;
+    if (end_mat != MAT_AIR)  bg = terrain_color(end_mat, face_normal(end_axis, W.d), sun, U);
+    else if (exited_up)      bg = sky_cube.sample(cube_smp, rdir).rgb;
+    else                     bg = U.deep_water_color;   // the diorama void
+
+    // Fog-form Beer-Lambert: absorption toward the water color, so deep
+    // water keeps color body instead of going black (extinction decision).
+    float3 T    = exp(-U.depth_fog_density * water_dist * U.extinction_rgb);
+    float3 refr = bg * T + U.deep_water_color * (1.0 - T);
+
+    float4 surf = surface.read(uint2(entry_col));
+    float  foam = saturate(U.foam_strength * (U.foam_threshold - surf.y));
+    float3 color = mix(refr, reflection, F);
+    if (entry_axis == 1 && n_entry.y > 0.5) {
+        color = mix(color, float3(1.0), foam);
     } else {
-        // Terrain: palette x lambert; tinted by the water column above when
-        // submerged (visible at the diorama side walls and on islands' shores).
-        float3 base = (mat == MAT_ROCK) ? U.rock_color : U.sand_color;
-        float lambert = 0.35 + 0.65 * max(dot(n, sun), 0.0);
-        color = base * lambert;
-        float depth = surf.x - wp.y;
-        if (depth > 0.0)
-            color *= exp(-U.depth_fog_density * depth * U.extinction_rgb);
+        // One-step crest foam bleed on side faces, carried over from v1.
+        float depth_below = max(surf.x - entry_p.y, 0.0);
+        float crest = saturate(1.0 - depth_below / max(U.height_step_m, 1e-3));
+        color = mix(color, float3(0.9), foam * crest);
     }
     return float4(aces_tonemap(color), 1.0);
 }
