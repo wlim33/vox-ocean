@@ -21,6 +21,10 @@ struct WaveConfig {
     float swell          = 0.3f;
     // Phillips spectrum amplitude. Wave height scales with sqrt(amplitude).
     float amplitude      = 4000.0f;
+    // Suppress spectral components with wavelength beyond this (high-pass).
+    // The diorama can't host waves longer than itself; without this the
+    // largest cascade renders as a single dome. 0 disables (open ocean).
+    float max_wavelength_m = 20.0f;
 };
 
 struct ShadingConfig {

@@ -14,6 +14,7 @@ struct CascadeParams {
     float wind_dir_rad = 0.5f;
     float amplitude = 4000.0f;
     float swell = 0.3f;
+    float max_wavelength_m = 0.0f;   // 0 = no long-wave suppression
     uint32_t seed = 0xC0FFEEu;
 };
 

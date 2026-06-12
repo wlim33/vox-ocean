@@ -24,6 +24,7 @@ void draw_debug_panel(App& app) {
         ImGui::SliderFloat("choppiness", &c.wave.choppiness,    0.0f, 2.0f);
         ImGui::SliderFloat("swell",      &c.wave.swell,         0.0f, 1.0f);
         ImGui::SliderFloat("amplitude",  &c.wave.amplitude,     0.1f, 10000.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("max wavelength", &c.wave.max_wavelength_m, 0.0f, 300.0f);
     }
     if (ImGui::CollapsingHeader("Sky")) {
         ImGui::SliderFloat("sun elev", &c.sky.sun_elevation_rad, 0.0f, 1.57f);

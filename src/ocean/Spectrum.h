@@ -12,6 +12,7 @@ struct SpectrumParams {
     float wind_dir_rad = 0.5f;
     float amplitude = 1.0f;       // A in Phillips formula
     float swell = 0.0f;           // 0 = broad wind sea, 1 = long-crested swell
+    float max_wavelength_m = 0.0f; // suppress waves longer than this; 0 = off
     uint32_t seed = 0xC0FFEEu;
 };
 
@@ -23,9 +24,11 @@ std::vector<glm::vec4> generate_h0(const SpectrumParams& p);
 // Analytic Phillips spectrum value at k. `swell` in [0,1] raises the
 // directional spreading exponent (|k̂·ŵ|² -> |k̂·ŵ|^(2(1+3·swell))), narrowing
 // the spread from broad wind sea toward long-crested swell; along-wind energy
-// is unchanged.
+// is unchanged. `max_wavelength_m` > 0 high-passes the spectrum: components
+// with wavelength beyond it are suppressed so a finite diorama isn't dominated
+// by swell larger than itself; 0 disables (open-ocean behavior).
 float phillips(glm::vec2 k, glm::vec2 wind_dir, float wind_speed, float amplitude,
-               float swell = 0.0f);
+               float swell = 0.0f, float max_wavelength_m = 0.0f);
 
 // Tessendorf horizontal-displacement spectrum:
 //   D̂x(k) = -i · (kx/|k|) · ĥ(k),   D̂z(k) = -i · (kz/|k|) · ĥ(k)

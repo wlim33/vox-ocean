@@ -7,6 +7,8 @@ wind_dir_rad   = 0.5
 choppiness     = 0.8
 swell          = 0.3
 amplitude      = 4000.0
+# Diorama high-pass: waves longer than this are suppressed (0 = open ocean).
+max_wavelength_m = 20.0
 
 [sky]
 cubemap_resolution = 128

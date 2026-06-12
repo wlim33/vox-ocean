@@ -15,6 +15,7 @@ static CascadeParams make_params(const Config& cfg, int i) {
     p.choppiness     = cfg.wave.choppiness;
     p.amplitude      = cfg.wave.amplitude;
     p.swell          = cfg.wave.swell;
+    p.max_wavelength_m = cfg.wave.max_wavelength_m;
     p.seed = 0xC0FFEEu ^ (uint32_t)(i * 0x9E3779B9u);
     return p;
 }
@@ -23,6 +24,7 @@ static CascadeParams make_params(const Config& cfg, int i) {
 static uint64_t h0_config_hash(const Config& cfg) {
     struct H {
         int n; float size[4]; float wind; float dir; float amp; float swell;
+        float max_wl;
         uint32_t seed;
     } h{};
     h.n = cfg.cascade_count;
@@ -31,6 +33,7 @@ static uint64_t h0_config_hash(const Config& cfg) {
     h.dir   = cfg.wave.wind_dir_rad;
     h.amp   = cfg.wave.amplitude;
     h.swell = cfg.wave.swell;
+    h.max_wl = cfg.wave.max_wavelength_m;
     h.seed  = 0xC0FFEE;
     return fnv1a64(&h, sizeof(h));
 }

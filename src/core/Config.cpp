@@ -31,6 +31,7 @@ void load_wave(const toml::table& t, WaveConfig& w) {
     if (auto v = t["choppiness"].value<double>())     w.choppiness     = (float)*v;
     if (auto v = t["swell"].value<double>())          w.swell          = (float)*v;
     if (auto v = t["amplitude"].value<double>())      w.amplitude      = (float)*v;
+    if (auto v = t["max_wavelength_m"].value<double>()) w.max_wavelength_m = (float)*v;
 }
 
 void load_voxel(const toml::table& t, VoxelConfig& v, LoadResult& r) {
@@ -100,6 +101,7 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
             else if (key == "wave.amplitude")             in.config.wave.amplitude      = std::stof(val);
             else if (key == "wave.choppiness")            in.config.wave.choppiness     = std::stof(val);
             else if (key == "wave.swell")                 in.config.wave.swell          = std::stof(val);
+            else if (key == "wave.max_wavelength_m")      in.config.wave.max_wavelength_m = std::stof(val);
             else if (key == "cascade_count")              in.config.cascade_count       = std::stoi(val);
             else if (key == "voxel.grid_extent") {
                 int n = std::stoi(val);
@@ -138,6 +140,7 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.wave.choppiness,     sizeof(c.wave.choppiness),     h);
     h = fnv1a64(&c.wave.swell,          sizeof(c.wave.swell),          h);
     h = fnv1a64(&c.wave.amplitude,      sizeof(c.wave.amplitude),      h);
+    h = fnv1a64(&c.wave.max_wavelength_m, sizeof(c.wave.max_wavelength_m), h);
     // Voxel
     h = fnv1a64(&c.voxel.grid_extent,   sizeof(c.voxel.grid_extent),   h);
     h = fnv1a64(&c.voxel.voxel_size_m,  sizeof(c.voxel.voxel_size_m),  h);

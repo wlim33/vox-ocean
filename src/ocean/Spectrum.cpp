@@ -7,7 +7,7 @@ namespace vox {
 static constexpr float G = 9.81f;
 
 float phillips(glm::vec2 k, glm::vec2 wind_dir, float wind_speed, float A,
-               float swell) {
+               float swell, float max_wavelength_m) {
     float k2 = k.x*k.x + k.y*k.y;
     if (k2 < 1e-12f) return 0.0f;
     float k4 = k2 * k2;
@@ -15,7 +15,18 @@ float phillips(glm::vec2 k, glm::vec2 wind_dir, float wind_speed, float A,
     float kw = (glm::length(k) > 0.0f ? glm::dot(glm::normalize(k), wind_dir) : 0.0f);
     float damping = std::exp(-k2 * (L * 0.001f) * (L * 0.001f));
     float spread = std::pow(kw * kw, 1.0f + 3.0f * swell);
-    return A * std::exp(-1.0f / (k2 * L * L)) / k4 * spread * damping;
+
+    // Diorama high-pass: suppress wavelengths beyond max_wavelength_m so a
+    // finite patch isn't dominated by swell larger than itself (0 = off).
+    float highpass = 1.0f;
+    if (max_wavelength_m > 0.0f) {
+        // Quartic shoulder: smooth in k (hard steps ring in the IFFT), ~0.1%
+        // at a quarter of the cutoff frequency, ~63% at the cutoff itself.
+        float k_min2 = (6.2831853f / max_wavelength_m) * (6.2831853f / max_wavelength_m);
+        float r = k2 / k_min2;            // (k / k_min)^2
+        highpass = 1.0f - std::exp(-r * r);
+    }
+    return A * std::exp(-1.0f / (k2 * L * L)) / k4 * spread * damping * highpass;
 }
 
 void displacement_spectrum_from_height(
@@ -59,7 +70,8 @@ std::vector<glm::vec4> generate_h0(const SpectrumParams& p) {
             int  jc = j - p.N / 2;
             glm::vec2 k = { 2.0f * 3.1415926535f * (float)ic / p.L,
                              2.0f * 3.1415926535f * (float)jc / p.L };
-            float ph = phillips(k, wd, p.wind_speed, p.amplitude, p.swell);
+            float ph = phillips(k, wd, p.wind_speed, p.amplitude, p.swell,
+                                p.max_wavelength_m);
             float kr = nd(rng), ki = nd(rng);
             float s = 1.0f / std::sqrt(2.0f);
             out[(size_t)j * p.N + i].x = s * kr * std::sqrt(ph);

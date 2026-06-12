@@ -41,6 +41,29 @@ TEST(Spectrum, SwellNarrowsDirectionalSpreading) {
     EXPECT_FLOAT_EQ(vox::phillips(k_diag, wd, wind, A), off_calm);
 }
 
+// A diorama can't host waves longer than itself: the 271m cascade-0 swell
+// renders as one giant dome swallowing a 96m patch. max_wavelength_m
+// high-passes the spectrum so long components vanish while the legible
+// chop is untouched. 0 disables (legacy open-ocean behavior).
+TEST(Spectrum, MaxWavelengthSuppressesLongWaves) {
+    glm::vec2 wd{1.0f, 0.0f};
+    float wind = 12.0f, A = 1.0f;
+    const float two_pi = 6.2831853f;
+    glm::vec2 k_long  {two_pi / 271.0f, 0.0f};   // the dome-maker
+    glm::vec2 k_short {two_pi / 20.0f,  0.0f};   // legible diorama wave
+
+    float long_off  = vox::phillips(k_long,  wd, wind, A, 0.0f);
+    float long_on   = vox::phillips(k_long,  wd, wind, A, 0.0f, 50.0f);
+    float short_off = vox::phillips(k_short, wd, wind, A, 0.0f);
+    float short_on  = vox::phillips(k_short, wd, wind, A, 0.0f, 50.0f);
+
+    EXPECT_GT(long_off, 0.0f);
+    EXPECT_LT(long_on,  long_off * 0.01f);    // 271m wave crushed to <1%
+    EXPECT_GT(short_on, short_off * 0.9f);    // 20m wave keeps >90% energy
+    // 0 disables: must reproduce legacy behavior exactly.
+    EXPECT_FLOAT_EQ(vox::phillips(k_long, wd, wind, A, 0.0f, 0.0f), long_off);
+}
+
 TEST(Spectrum, H0HasExpectedSize) {
     vox::SpectrumParams p; p.N = 64;
     auto h0 = vox::generate_h0(p);

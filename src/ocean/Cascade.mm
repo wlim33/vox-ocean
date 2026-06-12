@@ -56,6 +56,7 @@ void Cascade::rebuild_h0(const MetalContext& ctx, const CascadeParams& p) {
     sp.wind_speed = p.wind_speed_mps; sp.wind_dir_rad = p.wind_dir_rad;
     sp.amplitude = p.amplitude;
     sp.swell = p.swell;
+    sp.max_wavelength_m = p.max_wavelength_m;
     sp.seed = p.seed;
     auto data = generate_h0(sp);
     upload_h0(ctx, h0_, data, p.N);
