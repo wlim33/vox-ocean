@@ -32,7 +32,7 @@ TEST(Dda, HitsFirstSolidAlongX) {
     ASSERT_TRUE(r.hit);
     EXPECT_EQ(r.ix, 2); EXPECT_EQ(r.iy, 1); EXPECT_EQ(r.iz, 1);
     EXPECT_EQ(r.face_axis, 0);          // entered the cell through an x face
-    EXPECT_NEAR(r.t, 5.0f + 2.0f, 0.01f);  // origin -5 -> cell boundary at x=0
+    EXPECT_NEAR(r.t, 5.0f, 0.01f);  // origin -5 -> cell boundary at x=0
 }
 
 TEST(Dda, HitsTopSurfaceFromAbove) {
