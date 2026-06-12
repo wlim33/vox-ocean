@@ -52,6 +52,13 @@ TEST(VoxelWorld, WaterTopCellCountsFromBase) {
     EXPECT_EQ(w.water_top_cell(1e6f),   48);  // clamp: grid top
 }
 
+TEST(VoxelWorld, BaseAlignsWithStepGrid) {
+    // Contract: base_depth_m is an integer multiple of height_step_m, so the
+    // quantize floor lands exactly on a cell boundary.
+    auto w = make();
+    EXPECT_FLOAT_EQ(w.cell_bottom_y(w.water_top_cell(0.0f)), 0.0f);
+}
+
 TEST(VoxelWorld, CellIndexMatchesUploadLayout) {
     auto w = make();   // x fastest, then y, then z
     EXPECT_EQ(w.cell_index(0, 0, 0), 0);
