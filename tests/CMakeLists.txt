@@ -71,5 +71,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/entity/Wander.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    kelp_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/entity/Kelp.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
