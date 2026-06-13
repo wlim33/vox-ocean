@@ -49,6 +49,8 @@ struct FftPassUniforms {
 #define MAT_SAND  2
 #define MAT_ROCK  3
 #define MAT_BOAT  4
+#define MAT_KELP  5
+#define MAT_FISH  6
 
 struct WorldFillUniforms {
     int   grid_extent;
@@ -97,4 +99,6 @@ struct MarchUniforms {
     int   grid_extent;       int height_cells; float voxel_size_m; float base_depth_m;
     int   max_steps;         float water_ior; float _mpad3, _mpad4;
     vec3  boat_color;        float _mpad5;
+    vec3  kelp_color;        float _mpad6;
+    vec3  fish_color;        float _mpad7;
 };

@@ -65,6 +65,21 @@ void draw_debug_panel(App& app) {
         ImGui::SliderFloat("boat speed", &c.entity.boat_speed_mps, 0.0f, 5.0f);
         ImGui::SliderFloat("wake amp",   &c.entity.wake_amp,       0.0f, 2.0f);
     }
+    if (ImGui::CollapsingHeader("Kelp", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("kelp", &c.kelp.enabled);
+        ImGui::SliderFloat("density",       &c.kelp.density,       0.0f, 0.3f);
+        ImGui::SliderFloat("max height",    &c.kelp.max_height_m,  1.0f, 30.0f);
+        ImGui::SliderFloat("sway strength", &c.kelp.sway_strength, 0.0f, 4.0f);
+        ImGui::SliderFloat("sway ambient",  &c.kelp.sway_ambient,  0.0f, 2.0f);
+    }
+    if (ImGui::CollapsingHeader("Fish", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("fish", &c.fish.enabled);
+        ImGui::SliderInt("schools",    &c.fish.school_count, 0, 32);
+        ImGui::SliderInt("per school", &c.fish.per_school,   0, 256);
+        ImGui::SliderFloat("speed",    &c.fish.speed_mps,    0.0f, 8.0f);
+        ImGui::SliderFloat("depth",    &c.fish.depth_frac,   0.0f, 1.0f);
+        ImGui::SliderFloat("spread",   &c.fish.spread_m,     0.0f, 20.0f);
+    }
     ImGui::End();
 }
 }

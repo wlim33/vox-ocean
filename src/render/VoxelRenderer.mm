@@ -306,6 +306,10 @@ void VoxelRenderer::encode_march(void* command_buffer, const OrbitCamera& cam, c
     u._mpad3 = u._mpad4 = 0.0f;
     u.boat_color = (simd_float3){ cfg.shading.boat_color.x, cfg.shading.boat_color.y, cfg.shading.boat_color.z };
     u._mpad5 = 0.0f;
+    u.kelp_color = (simd_float3){ cfg.shading.kelp_color.x, cfg.shading.kelp_color.y, cfg.shading.kelp_color.z };
+    u._mpad6 = 0.0f;
+    u.fish_color = (simd_float3){ cfg.shading.fish_color.x, cfg.shading.fish_color.y, cfg.shading.fish_color.z };
+    u._mpad7 = 0.0f;
     std::memcpy(march_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
     MTLRenderPassDescriptor* rp = [MTLRenderPassDescriptor renderPassDescriptor];

@@ -9,6 +9,8 @@ static_assert((int)vox::VoxMat::Water == MAT_WATER);
 static_assert((int)vox::VoxMat::Sand  == MAT_SAND);
 static_assert((int)vox::VoxMat::Rock  == MAT_ROCK);
 static_assert((int)vox::VoxMat::Boat  == MAT_BOAT);
+static_assert((int)vox::VoxMat::Kelp  == MAT_KELP);
+static_assert((int)vox::VoxMat::Fish  == MAT_FISH);
 
 // extent 4, 48 cells, 0.5m voxels, 0.25m steps, 10m base
 static vox::VoxelWorld make() { return vox::VoxelWorld({4, 48, 0.5f, 0.25f, 10.0f}); }

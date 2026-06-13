@@ -14,7 +14,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "cascade_count",
     "max_in_flight_frames",
-    "cascades","wave","sky","shading","bench","voxel","march","ripple","entity"
+    "cascades","wave","sky","shading","bench","voxel","march","ripple","entity","kelp","fish"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -109,6 +109,61 @@ void load_ripple(const toml::table& t, RippleConfig& rp, LoadResult& r) {
     if (auto v = t["foam"].value<double>()) rp.foam = clamp((float)*v, 0.0f, 4.0f);
 }
 
+void load_kelp(const toml::table& t, KelpConfig& k, LoadResult& r) {
+    if (auto v = t["enabled"].value<bool>()) k.enabled = *v;
+    if (auto v = t["density"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 0.3f) r.warnings.push_back("kelp.density out of [0,0.3], clamped");
+        k.density = clamp(val, 0.0f, 0.3f);
+    }
+    if (auto v = t["max_height_m"].value<double>()) {
+        float val = (float)*v;
+        if (val < 1.0f || val > 30.0f) r.warnings.push_back("kelp.max_height_m out of [1,30], clamped");
+        k.max_height_m = clamp(val, 1.0f, 30.0f);
+    }
+    if (auto v = t["sway_strength"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 4.0f) r.warnings.push_back("kelp.sway_strength out of [0,4], clamped");
+        k.sway_strength = clamp(val, 0.0f, 4.0f);
+    }
+    if (auto v = t["sway_ambient"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 2.0f) r.warnings.push_back("kelp.sway_ambient out of [0,2], clamped");
+        k.sway_ambient = clamp(val, 0.0f, 2.0f);
+    }
+    if (auto v = t["seed"].value<int64_t>()) k.seed = (int)*v;
+}
+
+void load_fish(const toml::table& t, FishConfig& f, LoadResult& r) {
+    if (auto v = t["enabled"].value<bool>()) f.enabled = *v;
+    if (auto v = t["school_count"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 0 || val > 32) r.warnings.push_back("fish.school_count out of [0,32], clamped");
+        f.school_count = clamp(val, 0, 32);
+    }
+    if (auto v = t["per_school"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 0 || val > 256) r.warnings.push_back("fish.per_school out of [0,256], clamped");
+        f.per_school = clamp(val, 0, 256);
+    }
+    if (auto v = t["speed_mps"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 8.0f) r.warnings.push_back("fish.speed_mps out of [0,8], clamped");
+        f.speed_mps = clamp(val, 0.0f, 8.0f);
+    }
+    if (auto v = t["depth_frac"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 1.0f) r.warnings.push_back("fish.depth_frac out of [0,1], clamped");
+        f.depth_frac = clamp(val, 0.0f, 1.0f);
+    }
+    if (auto v = t["spread_m"].value<double>()) {
+        float val = (float)*v;
+        if (val < 0.0f || val > 20.0f) r.warnings.push_back("fish.spread_m out of [0,20], clamped");
+        f.spread_m = clamp(val, 0.0f, 20.0f);
+    }
+    if (auto v = t["seed"].value<int64_t>()) f.seed = (int)*v;
+}
+
 } // namespace
 
 LoadResult load_config_from_string(const std::string& text) {
@@ -135,6 +190,8 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* mc = tbl["march"].as_table()) load_march(*mc, c.march, r);
     if (auto* rp = tbl["ripple"].as_table()) load_ripple(*rp, c.ripple, r);
     if (auto* en = tbl["entity"].as_table()) load_entity(*en, c.entity, r);
+    if (auto* kp = tbl["kelp"].as_table()) load_kelp(*kp, c.kelp, r);
+    if (auto* fp = tbl["fish"].as_table()) load_fish(*fp, c.fish, r);
     // sky, shading, cascades, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -222,6 +279,55 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 if (f < 0.0f || f > 2.0f) in.warnings.push_back("entity.wake_amp out of [0,2], clamped");
                 in.config.entity.wake_amp = clamp(f, 0.0f, 2.0f);
             }
+            else if (key == "kelp.enabled") in.config.kelp.enabled = (val == "true" || val == "1");
+            else if (key == "kelp.density") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 0.3f) in.warnings.push_back("kelp.density out of [0,0.3], clamped");
+                in.config.kelp.density = clamp(f, 0.0f, 0.3f);
+            }
+            else if (key == "kelp.max_height_m") {
+                float f = std::stof(val);
+                if (f < 1.0f || f > 30.0f) in.warnings.push_back("kelp.max_height_m out of [1,30], clamped");
+                in.config.kelp.max_height_m = clamp(f, 1.0f, 30.0f);
+            }
+            else if (key == "kelp.sway_strength") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 4.0f) in.warnings.push_back("kelp.sway_strength out of [0,4], clamped");
+                in.config.kelp.sway_strength = clamp(f, 0.0f, 4.0f);
+            }
+            else if (key == "kelp.sway_ambient") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 2.0f) in.warnings.push_back("kelp.sway_ambient out of [0,2], clamped");
+                in.config.kelp.sway_ambient = clamp(f, 0.0f, 2.0f);
+            }
+            else if (key == "kelp.seed") in.config.kelp.seed = std::stoi(val);
+            else if (key == "fish.enabled") in.config.fish.enabled = (val == "true" || val == "1");
+            else if (key == "fish.school_count") {
+                int n = std::stoi(val);
+                if (n < 0 || n > 32) in.warnings.push_back("fish.school_count out of [0,32], clamped");
+                in.config.fish.school_count = clamp(n, 0, 32);
+            }
+            else if (key == "fish.per_school") {
+                int n = std::stoi(val);
+                if (n < 0 || n > 256) in.warnings.push_back("fish.per_school out of [0,256], clamped");
+                in.config.fish.per_school = clamp(n, 0, 256);
+            }
+            else if (key == "fish.speed_mps") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 8.0f) in.warnings.push_back("fish.speed_mps out of [0,8], clamped");
+                in.config.fish.speed_mps = clamp(f, 0.0f, 8.0f);
+            }
+            else if (key == "fish.depth_frac") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 1.0f) in.warnings.push_back("fish.depth_frac out of [0,1], clamped");
+                in.config.fish.depth_frac = clamp(f, 0.0f, 1.0f);
+            }
+            else if (key == "fish.spread_m") {
+                float f = std::stof(val);
+                if (f < 0.0f || f > 20.0f) in.warnings.push_back("fish.spread_m out of [0,20], clamped");
+                in.config.fish.spread_m = clamp(f, 0.0f, 20.0f);
+            }
+            else if (key == "fish.seed") in.config.fish.seed = std::stoi(val);
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
             in.warnings.push_back("invalid value for " + key + ": " + val);
@@ -258,6 +364,21 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.entity.boat_enabled,   sizeof(c.entity.boat_enabled),   h);
     h = fnv1a64(&c.entity.boat_speed_mps, sizeof(c.entity.boat_speed_mps), h);
     h = fnv1a64(&c.entity.wake_amp,       sizeof(c.entity.wake_amp),       h);
+    // Kelp
+    h = fnv1a64(&c.kelp.enabled,       sizeof(c.kelp.enabled),       h);
+    h = fnv1a64(&c.kelp.density,       sizeof(c.kelp.density),       h);
+    h = fnv1a64(&c.kelp.max_height_m,  sizeof(c.kelp.max_height_m),  h);
+    h = fnv1a64(&c.kelp.sway_strength, sizeof(c.kelp.sway_strength), h);
+    h = fnv1a64(&c.kelp.sway_ambient,  sizeof(c.kelp.sway_ambient),  h);
+    h = fnv1a64(&c.kelp.seed,          sizeof(c.kelp.seed),          h);
+    // Fish
+    h = fnv1a64(&c.fish.enabled,       sizeof(c.fish.enabled),       h);
+    h = fnv1a64(&c.fish.school_count,  sizeof(c.fish.school_count),  h);
+    h = fnv1a64(&c.fish.per_school,    sizeof(c.fish.per_school),    h);
+    h = fnv1a64(&c.fish.speed_mps,     sizeof(c.fish.speed_mps),     h);
+    h = fnv1a64(&c.fish.depth_frac,    sizeof(c.fish.depth_frac),    h);
+    h = fnv1a64(&c.fish.spread_m,      sizeof(c.fish.spread_m),      h);
+    h = fnv1a64(&c.fish.seed,          sizeof(c.fish.seed),          h);
     // Grid / cascades
     h = fnv1a64(&c.cascade_count,       sizeof(c.cascade_count),       h);
     for (int i = 0; i < 4; ++i) {

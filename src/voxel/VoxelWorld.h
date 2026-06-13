@@ -7,7 +7,7 @@ namespace vox {
 // Material IDs stored in the world grid (one byte per cell).
 // Lockstep mirror of the MAT_* constants in shaders/shader_types.h
 // (static_asserted in voxel_world_test.cpp).
-enum class VoxMat : uint8_t { Air = 0, Water = 1, Sand = 2, Rock = 3, Boat = 4 };
+enum class VoxMat : uint8_t { Air = 0, Water = 1, Sand = 2, Rock = 3, Boat = 4, Kelp = 5, Fish = 6 };
 
 // extent = columns per axis; height_cells = vertical cells above the diorama
 // base. Cells are voxel_size_m wide and height_step_m tall (non-cubic OK).

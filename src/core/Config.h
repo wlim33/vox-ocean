@@ -40,6 +40,8 @@ struct ShadingConfig {
     glm::vec3 sand_color       {0.76f, 0.70f, 0.50f};
     glm::vec3 rock_color       {0.35f, 0.33f, 0.30f};
     glm::vec3 boat_color       {0.45f, 0.30f, 0.18f};
+    glm::vec3 kelp_color       {0.13f, 0.32f, 0.15f};
+    glm::vec3 fish_color       {0.62f, 0.66f, 0.70f};
 };
 
 struct VoxelConfig {
@@ -68,6 +70,25 @@ struct EntityConfig {
     bool  boat_enabled   = true;
     float boat_speed_mps = 1.5f;   // cruise speed, clamp [0,5]
     float wake_amp       = 0.25f;  // stern splash amplitude (m), clamp [0,2]
+};
+
+struct KelpConfig {
+    bool  enabled       = true;
+    float density       = 0.02f;   // stalks as a fraction of columns, clamp [0,0.3]
+    float max_height_m  = 6.0f;    // tallest stalk, clamp [1,30]
+    float sway_strength = 0.6f;    // water-gradient coupling gain, clamp [0,4]
+    float sway_ambient  = 0.15f;   // idle sway so becalmed kelp still breathes, clamp [0,2]
+    int   seed          = 101;
+};
+
+struct FishConfig {
+    bool  enabled      = true;
+    int   school_count = 4;        // clamp [0,32]
+    int   per_school   = 24;       // clamp [0,256]
+    float speed_mps    = 2.0f;     // clamp [0,8]
+    float depth_frac   = 0.5f;     // 0=floor .. 1=surface, clamp [0,1]
+    float spread_m     = 3.0f;     // school formation radius, clamp [0,20]
+    int   seed         = 202;
 };
 
 struct SkyConfig {
@@ -100,6 +121,8 @@ struct Config {
     MarchConfig march;
     RippleConfig ripple;
     EntityConfig entity;
+    KelpConfig kelp;
+    FishConfig fish;
 
     SkyConfig sky;
     ShadingConfig shading;

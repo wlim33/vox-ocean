@@ -50,3 +50,20 @@ foam           = 0.5
 boat_enabled   = true
 boat_speed_mps = 1.5
 wake_amp       = 0.25
+
+[kelp]
+enabled       = true
+density       = 0.02
+max_height_m  = 6.0
+sway_strength = 0.6
+sway_ambient  = 0.15
+seed          = 101
+
+[fish]
+enabled      = true
+school_count = 4
+per_school   = 24
+speed_mps    = 2.0
+depth_frac   = 0.5
+spread_m     = 3.0
+seed         = 202
