@@ -41,7 +41,7 @@ struct ShadingConfig {
     glm::vec3 rock_color       {0.35f, 0.33f, 0.30f};
     glm::vec3 boat_color       {0.45f, 0.30f, 0.18f};
     glm::vec3 kelp_color       {0.13f, 0.32f, 0.15f};
-    glm::vec3 fish_color       {0.62f, 0.66f, 0.70f};
+    glm::vec3 fish_color       {1.0f, 0.08f, 0.55f};   // bright pink, rendered opaque
 };
 
 struct VoxelConfig {
@@ -84,10 +84,10 @@ struct KelpConfig {
 struct FishConfig {
     bool  enabled      = true;
     int   school_count = 4;        // clamp [0,32]
-    int   per_school   = 24;       // clamp [0,256]
+    int   per_school   = 40;       // clamp [0,256]
     float speed_mps    = 2.0f;     // clamp [0,8]
     float depth_frac   = 0.5f;     // 0=floor .. 1=surface, clamp [0,1]
-    float spread_m     = 3.0f;     // school formation radius, clamp [0,20]
+    float spread_m     = 2.5f;     // school formation radius, clamp [0,20]
     int   seed         = 202;
 };
 

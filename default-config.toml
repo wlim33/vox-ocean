@@ -62,8 +62,8 @@ seed          = 101
 [fish]
 enabled      = true
 school_count = 4
-per_school   = 24
+per_school   = 40
 speed_mps    = 2.0
 depth_frac   = 0.5
-spread_m     = 3.0
+spread_m     = 2.5
 seed         = 202

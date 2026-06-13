@@ -165,6 +165,11 @@ fragment float4 march_fs(
         if (!alive) { exited_up = rdir.y > 0.0; break; }
     }
 
+    // Opaque fish: render solid, unattenuated by the water path or surface
+    // reflection, so schools read clearly through the water.
+    if (end_mat == MAT_FISH)
+        return float4(aces_tonemap(terrain_color(MAT_FISH, face_normal(end_axis, W.d), sun, U)), 1.0);
+
     // Background behind the water along the refracted path.
     float3 bg;
     if (end_mat != MAT_AIR)  bg = terrain_color(end_mat, face_normal(end_axis, W.d), sun, U);

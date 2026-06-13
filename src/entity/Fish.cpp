@@ -67,15 +67,17 @@ void FishSchools::build_stamp(const Config& cfg, const VoxelWorld& w, StampList&
     float half = 0.5f * p.extent * p.voxel_size_m;
     for (const auto& f : fish_) {
         glm::vec2 fwd { std::cos(f.yaw), std::sin(f.yaw) };
-        for (int s = 0; s < FISH_CELLS; ++s) {
+        int iy0 = (int)std::floor((f.pos.y + p.base_depth_m) / p.height_step_m);
+        for (int s = 0; s < FISH_BODY_LEN; ++s) {
             float along = -(float)s * p.voxel_size_m;   // body+tail trails behind the head
             float wx = f.pos.x + fwd.x * along;
             float wz = f.pos.z + fwd.y * along;
             int ix = std::clamp((int)std::floor((wx + half) / p.voxel_size_m), 0, p.extent - 1);
             int iz = std::clamp((int)std::floor((wz + half) / p.voxel_size_m), 0, p.extent - 1);
-            int iy = std::clamp((int)std::floor((f.pos.y + p.base_depth_m) / p.height_step_m),
-                                0, p.height_cells - 1);
-            out.push((uint32_t)w.cell_index(ix, iy, iz), VoxMat::Fish);
+            for (int dy = 0; dy < FISH_BODY_HGT; ++dy) {   // vertical bulk -> visible cross-section
+                int iy = std::clamp(iy0 - FISH_BODY_HGT / 2 + dy, 0, p.height_cells - 1);
+                out.push((uint32_t)w.cell_index(ix, iy, iz), VoxMat::Fish);
+            }
         }
     }
 }

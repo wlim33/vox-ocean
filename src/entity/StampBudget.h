@@ -17,8 +17,11 @@ struct StampList {
     int  count() const { return (int)idx.size(); }
 };
 
-// Per-fish silhouette voxels.
-inline constexpr int FISH_CELLS = 5;
+// Per-fish silhouette: a small body, FISH_BODY_LEN along the heading by
+// FISH_BODY_HGT tall, so each fish has real voxel cross-section through water.
+inline constexpr int FISH_BODY_LEN = 3;
+inline constexpr int FISH_BODY_HGT = 3;
+inline constexpr int FISH_CELLS    = FISH_BODY_LEN * FISH_BODY_HGT;
 
 // Exact stalk count: density directly sets the number, so the stamp capacity
 // is an exact (not worst-case) bound. Mirrored by KelpBed::rebuild.
