@@ -20,6 +20,8 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/voxel/VoxelWorld.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE voxel_grid_test.cpp)
+
 target_sources(vox-ocean-tests PRIVATE
     fft_reference_test.cpp
     support/cpu_fft_reference.cpp
