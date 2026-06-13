@@ -1,7 +1,8 @@
 #include "engine/Engine.h"
 #include "core/App.h"
 #include "core/InputBridge.h"
-#include "entity/Boat.h"
+#include "entity/Ecosystem.h"
+#include "entity/StampBudget.h"
 #include "voxel/VoxelWorld.h"
 #include "gpu/MetalContext.h"
 #include "gpu/PipelineCache.h"
@@ -33,7 +34,8 @@ public:
     VoxelRenderer voxels;
     ImGuiBackend imgui;
     BenchmarkHarness bench;
-    Boat boat;
+    Ecosystem ecosystem;
+    StampList stamp;
     // Bounds CPU frames-in-flight to config.max_in_flight_frames; created
     // lazily on the first render. signaled in the command-buffer completed
     // handler so the CPU blocks once that many frames are still on the GPU.
@@ -145,27 +147,23 @@ void engine_render(Engine* e) {
     float sim_time = (float)e->app->clock().total_seconds();
 
     const Config& cfg = e->app->config();
+    float dt = (float)e->app->clock().delta_seconds();
+    e->ecosystem.rebuild_if_dirty(cfg);
+    e->ecosystem.update(cfg, dt, sim_time,
+        [&](float x, float z) { return e->voxels.water_height_at(x, z, cfg, e->frame_index); });
+
     std::vector<RippleSplash> wake;
-    std::vector<uint32_t> boat_cells_scratch;
-    if (cfg.entity.boat_enabled) {
+    glm::vec2 stern;
+    if (e->ecosystem.shed_boat_wake(cfg, stern)) {
         float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
-        float dt = (float)e->app->clock().delta_seconds();
-        e->boat.update(dt, sim_time,
-            [&](float x, float z) { return e->voxels.water_height_at(x, z, cfg, e->frame_index); },
-            cfg.entity.boat_speed_mps, half, cfg.voxel.voxel_size_m);
-        // Shed wake by distance traveled (≈ one impulse per cell), not every
-        // frame — a per-frame deposit let a slow boat dig a ripple hole its
-        // own buoyancy sank into.
-        glm::vec2 st;
-        if (e->boat.shed_wake(cfg.voxel.voxel_size_m, st))
-            wake.push_back({ (st.x + half) / cfg.voxel.voxel_size_m,
-                             (st.y + half) / cfg.voxel.voxel_size_m,
-                             1.5f, -cfg.entity.wake_amp });
-        VoxelWorld w({cfg.voxel.grid_extent, cfg.voxel.height_cells,
+        wake.push_back({ (stern.x + half) / cfg.voxel.voxel_size_m,
+                         (stern.y + half) / cfg.voxel.voxel_size_m,
+                         1.5f, -cfg.entity.wake_amp });
+    }
+    VoxelWorld world({cfg.voxel.grid_extent, cfg.voxel.height_cells,
                       cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
                       cfg.voxel.base_depth_m});
-        boat_cells_scratch = boat_cells(e->boat.state(), w);
-    }
+    e->ecosystem.build_stamp(cfg, world, e->stamp);
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
@@ -173,10 +171,9 @@ void engine_render(Engine* e) {
                             (float)e->app->clock().delta_seconds(),
                             wake.data(), (int)wake.size());
     e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->frame_index);
-    std::vector<uint8_t> boat_mats(boat_cells_scratch.size(), (uint8_t)VoxMat::Boat);
     e->voxels.encode_stamp((__bridge void*)ce, e->app->config(),
-                           boat_cells_scratch.data(), boat_mats.data(),
-                           (int)boat_cells_scratch.size(), e->frame_index);
+                           e->stamp.idx.data(), e->stamp.mat.data(),
+                           e->stamp.count(), e->frame_index);
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
