@@ -8,7 +8,10 @@
 #include "gpu/PipelineCache.h"
 #include "ocean/Simulation.h"
 #include "render/SkyRenderer.h"
-#include "render/VoxelRenderer.h"
+#include "voxel/DenseVoxelField.h"
+#include "voxel/RippleSim.h"
+#include "render/IVoxelRenderer.h"
+#include "render/RendererFactory.h"
 #include "ui/ImGuiBackend.h"
 #include "ui/DebugPanel.h"
 #include "bench/BenchmarkHarness.h"
@@ -31,7 +34,9 @@ public:
     std::unique_ptr<App> app;
     Simulation sim;
     SkyRenderer sky;
-    VoxelRenderer voxels;
+    DenseVoxelField field;
+    RippleSim ripple;
+    std::unique_ptr<IVoxelRenderer> renderer;
     ImGuiBackend imgui;
     BenchmarkHarness bench;
     Ecosystem ecosystem;
@@ -71,7 +76,10 @@ Engine* engine_create(const char* config_path, const char* overrides) {
 
     e->sky.init(e->ctx, e->cache);
     e->sim.init(e->ctx, e->cache, e->app->config());
-    e->voxels.init(e->ctx, e->cache);
+    e->field.init(e->ctx, e->cache);
+    e->ripple.init(e->ctx, e->cache);
+    e->renderer = make_renderer(e->app->config().render.backend);
+    e->renderer->init(e->ctx, e->cache);
     e->bench.start(e->app->config(), config_hash(e->app->config()));
     return e;
 }
@@ -138,19 +146,21 @@ void engine_render(Engine* e) {
 
     e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, e->app->config());
     e->sim.rebuild_if_dirty(e->ctx, e->app->config());
-    e->voxels.rebuild_if_dirty(e->ctx, e->app->config());
+    e->field.rebuild_if_dirty(e->ctx, e->app->config());
+    e->ripple.rebuild_if_dirty(e->ctx, e->app->config());
     CGSize dsz = view.drawableSize;
-    e->voxels.ensure_march_target(e->ctx, (int)dsz.width, (int)dsz.height,
-                                  e->app->config());
-    e->voxels.ensure_stamp_capacity(e->ctx, e->app->config());
-    e->voxels.encode_terrain_upload_if_dirty((__bridge void*)cb);
+    e->renderer->resize(e->ctx, (int)dsz.width, (int)dsz.height,
+                        e->app->config());
+    e->field.ensure_capacity(e->ctx, e->app->config());
+    e->field.upload_terrain_if_dirty((__bridge void*)cb);
+    e->ripple.upload_zero_if_dirty((__bridge void*)cb);
     float sim_time = (float)e->app->clock().total_seconds();
 
     const Config& cfg = e->app->config();
     float dt = (float)e->app->clock().delta_seconds();
     e->ecosystem.rebuild_if_dirty(cfg);
     e->ecosystem.update(cfg, dt, sim_time,
-        [&](float x, float z) { return e->voxels.water_height_at(x, z, cfg, e->frame_index); });
+        [&](float x, float z) { return e->field.height_at(x, z, cfg, e->frame_index); });
 
     std::vector<RippleSplash> wake;
     glm::vec2 stern;
@@ -167,26 +177,24 @@ void engine_render(Engine* e) {
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
-    e->voxels.encode_ripple((__bridge void*)ce, e->app->config(),
-                            (float)e->app->clock().delta_seconds(),
-                            wake.data(), (int)wake.size());
-    e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->frame_index);
-    e->voxels.encode_stamp((__bridge void*)ce, e->app->config(),
-                           e->stamp.idx.data(), e->stamp.mat.data(),
-                           e->stamp.count(), e->frame_index);
+    e->ripple.encode((__bridge void*)ce, e->app->config(),
+                     (float)e->app->clock().delta_seconds(),
+                     wake.data(), (int)wake.size());
+    e->field.encode_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->ripple.front_texture(), e->frame_index);
+    e->field.encode_stamp((__bridge void*)ce, e->app->config(), e->stamp, e->frame_index);
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
     e->sim.encode_mipgen((__bridge void*)blit, e->app->config());
-    e->voxels.encode_surface_readback((__bridge void*)blit, e->app->config(), e->frame_index);
+    e->field.encode_readback((__bridge void*)blit, e->app->config(), e->frame_index);
     [blit endEncoding];
 
-    e->voxels.encode_march((__bridge void*)cb, e->app->camera(), e->app->config(),
-                           e->sky, e->frame_index);
+    e->renderer->encode((__bridge void*)cb, e->field, e->app->camera(), e->app->config(),
+                        e->sky, e->frame_index);
 
     id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
     e->sky.encode_full_screen((__bridge void*)enc, e->app->camera(), e->app->config());
-    e->voxels.encode_composite((__bridge void*)enc);
+    e->renderer->draw_into_drawable((__bridge void*)enc);
     if (ui) e->imgui.render((__bridge void*)cb, (__bridge void*)rp, (__bridge void*)enc);
     [enc endEncoding];
 

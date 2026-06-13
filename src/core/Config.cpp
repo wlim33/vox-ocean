@@ -14,7 +14,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "cascade_count",
     "max_in_flight_frames",
-    "cascades","wave","sky","shading","bench","voxel","march","ripple","entity","kelp","fish"
+    "cascades","wave","sky","shading","bench","voxel","march","render","ripple","entity","kelp","fish"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -74,6 +74,10 @@ void load_march(const toml::table& t, MarchConfig& m, LoadResult& r) {
         if (val < 0.25f || val > 1.0f) r.warnings.push_back("march.render_scale out of [0.25,1.0], clamped");
         m.render_scale = clamp(val, 0.25f, 1.0f);
     }
+}
+
+void load_render(const toml::table& t, RenderConfig& rc) {
+    if (auto v = t["backend"].value<std::string>()) rc.backend = *v;
 }
 
 void load_entity(const toml::table& t, EntityConfig& e, LoadResult& r) {
@@ -188,6 +192,7 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* w = tbl["wave"].as_table())  load_wave(*w, c.wave);
     if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel, r);
     if (auto* mc = tbl["march"].as_table()) load_march(*mc, c.march, r);
+    if (auto* rd = tbl["render"].as_table()) load_render(*rd, c.render);
     if (auto* rp = tbl["ripple"].as_table()) load_ripple(*rp, c.ripple, r);
     if (auto* en = tbl["entity"].as_table()) load_entity(*en, c.entity, r);
     if (auto* kp = tbl["kelp"].as_table()) load_kelp(*kp, c.kelp, r);
@@ -251,6 +256,7 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 if (f < 0.25f || f > 1.0f) in.warnings.push_back("march.render_scale out of [0.25,1.0], clamped");
                 in.config.march.render_scale = clamp(f, 0.25f, 1.0f);
             }
+            else if (key == "render.backend") in.config.render.backend = val;
             else if (key == "bench.bench_mode")           in.config.bench.bench_mode    = (val == "true" || val == "1");
             else if (key == "ripple.wave_speed_mps") {
                 float f = std::stof(val);
@@ -403,6 +409,8 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.bench.camera_path,     sizeof(c.bench.camera_path),     h);
     // bench.output_path: hash the string content, not raw bytes
     h = fnv1a64(c.bench.output_path.data(), c.bench.output_path.size(), h);
+    // Render backend: hash the string content, not raw bytes
+    h = fnv1a64(c.render.backend.data(), c.render.backend.size(), h);
     // Frame controls
     h = fnv1a64(&c.max_in_flight_frames,  sizeof(c.max_in_flight_frames),  h);
     return h;

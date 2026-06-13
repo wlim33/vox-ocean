@@ -259,3 +259,13 @@ seed = 9
     b = a; b.fish.depth_frac = 0.25f;
     EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
 }
+
+TEST(Config, RenderBackendParsesAndOverrides) {
+    auto r = vox::load_config_from_string("[render]\nbackend = \"foo\"\n");
+    EXPECT_EQ(r.config.render.backend, "foo");
+    auto d = vox::load_config_from_string("");
+    EXPECT_EQ(d.config.render.backend, "raymarch");
+    auto o = vox::apply_overrides(vox::load_config_from_string(""), {"render.backend=bar"});
+    EXPECT_EQ(o.config.render.backend, "bar");
+    EXPECT_NE(vox::config_hash(o.config), vox::config_hash(d.config));
+}

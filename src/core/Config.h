@@ -58,6 +58,8 @@ struct MarchConfig {
     float render_scale = 1.0f;  // march-target resolution factor (iOS escape hatch)
 };
 
+struct RenderConfig { std::string backend = "raymarch"; };
+
 struct RippleConfig {
     // Interactive surface ripples (2D wave equation), summed with the FFT.
     float wave_speed_mps = 6.0f;   // propagation speed c
@@ -119,6 +121,7 @@ struct Config {
     WaveConfig wave;
     VoxelConfig voxel;
     MarchConfig march;
+    RenderConfig render;
     RippleConfig ripple;
     EntityConfig entity;
     KelpConfig kelp;

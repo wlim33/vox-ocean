@@ -67,3 +67,6 @@ speed_mps    = 2.0
 depth_frac   = 0.5
 spread_m     = 2.5
 seed         = 202
+
+[render]
+backend = "raymarch"
