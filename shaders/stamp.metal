@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "shader_types.h"
+#include "voxel_grid.h"
 using namespace metal;
 
 // Writes per-cell materials into a CPU-supplied list of packed cell indices,
@@ -14,9 +15,8 @@ kernel void stamp_cells(
 {
     if ((int)gid >= U.count) return;
     uint i  = cells[gid];
-    uint ix = i % (uint)U.grid_extent;
-    uint iy = (i / (uint)U.grid_extent) % (uint)U.height_cells;
-    uint iz = i / ((uint)U.grid_extent * (uint)U.height_cells);
-    if ((int)iz >= U.grid_extent) return;
-    world.write(uint4((uint)materials[gid], 0, 0, 0), uint3(ix, iy, iz));
+    VoxelGridDesc g = {U.grid_extent, U.height_cells, 0.0f, 0.0f, 0.0f};  // decode uses int fields only
+    VgCell c = vg_decode_index(g, (int)i);
+    if (c.iz >= U.grid_extent) return;
+    world.write(uint4((uint)materials[gid], 0, 0, 0), uint3((uint)c.ix, (uint)c.iy, (uint)c.iz));
 }

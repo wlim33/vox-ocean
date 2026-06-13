@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "shader_types.h"
+#include "voxel_grid.h"
 using namespace metal;
 
 // One thread per column: sample cascade displacement, quantize (floor
@@ -17,9 +18,10 @@ kernel void world_fill(
     uint2 gid [[thread_position_in_grid]])
 {
     if ((int)gid.x >= U.grid_extent || (int)gid.y >= U.grid_extent) return;
+    VoxelGridDesc g = {U.grid_extent, U.height_cells, U.voxel_size_m, U.height_step_m, U.base_depth_m};
     constexpr sampler smp(filter::linear, address::repeat);
 
-    float half_patch = 0.5 * U.grid_extent * U.voxel_size_m;
+    float half_patch = vg_half_patch(g);
     float2 xz = (float2(gid) + 0.5) * U.voxel_size_m - half_patch;
 
     float h = 0.0;
@@ -37,10 +39,8 @@ kernel void world_fill(
     float ripple_h = ripple.read(gid).x;
     h += ripple_h;
     // Mirror of VoxelWorld::quantize_height / water_top_cell (floor policy).
-    float top = floor(h / U.height_step_m) * U.height_step_m;
-    top = max(top, -U.base_depth_m + U.height_step_m);
-    int water_cells = clamp((int)floor((top + U.base_depth_m) / U.height_step_m + 0.5),
-                            1, U.height_cells);
+    float top = vg_quantize_height(g, h);
+    int water_cells = vg_water_top_cell(g, h);
 
     for (int iy = 0; iy < U.height_cells; ++iy) {
         uint t = terrain.read(uint3(gid.x, iy, gid.y)).r;

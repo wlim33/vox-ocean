@@ -56,9 +56,9 @@ inline int vg_water_top_cell(VoxelGridDesc g, float h) {
 }
 // World (x, z) -> clamped column indices (the lookup behind surface height_at).
 inline VgCol vg_column_at(VoxelGridDesc g, float x, float z) {
-    float half = vg_half_patch(g);
+    float half_ext = vg_half_patch(g);
     VgCol c;
-    c.ix = VG_CLAMPI((int)VG_FLOOR((x + half) / g.voxel_size_m), 0, g.extent - 1);
-    c.iz = VG_CLAMPI((int)VG_FLOOR((z + half) / g.voxel_size_m), 0, g.extent - 1);
+    c.ix = VG_CLAMPI((int)VG_FLOOR((x + half_ext) / g.voxel_size_m), 0, g.extent - 1);
+    c.iz = VG_CLAMPI((int)VG_FLOOR((z + half_ext) / g.voxel_size_m), 0, g.extent - 1);
     return c;
 }

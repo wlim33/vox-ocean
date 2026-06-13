@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "shader_types.h"
+#include "voxel_grid.h"
 using namespace metal;
 
 struct MarchVOut { float4 pos [[position]]; float2 ndc; };
@@ -101,12 +102,11 @@ fragment float4 march_fs(
     float3 dir = normalize(p1.xyz / p1.w - p0.xyz / p0.w);
     float3 org = U.camera_pos;
 
-    float half_patch = 0.5 * U.grid_extent * U.voxel_size_m;
+    VoxelGridDesc vg = {U.grid_extent, U.height_cells, U.voxel_size_m, U.height_step_m, U.base_depth_m};
+    float half_patch = vg_half_patch(vg);
     GridDims G;
     G.bmin = float3(-half_patch, -U.base_depth_m, -half_patch);
-    G.bmax = float3( half_patch,
-                     -U.base_depth_m + U.height_cells * U.height_step_m,
-                      half_patch);
+    G.bmax = float3( half_patch, vg_world_top_y(vg), half_patch);
     G.cell = float3(U.voxel_size_m, U.height_step_m, U.voxel_size_m);
     G.dims = int3(U.grid_extent, U.height_cells, U.grid_extent);
 
