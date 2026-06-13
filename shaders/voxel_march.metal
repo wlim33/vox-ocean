@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "shader_types.h"
 #include "voxel_grid.h"
+#include "dense_field.h"
 using namespace metal;
 
 struct MarchVOut { float4 pos [[position]]; float2 ndc; };
@@ -118,7 +119,7 @@ fragment float4 march_fs(
     int steps = 0;
     while (steps < U.max_steps) {
         steps++;
-        mat = world.read(uint3(S.idx)).r;
+        mat = vox_read(vg, world, S.idx);
         if (mat != MAT_AIR) break;
         if (!dda_step(S, G)) return float4(0.0);
     }
@@ -157,7 +158,7 @@ fragment float4 march_fs(
     bool  exited_up = false;
     while (walking && steps < U.max_steps) {
         steps++;
-        uint m = world.read(uint3(W.idx)).r;
+        uint m = vox_read(vg, world, W.idx);
         if (m != MAT_AIR && m != MAT_WATER) { end_mat = m; end_axis = W.axis; break; }
         float t_enter = W.t_cur;
         bool alive = dda_step(W, G);
