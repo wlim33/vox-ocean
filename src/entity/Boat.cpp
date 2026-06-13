@@ -21,31 +21,16 @@ bool boat_hull(int x, int y, int z) {
 
 void Boat::update(float dt, float t, const HeightFn& water_height,
                   float speed_mps, float patch_half_m, float voxel_size_m) {
-    // Wander: smooth deterministic steering; two incommensurate sines give a
-    // non-repeating-feeling course with no RNG (bench determinism).
-    float yaw_rate = 0.4f * (0.6f * std::sin(t * 0.23f) + 0.3f * std::sin(t * 0.71f));
-
-    // Edge avoidance: beyond 60% of the half patch, blend toward the center
-    // heading, fully overriding the wander at 85%.
-    float r = glm::length(state_.pos);
-    if (r > 0.6f * patch_half_m) {
-        glm::vec2 to_center = -state_.pos / std::max(r, 1e-3f);
-        float want = std::atan2(to_center.y, to_center.x);
-        float diff = want - state_.yaw;
-        while (diff >  3.1415927f) diff -= 6.2831853f;
-        while (diff < -3.1415927f) diff += 6.2831853f;
-        float urgency = std::min((r - 0.6f * patch_half_m) / (0.25f * patch_half_m), 1.0f);
-        yaw_rate = glm::mix(yaw_rate, std::clamp(diff, -1.2f, 1.2f), urgency);
-    }
-    state_.yaw += yaw_rate * dt;
-    glm::vec2 fwd { std::cos(state_.yaw), std::sin(state_.yaw) };
-    float travel = speed_mps * dt;
-    state_.pos += fwd * travel;
+    WanderState ws { state_.pos, state_.yaw };
+    float travel = wander_step(ws, dt, t, speed_mps, patch_half_m);
+    state_.pos = ws.pos;
+    state_.yaw = ws.yaw;
     wake_dist_ += std::abs(travel);
 
     // Heave: average water height under bow/stern/port/starboard, smoothed;
     // the hull base floats DRAFT below the surface.
     constexpr float DRAFT = 0.4f;
+    glm::vec2 fwd { std::cos(state_.yaw), std::sin(state_.yaw) };
     glm::vec2 right { -fwd.y, fwd.x };
     float hl = 0.5f * BOAT_LEN  * voxel_size_m;
     float hb = 0.5f * BOAT_BEAM * voxel_size_m;

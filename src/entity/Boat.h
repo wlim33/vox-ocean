@@ -1,5 +1,6 @@
 #pragma once
 #include "voxel/VoxelWorld.h"
+#include "entity/Wander.h"
 #include <cstdint>
 #include <functional>
 #include <vector>

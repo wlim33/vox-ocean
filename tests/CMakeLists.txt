@@ -66,5 +66,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/entity/StampBudget.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    wander_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/entity/Wander.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
