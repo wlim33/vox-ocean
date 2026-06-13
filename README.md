@@ -19,6 +19,9 @@ C++20 / Objective-C++ engine with direct Swift↔C++ interop.
   splash injection (`ripple.rain_rate`), absorbing diorama borders
 - Autonomous voxel boat: hull stamped into the grid, buoyancy from the live
   surface heights, deterministic wandering course, stern wake in the ripple layer
+- Living ecosystem: a seeded kelp bed rooted across the floor that sways with
+  the live water field (and the boat's wake), and fish in deterministic
+  wandering schools — all stamped through one multi-material cell pass
 - Finite diorama with volumetric Beer–Lambert attenuation along the in-water path, Jacobian foam on crest voxels
 - Preetham sky baked to a cubemap; ACES tonemap
 
