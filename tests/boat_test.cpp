@@ -79,3 +79,29 @@ TEST(Boat, CellsCoverTheHullFootprint) {
     // Determinism.
     EXPECT_EQ(cells, vox::boat_cells(s, w));
 }
+
+TEST(Boat, WakeSheddingScalesWithDistanceNotTime) {
+    // Root-cause regression: the boat must NOT shed a wake impulse every
+    // frame. A near-stationary boat deposited a negative splash each frame
+    // into the same ripple cells, which integrated into a self-reinforcing
+    // hole the buoyancy then sank into. Wake energy scales with DISTANCE
+    // traveled: ~one impulse per cell, none when dead in the water.
+    glm::vec2 p;
+
+    vox::Boat still;
+    int still_count = 0;
+    for (int i = 0; i < 600; ++i) {                 // 10s, speed 0
+        still.update(1.0f / 60.0f, i / 60.0f, flat2, 0.0f, 48.0f, 0.5f);
+        if (still.shed_wake(0.5f, p)) still_count++;
+    }
+    EXPECT_EQ(still_count, 0);                       // no travel -> no wake
+
+    vox::Boat moving;
+    int move_count = 0;
+    for (int i = 0; i < 600; ++i) {                 // 10s at 1.5 m/s = 15m
+        moving.update(1.0f / 60.0f, i / 60.0f, flat2, 1.5f, 48.0f, 0.5f);
+        if (moving.shed_wake(0.5f, p)) move_count++;
+    }
+    EXPECT_GE(move_count, 25);                       // ~15m / 0.5m cell ~= 30
+    EXPECT_LE(move_count, 35);
+}

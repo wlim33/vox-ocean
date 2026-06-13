@@ -152,10 +152,14 @@ void engine_render(Engine* e) {
         e->boat.update(dt, sim_time,
             [&](float x, float z) { return e->voxels.water_height_at(x, z, cfg, e->frame_index); },
             cfg.entity.boat_speed_mps, half, cfg.voxel.voxel_size_m);
-        glm::vec2 st = e->boat.stern_world(cfg.voxel.voxel_size_m);
-        wake.push_back({ (st.x + half) / cfg.voxel.voxel_size_m,
-                         (st.y + half) / cfg.voxel.voxel_size_m,
-                         1.5f, -cfg.entity.wake_amp });
+        // Shed wake by distance traveled (≈ one impulse per cell), not every
+        // frame — a per-frame deposit let a slow boat dig a ripple hole its
+        // own buoyancy sank into.
+        glm::vec2 st;
+        if (e->boat.shed_wake(cfg.voxel.voxel_size_m, st))
+            wake.push_back({ (st.x + half) / cfg.voxel.voxel_size_m,
+                             (st.y + half) / cfg.voxel.voxel_size_m,
+                             1.5f, -cfg.entity.wake_amp });
         VoxelWorld w({cfg.voxel.grid_extent, cfg.voxel.height_cells,
                       cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
                       cfg.voxel.base_depth_m});

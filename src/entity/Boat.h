@@ -27,9 +27,15 @@ public:
                 float speed_mps, float patch_half_m, float voxel_size_m);
     const BoatState& state() const { return state_; }
     glm::vec2 stern_world(float voxel_size_m) const;
+    // Emit at most one stern wake impulse per ~voxel_size of travel, setting
+    // out_world to the stern point. A wake sheds energy with DISTANCE, not
+    // time: depositing every frame let a slow boat dig a self-reinforcing
+    // ripple hole its own buoyancy then sank into. Dead in the water -> none.
+    bool shed_wake(float voxel_size_m, glm::vec2& out_world);
 private:
     BoatState state_;
     float heave_smooth_ = 0.0f;
+    float wake_dist_ = 0.0f;       // unspent travel since the last wake impulse
     bool  primed_ = false;
 };
 

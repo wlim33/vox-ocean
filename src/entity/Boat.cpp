@@ -39,7 +39,9 @@ void Boat::update(float dt, float t, const HeightFn& water_height,
     }
     state_.yaw += yaw_rate * dt;
     glm::vec2 fwd { std::cos(state_.yaw), std::sin(state_.yaw) };
-    state_.pos += fwd * (speed_mps * dt);
+    float travel = speed_mps * dt;
+    state_.pos += fwd * travel;
+    wake_dist_ += std::abs(travel);
 
     // Heave: average water height under bow/stern/port/starboard, smoothed;
     // the hull base floats DRAFT below the surface.
@@ -54,6 +56,13 @@ void Boat::update(float dt, float t, const HeightFn& water_height,
     if (!primed_) { heave_smooth_ = target; primed_ = true; }
     heave_smooth_ += (target - heave_smooth_) * std::min(dt * 4.0f, 1.0f);
     state_.y = heave_smooth_ - DRAFT;
+}
+
+bool Boat::shed_wake(float voxel_size_m, glm::vec2& out_world) {
+    if (wake_dist_ < voxel_size_m) return false;
+    wake_dist_ -= voxel_size_m;
+    out_world = stern_world(voxel_size_m);
+    return true;
 }
 
 glm::vec2 Boat::stern_world(float voxel_size_m) const {
