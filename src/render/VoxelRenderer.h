@@ -2,6 +2,7 @@
 #include "gpu/Buffer.h"
 #include "gpu/Texture.h"
 #include "shader_types.h"
+#include "voxel/DenseVoxelField.h"
 #include <cstdint>
 namespace vox {
 struct MetalContext;
@@ -59,27 +60,21 @@ public:
     // semaphore, exactly as in v1 (see git history for the full contract).
     static constexpr int RING = 3;
 private:
-    Texture terrain_grid_{}, world_grid_{}, surface_tex_{}, march_target_{};
-    // staged terrain lives until the next rebuild; the blit (encode_terrain_upload_if_dirty) may run a frame later than generation
-    Buffer  terrain_staging_{};
+    DenseVoxelField field_;          // owns grid storage + fill/stamp/readback producers
+    Texture march_target_{};
     Buffer  ripple_zero_staging_{};   // zeroed float buffer blitted into all three ripple_ textures after rebuild
-    Buffer  fill_uniforms_[RING]{}, march_uniforms_[RING]{};
+    Buffer  march_uniforms_[RING]{};
     Texture ripple_[3]{};            // wave-equation ping-pong ring (prev/cur/next)
     int     ripple_phase_ = 0;
     Buffer  ripple_uniforms_[RING]{}, splash_buf_[RING]{};
     float   rain_accum_ = 0.0f;
     void*   pso_ripple_ = nullptr;
-    Buffer  stamp_uniforms_[RING]{}, stamp_cells_[RING]{};
-    Buffer  stamp_mats_[RING]{};
-    int     built_stamp_cap_ = 0;
-    Buffer  surface_readback_[RING]{};
-    void*   pso_stamp_ = nullptr;
+    // Ripple ring rebuild tracking — mirrors the field's storage rebuild so the
+    // ripple sim resets (zero + phase 0) on the same extent/hc/seed changes.
+    int     ripple_built_extent_ = 0, ripple_built_hc_ = 0, ripple_built_seed_ = 0;
     int     ripple_front_() const { return (ripple_phase_ + 1) % 3; }   // freshly written field
-    int     built_extent_ = 0, built_height_cells_ = 0, built_seed_ = 0;
     int     target_w_ = 0, target_h_ = 0;
-    bool    terrain_dirty_ = false;
     bool    ripple_dirty_  = false;
-    void*   pso_fill_ = nullptr;
     void*   pso_march_ = nullptr;
     void*   pso_composite_ = nullptr;
     void*   dss_off_ = nullptr;   // depth Always, write OFF (drawable pass has a depth buffer)
