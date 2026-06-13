@@ -3,6 +3,7 @@
 #include "gpu/Texture.h"
 #include "shader_types.h"
 #include "voxel/DenseVoxelField.h"
+#include "voxel/RippleSim.h"
 #include <cstdint>
 namespace vox {
 struct MetalContext;
@@ -61,20 +62,10 @@ public:
     static constexpr int RING = 3;
 private:
     DenseVoxelField field_;          // owns grid storage + fill/stamp/readback producers
+    RippleSim       ripplesim_;      // damped wave-equation ping-pong, feeds encode_world_fill
     Texture march_target_{};
-    Buffer  ripple_zero_staging_{};   // zeroed float buffer blitted into all three ripple_ textures after rebuild
     Buffer  march_uniforms_[RING]{};
-    Texture ripple_[3]{};            // wave-equation ping-pong ring (prev/cur/next)
-    int     ripple_phase_ = 0;
-    Buffer  ripple_uniforms_[RING]{}, splash_buf_[RING]{};
-    float   rain_accum_ = 0.0f;
-    void*   pso_ripple_ = nullptr;
-    // Ripple ring rebuild tracking — mirrors the field's storage rebuild so the
-    // ripple sim resets (zero + phase 0) on the same extent/hc/seed changes.
-    int     ripple_built_extent_ = 0, ripple_built_hc_ = 0, ripple_built_seed_ = 0;
-    int     ripple_front_() const { return (ripple_phase_ + 1) % 3; }   // freshly written field
     int     target_w_ = 0, target_h_ = 0;
-    bool    ripple_dirty_  = false;
     void*   pso_march_ = nullptr;
     void*   pso_composite_ = nullptr;
     void*   dss_off_ = nullptr;   // depth Always, write OFF (drawable pass has a depth buffer)
