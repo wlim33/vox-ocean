@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <random>
 #include <vector>
@@ -356,6 +357,13 @@ void VoxelRenderer::encode_stamp(void* compute_encoder, const Config& cfg,
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
     int slot = frame_index % RING;
     int n = std::min(count, built_stamp_cap_);
+    if (count > built_stamp_cap_) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            fprintf(stderr, "[vox] stamp truncated: %d cells exceed capacity %d\n", count, built_stamp_cap_);
+        }
+    }
 
     StampUniforms u{};
     u.grid_extent  = cfg.voxel.grid_extent;

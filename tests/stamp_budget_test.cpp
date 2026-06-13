@@ -20,7 +20,7 @@ TEST(StampBudget, MaxStampCellsBoundsAllEntities) {
     c.fish.enabled = true; c.fish.school_count = 4; c.fish.per_school = 25;
     int expect = vox::kelp_stalk_count(c) * vox::kelp_cells_per_stalk(c)
                + 4 * 25 * vox::FISH_CELLS
-               + vox::BOAT_MAX_CELLS;
+               + vox::boat_max_cells(c);
     EXPECT_EQ(vox::max_stamp_cells(c), expect);
     EXPECT_GT(vox::max_stamp_cells(c), 0);
 }

@@ -17,15 +17,15 @@ struct StampList {
     int  count() const { return (int)idx.size(); }
 };
 
-// Per-fish silhouette voxels, and the boat's worst-case cell count (its hull
-// AABB; matches M4's old MAX_STAMP_CELLS bound).
-inline constexpr int FISH_CELLS     = 5;
-inline constexpr int BOAT_MAX_CELLS = 256;
+// Per-fish silhouette voxels.
+inline constexpr int FISH_CELLS = 5;
 
 // Exact stalk count: density directly sets the number, so the stamp capacity
 // is an exact (not worst-case) bound. Mirrored by KelpBed::rebuild.
 int kelp_stalk_count(const Config&);
 int kelp_cells_per_stalk(const Config&);   // ceil(max_height_m / height_step_m)
+
+int boat_max_cells(const Config&);   // BOAT_LEN*BOAT_HGT*BOAT_BEAM * vratio — exact upper bound
 
 // Upper bound on cells stamped in one frame: kelp bed + all fish + boat.
 int max_stamp_cells(const Config&);

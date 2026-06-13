@@ -33,7 +33,7 @@ void KelpBed::rebuild(const Config& cfg, const std::vector<FloorColumn>& floor) 
         int iz = std::min(extent - 1, (int)(h01((uint32_t)k, 1u, seed) * extent));
         int base = floor[(size_t)iz * extent + ix].height;   // first cell above terrain
         float hf = 0.4f + 0.6f * h01((uint32_t)k, 2u, seed);
-        int layers = std::max(2, (int)(hf * max_layers));
+        int layers = std::min(std::max(2, (int)(hf * max_layers)), max_layers);
         layers = std::min(layers, cfg.voxel.height_cells - base);
         if (layers < 1) continue;                            // no head-room (tall floor)
         float phase = h01((uint32_t)k, 3u, seed) * 6.2831853f;
