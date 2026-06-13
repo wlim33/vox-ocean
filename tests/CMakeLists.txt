@@ -61,5 +61,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/entity/Boat.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    stamp_budget_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/entity/StampBudget.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)

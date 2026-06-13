@@ -140,6 +140,7 @@ void engine_render(Engine* e) {
     CGSize dsz = view.drawableSize;
     e->voxels.ensure_march_target(e->ctx, (int)dsz.width, (int)dsz.height,
                                   e->app->config());
+    e->voxels.ensure_stamp_capacity(e->ctx, e->app->config());
     e->voxels.encode_terrain_upload_if_dirty((__bridge void*)cb);
     float sim_time = (float)e->app->clock().total_seconds();
 
@@ -172,9 +173,10 @@ void engine_render(Engine* e) {
                             (float)e->app->clock().delta_seconds(),
                             wake.data(), (int)wake.size());
     e->voxels.encode_world_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->frame_index);
+    std::vector<uint8_t> boat_mats(boat_cells_scratch.size(), (uint8_t)VoxMat::Boat);
     e->voxels.encode_stamp((__bridge void*)ce, e->app->config(),
-                           boat_cells_scratch.data(), (int)boat_cells_scratch.size(),
-                           e->frame_index);
+                           boat_cells_scratch.data(), boat_mats.data(),
+                           (int)boat_cells_scratch.size(), e->frame_index);
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];

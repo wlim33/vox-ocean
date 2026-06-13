@@ -30,9 +30,14 @@ public:
     // rain; both go through the same splash buffer.
     void encode_ripple(void* compute_encoder, const Config& cfg, float dt,
                        const RippleSplash* extra = nullptr, int extra_count = 0);
-    // Stamp entity cells into the world grid. Call AFTER encode_world_fill.
+    // Grow the stamp ring buffers to hold max_stamp_cells(cfg). Grow-only;
+    // call each frame before encode_stamp (mirrors ensure_march_target).
+    void ensure_stamp_capacity(const MetalContext& ctx, const Config& cfg);
+    // Stamp entity cells+materials into the world grid. Call AFTER
+    // encode_world_fill so entities overwrite water.
     void encode_stamp(void* compute_encoder, const Config& cfg,
-                      const uint32_t* cells, int count, int frame_index);
+                      const uint32_t* cells, const uint8_t* mats, int count,
+                      int frame_index);
     // Copies surface_tex into a CPU-readable ring. Call in the blit phase.
     void encode_surface_readback(void* blit_encoder, const Config& cfg,
                                  int frame_index);
@@ -65,6 +70,8 @@ private:
     float   rain_accum_ = 0.0f;
     void*   pso_ripple_ = nullptr;
     Buffer  stamp_uniforms_[RING]{}, stamp_cells_[RING]{};
+    Buffer  stamp_mats_[RING]{};
+    int     built_stamp_cap_ = 0;
     Buffer  surface_readback_[RING]{};
     void*   pso_stamp_ = nullptr;
     int     ripple_front_() const { return (ripple_phase_ + 1) % 3; }   // freshly written field

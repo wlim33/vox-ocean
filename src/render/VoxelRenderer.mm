@@ -9,6 +9,7 @@
 #import "voxel/FloorGen.h"
 #import "voxel/Ripple.h"
 #import "shader_types.h"
+#include "entity/StampBudget.h"
 #import <Metal/Metal.h>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/mat4x4.hpp>
@@ -56,7 +57,6 @@ void VoxelRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
         ripple_uniforms_[i] = make_buffer(ctx, sizeof(RippleUniforms), true);
         splash_buf_[i]      = make_buffer(ctx, sizeof(RippleSplash) * MAX_SPLASHES, true);
         stamp_uniforms_[i]  = make_buffer(ctx, sizeof(StampUniforms), true);
-        stamp_cells_[i]     = make_buffer(ctx, sizeof(uint32_t) * MAX_STAMP_CELLS, true);
     }
 }
 
@@ -337,24 +337,38 @@ void VoxelRenderer::encode_composite(void* render_encoder) {
     [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
 }
 
+void VoxelRenderer::ensure_stamp_capacity(const MetalContext& ctx, const Config& cfg) {
+    int cap = std::max(1, max_stamp_cells(cfg));
+    if (cap <= built_stamp_cap_ && stamp_cells_[0].handle) return;   // grow-only
+    for (int i = 0; i < RING; ++i) {
+        destroy_buffer(stamp_cells_[i]);
+        destroy_buffer(stamp_mats_[i]);
+        stamp_cells_[i] = make_buffer(ctx, sizeof(uint32_t) * (size_t)cap, true);
+        stamp_mats_[i]  = make_buffer(ctx, sizeof(uint8_t)  * (size_t)cap, true);
+    }
+    built_stamp_cap_ = cap;
+}
+
 void VoxelRenderer::encode_stamp(void* compute_encoder, const Config& cfg,
-                                 const uint32_t* cells, int count, int frame_index) {
-    if (!world_grid_.handle || count <= 0) return;
+                                 const uint32_t* cells, const uint8_t* mats,
+                                 int count, int frame_index) {
+    if (!world_grid_.handle || count <= 0 || built_stamp_cap_ <= 0) return;
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
     int slot = frame_index % RING;
-    int n = std::min(count, MAX_STAMP_CELLS);
+    int n = std::min(count, built_stamp_cap_);
 
     StampUniforms u{};
     u.grid_extent  = cfg.voxel.grid_extent;
     u.height_cells = cfg.voxel.height_cells;
     u.count        = n;
-    u.material     = MAT_BOAT;
     std::memcpy(stamp_uniforms_[slot].cpu_ptr, &u, sizeof(u));
     std::memcpy(stamp_cells_[slot].cpu_ptr, cells, (size_t)n * sizeof(uint32_t));
+    std::memcpy(stamp_mats_[slot].cpu_ptr,  mats,  (size_t)n * sizeof(uint8_t));
 
     [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_stamp_];
     [ce setBuffer:(__bridge id<MTLBuffer>)stamp_uniforms_[slot].handle offset:0 atIndex:0];
     [ce setBuffer:(__bridge id<MTLBuffer>)stamp_cells_[slot].handle offset:0 atIndex:1];
+    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_mats_[slot].handle offset:0 atIndex:2];
     [ce setTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:0];
     [ce dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];

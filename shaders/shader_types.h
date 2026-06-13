@@ -78,13 +78,10 @@ struct RippleSplash {   // injected into the ripple field this frame
     float amp;           // meters; negative = depression (raindrop)
 };
 
-#define MAX_STAMP_CELLS 256
-
 struct StampUniforms {
     int grid_extent;
     int height_cells;
     int count;
-    int material;
 };
 
 struct MarchUniforms {
