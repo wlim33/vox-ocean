@@ -52,6 +52,8 @@ void draw_debug_panel(App& app) {
         ImGui::InputInt("floor seed",         &v.floor_seed);
     }
     if (ImGui::CollapsingHeader("March", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("backend: %s (restart to change)", c.render.backend.c_str());
+        ImGui::Text("grid cells: %d", c.voxel.grid_extent * c.voxel.grid_extent * c.voxel.height_cells);
         ImGui::SliderInt("max steps",      &c.march.max_steps,    32, 4096);
         ImGui::SliderFloat("render scale", &c.march.render_scale, 0.25f, 1.0f);
     }
