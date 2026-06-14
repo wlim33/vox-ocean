@@ -19,11 +19,6 @@ public:
     void* world_grid_handle() const override { return world_grid_.handle; }
     void* surface_handle()    const override { return surface_tex_.handle; }
     float height_at(float x, float z, const Config&, int frame) const override;
-    // Raw-pointer stamp body shared by the StampList interface above and
-    // VoxelRenderer's pointer-forwarding overload (kept until Engine moves to
-    // StampList directly).
-    void encode_stamp_raw(void* compute_encoder, const Config&, const uint32_t* cells,
-                          const uint8_t* mats, int count, int frame);
 private:
     Texture terrain_grid_{}, world_grid_{}, surface_tex_{};
     Buffer  terrain_staging_{};

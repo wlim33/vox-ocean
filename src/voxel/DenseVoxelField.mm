@@ -160,11 +160,9 @@ void DenseVoxelField::encode_fill(void* compute_encoder, const Config& cfg,
     [ce dispatchThreadgroups:grid threadsPerThreadgroup:tg];
 }
 
-// Real stamp body, shared by the StampList interface and VoxelRenderer's raw
-// pointer-forwarding overload (kept until Engine moves to StampList directly).
-void DenseVoxelField::encode_stamp_raw(void* compute_encoder, const Config& cfg,
-                                       const uint32_t* cells, const uint8_t* mats,
-                                       int count, int frame_index) {
+void DenseVoxelField::encode_stamp(void* compute_encoder, const Config& cfg,
+                                   const StampList& stamp, int frame_index) {
+    int count = stamp.count();
     if (!world_grid_.handle || count <= 0 || built_stamp_cap_ <= 0) return;
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
     int slot = frame_index % RING;
@@ -182,8 +180,8 @@ void DenseVoxelField::encode_stamp_raw(void* compute_encoder, const Config& cfg,
     u.height_cells = cfg.voxel.height_cells;
     u.count        = n;
     std::memcpy(stamp_uniforms_[slot].cpu_ptr, &u, sizeof(u));
-    std::memcpy(stamp_cells_[slot].cpu_ptr, cells, (size_t)n * sizeof(uint32_t));
-    std::memcpy(stamp_mats_[slot].cpu_ptr,  mats,  (size_t)n * sizeof(uint8_t));
+    std::memcpy(stamp_cells_[slot].cpu_ptr, stamp.idx.data(), (size_t)n * sizeof(uint32_t));
+    std::memcpy(stamp_mats_[slot].cpu_ptr,  stamp.mat.data(), (size_t)n * sizeof(uint8_t));
 
     [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_stamp_];
     [ce setBuffer:(__bridge id<MTLBuffer>)stamp_uniforms_[slot].handle offset:0 atIndex:0];
@@ -192,14 +190,6 @@ void DenseVoxelField::encode_stamp_raw(void* compute_encoder, const Config& cfg,
     [ce setTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:0];
     [ce dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
         threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
-}
-
-void DenseVoxelField::encode_stamp(void* compute_encoder, const Config& cfg,
-                                   const StampList& stamp, int frame_index) {
-    const uint32_t* cells = stamp.idx.data();
-    const uint8_t*  mats  = stamp.mat.data();
-    int count = stamp.count();
-    encode_stamp_raw(compute_encoder, cfg, cells, mats, count, frame_index);
 }
 
 void DenseVoxelField::encode_readback(void* blit_encoder, const Config& cfg,

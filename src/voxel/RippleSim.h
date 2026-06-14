@@ -6,9 +6,8 @@ namespace vox {
 struct MetalContext; struct PipelineCache; struct Config;
 
 // Damped 2D wave-equation surface ripple (ping-pong), an input to the field's
-// fill pass — extracted from VoxelRenderer::encode_ripple. Resets (re-zeros)
-// on the same extent/height_cells/seed change as the grid rebuild, to preserve
-// original behavior exactly.
+// fill pass. Resets (re-zeros) on the same extent/height_cells/seed change as
+// the grid rebuild, to preserve original behavior exactly.
 class RippleSim {
 public:
     static constexpr int RING = 3;
