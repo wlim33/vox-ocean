@@ -120,6 +120,11 @@ void load_kelp(const toml::table& t, KelpConfig& k, LoadResult& r) {
         if (val < 0.0f || val > 0.3f) r.warnings.push_back("kelp.density out of [0,0.3], clamped");
         k.density = clamp(val, 0.0f, 0.3f);
     }
+    if (auto v = t["max_stalks"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 0 || val > 1000000) r.warnings.push_back("kelp.max_stalks out of [0,1000000], clamped");
+        k.max_stalks = clamp(val, 0, 1000000);
+    }
     if (auto v = t["max_height_m"].value<double>()) {
         float val = (float)*v;
         if (val < 1.0f || val > 30.0f) r.warnings.push_back("kelp.max_height_m out of [1,30], clamped");
@@ -291,6 +296,11 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 if (f < 0.0f || f > 0.3f) in.warnings.push_back("kelp.density out of [0,0.3], clamped");
                 in.config.kelp.density = clamp(f, 0.0f, 0.3f);
             }
+            else if (key == "kelp.max_stalks") {
+                int n = std::stoi(val);
+                if (n < 0 || n > 1000000) in.warnings.push_back("kelp.max_stalks out of [0,1000000], clamped");
+                in.config.kelp.max_stalks = clamp(n, 0, 1000000);
+            }
             else if (key == "kelp.max_height_m") {
                 float f = std::stof(val);
                 if (f < 1.0f || f > 30.0f) in.warnings.push_back("kelp.max_height_m out of [1,30], clamped");
@@ -373,6 +383,7 @@ uint64_t config_hash(const Config& c) {
     // Kelp
     h = fnv1a64(&c.kelp.enabled,       sizeof(c.kelp.enabled),       h);
     h = fnv1a64(&c.kelp.density,       sizeof(c.kelp.density),       h);
+    h = fnv1a64(&c.kelp.max_stalks,    sizeof(c.kelp.max_stalks),    h);
     h = fnv1a64(&c.kelp.max_height_m,  sizeof(c.kelp.max_height_m),  h);
     h = fnv1a64(&c.kelp.sway_strength, sizeof(c.kelp.sway_strength), h);
     h = fnv1a64(&c.kelp.sway_ambient,  sizeof(c.kelp.sway_ambient),  h);

@@ -211,6 +211,7 @@ TEST(Config, KelpKnobsParseClampOverrideHash) {
     auto r = vox::load_config_from_string(R"([kelp]
 enabled = false
 density = 0.05
+max_stalks = 5000
 max_height_m = 8.0
 sway_strength = 1.0
 sway_ambient = 0.3
@@ -218,18 +219,22 @@ seed = 7
 )");
     EXPECT_FALSE(r.config.kelp.enabled);
     EXPECT_FLOAT_EQ(r.config.kelp.density, 0.05f);
+    EXPECT_EQ(r.config.kelp.max_stalks, 5000);
     EXPECT_FLOAT_EQ(r.config.kelp.max_height_m, 8.0f);
 
     auto o = vox::apply_overrides(vox::load_config_from_string(""),
-        {"kelp.density=9", "kelp.enabled=false"});
+        {"kelp.density=9", "kelp.enabled=false", "kelp.max_stalks=4000"});
     EXPECT_FLOAT_EQ(o.config.kelp.density, 0.3f);   // clamped [0,0.3]
     EXPECT_FALSE(o.config.kelp.enabled);
-    EXPECT_EQ(o.warnings.size(), 1u);
+    EXPECT_EQ(o.config.kelp.max_stalks, 4000);
+    EXPECT_EQ(o.warnings.size(), 1u);               // only density=9 warns; max_stalks in range
 
     vox::Config a, b;
     b.kelp.density = 0.1f;
     EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
     b = a; b.kelp.seed = 5;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+    b = a; b.kelp.max_stalks = 100;
     EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
 }
 

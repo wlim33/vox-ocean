@@ -77,6 +77,8 @@ struct EntityConfig {
 struct KelpConfig {
     bool  enabled       = true;
     float density       = 0.02f;   // stalks as a fraction of columns, clamp [0,0.3]
+    int   max_stalks    = 8192;    // hard cap on stalk count (0 = unlimited); bounds the
+                                   // density*extent^2 per-frame stamp cost at large grids
     float max_height_m  = 6.0f;    // tallest stalk, clamp [1,30]
     float sway_strength = 0.6f;    // water-gradient coupling gain, clamp [0,4]
     float sway_ambient  = 0.15f;   // idle sway so becalmed kelp still breathes, clamp [0,2]

@@ -7,7 +7,9 @@ namespace vox {
 int kelp_stalk_count(const Config& c) {
     if (!c.kelp.enabled) return 0;
     long e = c.voxel.grid_extent;
-    return (int)std::round(c.kelp.density * (double)(e * e));
+    long n = std::lround(c.kelp.density * (double)(e * e));
+    if (c.kelp.max_stalks > 0 && n > c.kelp.max_stalks) n = c.kelp.max_stalks;   // bound the per-frame stamp cost
+    return (int)n;
 }
 int kelp_cells_per_stalk(const Config& c) {
     return std::max(1, (int)std::ceil(c.kelp.max_height_m / c.voxel.height_step_m));

@@ -12,6 +12,22 @@ TEST(StampBudget, KelpStalkCountFollowsDensity) {
     EXPECT_EQ(vox::kelp_stalk_count(c), 0);
 }
 
+TEST(StampBudget, KelpStalkCountIsCappedAtScale) {
+    vox::Config c;
+    c.kelp.enabled = true;
+    c.kelp.density = 0.02f;
+    c.kelp.max_stalks = 8192;            // default cap
+    // Below the cap: still scales as density * extent^2.
+    c.voxel.grid_extent = 192;           // round(0.02 * 36864) = 737
+    EXPECT_EQ(vox::kelp_stalk_count(c), 737);
+    // Past the cap: bounded — no more quadratic per-frame stamping blowup.
+    c.voxel.grid_extent = 1024;          // round(0.02 * 1048576) = 20972 -> capped
+    EXPECT_EQ(vox::kelp_stalk_count(c), 8192);
+    // max_stalks = 0 is the unlimited escape hatch.
+    c.kelp.max_stalks = 0;
+    EXPECT_EQ(vox::kelp_stalk_count(c), 20972);
+}
+
 TEST(StampBudget, MaxStampCellsBoundsAllEntities) {
     vox::Config c;
     c.voxel.grid_extent = 100;

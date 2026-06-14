@@ -54,6 +54,7 @@ wake_amp       = 0.25
 [kelp]
 enabled       = true
 density       = 0.02
+max_stalks    = 8192
 max_height_m  = 6.0
 sway_strength = 0.6
 sway_ambient  = 0.15

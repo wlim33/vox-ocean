@@ -54,6 +54,7 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " boat_speed=" << cfg.entity.boat_speed_mps
          << " kelp_enabled=" << cfg.kelp.enabled
          << " kelp_density=" << cfg.kelp.density
+         << " kelp_max_stalks=" << cfg.kelp.max_stalks
          << " fish_schools=" << cfg.fish.school_count
          << " fish_per_school=" << cfg.fish.per_school
          << " backend=" << cfg.render.backend
