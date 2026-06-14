@@ -56,6 +56,7 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " kelp_density=" << cfg.kelp.density
          << " fish_schools=" << cfg.fish.school_count
          << " fish_per_school=" << cfg.fish.per_school
+         << " backend=" << cfg.render.backend
          << " fft_size=" << cfg.cascades[0].resolution << '\n';
     out_ << "frame_idx,cpu_ms,gpu_total_ms,drawable_wait_ms,config_hash\n";
 }
