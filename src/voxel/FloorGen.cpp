@@ -35,7 +35,7 @@ constexpr float kPeakAboveM  = 4.0f;    // land peak above still water (m)
 std::vector<FloorColumn> generate_floor(const FloorParams& p) {
     std::vector<FloorColumn> out((size_t)p.extent * p.extent);
     // Offshore dunes occupy at most the bottom third (water headroom over open
-    // ocean). Land near the +X+Z corner rises above this toward peak_cells.
+    // ocean). Land near the +X+Z corner rises above this toward `peak`.
     int max_h = std::max(2, p.height_cells / 3);
     int sea   = sea_level_cells(p.base_depth_m, p.height_step_m);
     int peak  = sea + (int)std::lround(kPeakAboveM / p.height_step_m);
@@ -49,11 +49,12 @@ std::vector<FloorColumn> generate_floor(const FloorParams& p) {
             int h_dune = 1 + (int)(n * (float)(max_h - 1));
             // Blend ocean floor -> land peak along the diagonal, with a
             // noise-jittered coastline for an irregular, natural waterline.
-            float u       = 0.5f * (float)(ix + iz) / (float)(p.extent - 1);
+            float u       = 0.5f * (float)(ix + iz) / (float)std::max(1, p.extent - 1);
             float u_shore = u + kShoreJitter * (n - 0.5f);
             float t       = smooth01(u_mid - kBeachWidth, u_mid + kBeachWidth, u_shore);
             int h = (int)std::lround((float)h_dune + ((float)peak - (float)h_dune) * t);
-            h = std::clamp(h, 1, p.height_cells - 1);
+            // FloorColumn::height is uint8_t; cap at 255 as well as the grid top.
+            h = std::clamp(h, 1, std::min(p.height_cells - 1, 255));
             // Rock outcrops break through on a sparser independent channel.
             float rock = value_noise(fx * 1.5f, fz * 1.5f, p.seed + 99);
             uint8_t mat = (uint8_t)(rock > 0.72f ? VoxMat::Rock : VoxMat::Sand);

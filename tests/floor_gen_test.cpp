@@ -43,11 +43,11 @@ TEST(FloorGen, ShorelineRisesInTheCorner) {
     auto p = params();
     auto f = vox::generate_floor(p);
     int sea = vox::sea_level_cells(p.base_depth_m, p.height_step_m);   // 40
-    auto at = [&](int ix, int iz) { return (int)f[(size_t)iz * 96 + ix].height; };
+    auto at = [&](int ix, int iz) { return (int)f[(size_t)iz * p.extent + ix].height; };
     // Open-water corner keeps the low ocean floor (water headroom preserved).
     EXPECT_LE(at(0, 0), p.height_cells / 3);
     // Land corner rises above sea level.
-    EXPECT_GT(at(95, 95), sea);
+    EXPECT_GT(at(p.extent - 1, p.extent - 1), sea);
 }
 
 TEST(FloorGen, WaterlineCrossesTheGrid) {
