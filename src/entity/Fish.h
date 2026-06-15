@@ -11,6 +11,7 @@ struct Config;
 struct Fish {
     glm::vec3 pos {0.0f, 0.0f, 0.0f};   // world (x, y, z)
     float yaw = 0.0f;
+    bool  visible = true;               // false where water over the floor is too shallow
 };
 
 // Several schools: each centroid wanders deterministically (shared Wander);

@@ -1,5 +1,6 @@
 #include "entity/Fish.h"
 #include "core/Config.h"
+#include "voxel/FloorGen.h"   // kMinDepthCells
 #include <algorithm>
 #include <cmath>
 namespace vox {
@@ -58,6 +59,8 @@ void FishSchools::update(const Config& cfg, float dt, float t,
         float bob = FISH_BOB_AMP * std::sin(t * FISH_BOB_FREQ + bob_phase_[i]);
         fish_[i].pos = { xz.x, std::clamp(band + bob, lo, hi), xz.y };
         fish_[i].yaw = c.yaw;
+        float depth = surface(xz.x, xz.y) - floor_fn(xz.x, xz.y);
+        fish_[i].visible = depth >= (float)kMinDepthCells * cfg.voxel.height_step_m;
     }
 }
 
@@ -66,6 +69,7 @@ void FishSchools::build_stamp(const Config& cfg, const VoxelWorld& w, StampList&
     const auto& p = w.params();
     float half = 0.5f * p.extent * p.voxel_size_m;
     for (const auto& f : fish_) {
+        if (!f.visible) continue;          // hidden over too-shallow water
         glm::vec2 fwd { std::cos(f.yaw), std::sin(f.yaw) };
         int iy0 = (int)std::floor((f.pos.y + p.base_depth_m) / p.height_step_m);
         for (int s = 0; s < FISH_BODY_LEN; ++s) {

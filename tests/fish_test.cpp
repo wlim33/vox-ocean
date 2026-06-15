@@ -13,8 +13,9 @@ static vox::Config fish_cfg() {
     c.fish.speed_mps = 2.0f; c.fish.depth_frac = 0.5f; c.fish.spread_m = 3.0f; c.fish.seed = 202;
     return c;
 }
-static float surf0(float, float)   { return 0.0f; }    // surface at y=0
-static float floorm6(float, float) { return -6.0f; }   // floor top at y=-6
+static float surf0(float, float)      { return 0.0f; }    // surface at y=0
+static float floorm6(float, float)    { return -6.0f; }   // floor top at y=-6
+static float floor_shallow(float, float) { return -0.1f; }   // floor top just below surface
 
 TEST(Fish, RebuildIsDeterministicAndCounts) {
     auto c = fish_cfg();
@@ -77,4 +78,14 @@ TEST(Fish, StampMarksFishVoxels) {
     EXPECT_EQ(out.count(), (int)sch.fish().size() * vox::FISH_CELLS);
     for (int i = 0; i < out.count(); ++i)
         EXPECT_EQ((int)out.mat[i], (int)vox::VoxMat::Fish);
+}
+
+TEST(Fish, SkipsStampOverShallows) {
+    auto c = fish_cfg();   // surface 0; floor -0.1 -> depth 0.1m < kMinDepthCells*step (0.75m)
+    vox::FishSchools sch; sch.rebuild(c);
+    sch.update(c, 1.0f/60.0f, 0.0f, surf0, floor_shallow);
+    vox::VoxelWorld w({c.voxel.grid_extent, c.voxel.height_cells, c.voxel.voxel_size_m,
+                       c.voxel.height_step_m, c.voxel.base_depth_m});
+    vox::StampList out; sch.build_stamp(c, w, out);
+    EXPECT_EQ(out.count(), 0);              // nothing rendered over too-shallow water
 }
