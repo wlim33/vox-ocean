@@ -95,5 +95,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/io/PngWriter.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    axis_view_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/AxisCamera.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
