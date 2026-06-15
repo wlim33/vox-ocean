@@ -3,8 +3,13 @@
 #include <gtest/gtest.h>
 #include <set>
 
+// 5-field FloorParams: extent, height_cells, seed, base_depth_m, height_step_m.
+static vox::FloorParams params(uint32_t seed = 7u) {
+    return vox::FloorParams{96, 64, seed, 10.0f, 0.25f};
+}
+
 TEST(FloorGen, DeterministicPerSeed) {
-    vox::FloorParams p{96, 64, 7u};
+    auto p = params();
     auto a = vox::generate_floor(p);
     auto b = vox::generate_floor(p);
     ASSERT_EQ(a.size(), 96u * 96u);
@@ -15,23 +20,47 @@ TEST(FloorGen, DeterministicPerSeed) {
 }
 
 TEST(FloorGen, SeedsDiffer) {
-    auto a = vox::generate_floor({96, 64, 7u});
-    auto b = vox::generate_floor({96, 64, 8u});
+    auto a = vox::generate_floor(params(7u));
+    auto b = vox::generate_floor(params(8u));
     int diff = 0;
     for (size_t i = 0; i < a.size(); ++i) diff += a[i].height != b[i].height;
     EXPECT_GT(diff, (int)a.size() / 4);
 }
 
-TEST(FloorGen, HeightsBoundedAndVaried) {
-    vox::FloorParams p{96, 64, 7u};
+TEST(FloorGen, HeightsVariedAndBounded) {
+    auto p = params();
     auto f = vox::generate_floor(p);
     std::set<int> heights;
     for (auto& c : f) {
         EXPECT_GE((int)c.height, 1);
-        EXPECT_LE((int)c.height, 64 / 3);   // hills capped to the bottom third
+        EXPECT_LE((int)c.height, p.height_cells - 1);
         heights.insert(c.height);
     }
-    EXPECT_GT(heights.size(), 4u);          // actually hilly, not a flat slab
+    EXPECT_GT(heights.size(), 4u);          // actually varied, not a flat slab
+}
+
+TEST(FloorGen, ShorelineRisesInTheCorner) {
+    auto p = params();
+    auto f = vox::generate_floor(p);
+    int sea = vox::sea_level_cells(p.base_depth_m, p.height_step_m);   // 40
+    auto at = [&](int ix, int iz) { return (int)f[(size_t)iz * 96 + ix].height; };
+    // Open-water corner keeps the low ocean floor (water headroom preserved).
+    EXPECT_LE(at(0, 0), p.height_cells / 3);
+    // Land corner rises above sea level.
+    EXPECT_GT(at(95, 95), sea);
+}
+
+TEST(FloorGen, WaterlineCrossesTheGrid) {
+    auto p = params();
+    auto f = vox::generate_floor(p);
+    int sea = vox::sea_level_cells(p.base_depth_m, p.height_step_m);
+    int below = 0, above = 0;
+    for (auto& c : f) {
+        if ((int)c.height < sea)      below++;
+        else if ((int)c.height > sea) above++;
+    }
+    EXPECT_GT(below, (int)f.size() / 10);   // plenty of open water
+    EXPECT_GT(above, (int)f.size() / 20);   // a real landmass above water
 }
 
 TEST(FloorGen, ContainsSandAndRock) {
@@ -39,7 +68,7 @@ TEST(FloorGen, ContainsSandAndRock) {
     // batch grows rock outcrops (rock is sparse by design).
     bool saw_rock = false;
     for (uint32_t seed = 0; seed < 10; ++seed) {
-        auto f = vox::generate_floor({96, 64, seed});
+        auto f = vox::generate_floor(params(seed));
         int sand = 0, rock = 0;
         for (auto& c : f) {
             if (c.material == (uint8_t)vox::VoxMat::Sand) sand++;

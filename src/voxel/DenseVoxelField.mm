@@ -101,7 +101,9 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
 
     VoxelWorld world({ extent, hc, cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
                        cfg.voxel.base_depth_m });
-    std::vector<FloorColumn> floor = generate_floor({ extent, hc, (uint32_t)seed });
+    std::vector<FloorColumn> floor = generate_floor({ extent, hc, (uint32_t)seed,
+                                                      cfg.voxel.base_depth_m,
+                                                      cfg.voxel.height_step_m });
 
     size_t cells = (size_t)world.cells();
     terrain_staging_ = make_buffer(ctx, cells, true);

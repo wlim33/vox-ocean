@@ -10,7 +10,8 @@ void Ecosystem::rebuild_if_dirty(const Config& cfg) {
                     || cfg.voxel.floor_seed   != built_floor_seed_;
     if (floor_dirty) {
         floor_ = generate_floor({ cfg.voxel.grid_extent, cfg.voxel.height_cells,
-                                  (uint32_t)cfg.voxel.floor_seed });
+                                  (uint32_t)cfg.voxel.floor_seed,
+                                  cfg.voxel.base_depth_m, cfg.voxel.height_step_m });
         built_extent_       = cfg.voxel.grid_extent;
         built_height_cells_ = cfg.voxel.height_cells;
         built_floor_seed_   = cfg.voxel.floor_seed;
