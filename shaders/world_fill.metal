@@ -51,3 +51,16 @@ kernel void world_fill(
     // Ripple amplitude lowers fold_min so impacts read as foam in the marcher.
     surface.write(float4(top, fold_min - U.ripple_foam * abs(ripple_h), 0.0, 0.0), gid);
 }
+
+// Dev verify: count cells where the live grid and the full-rebuild scratch differ.
+kernel void grid_diff(
+    constant WorldFillUniforms& U          [[buffer(0)]],
+    device atomic_uint* mismatch           [[buffer(1)]],
+    texture3d<uint, access::read> a        [[texture(0)]],
+    texture3d<uint, access::read> b        [[texture(1)]],
+    uint3 gid [[thread_position_in_grid]])
+{
+    if ((int)gid.x >= U.grid_extent || (int)gid.y >= U.height_cells || (int)gid.z >= U.grid_extent) return;
+    if (a.read(gid).r != b.read(gid).r)
+        atomic_fetch_add_explicit(mismatch, 1u, memory_order_relaxed);
+}

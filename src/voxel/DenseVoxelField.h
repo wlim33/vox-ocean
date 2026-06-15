@@ -19,6 +19,9 @@ public:
     void* world_grid_handle() const override { return world_grid_.handle; }
     void* surface_handle()    const override { return surface_tex_.handle; }
     float height_at(float x, float z, const Config&, int frame) const override;
+    // Dev gate: full-rebuild into a scratch grid + diff vs the live grid; logs mismatches.
+    void encode_verify(void* compute_encoder, const Config&, Cascade* const* cascades,
+                       int cascade_count, void* ripple_front_tex, const StampList&, int frame);
 private:
     Texture terrain_grid_{}, world_grid_{}, surface_tex_{};
     Buffer  terrain_staging_{};
@@ -30,5 +33,8 @@ private:
     bool    terrain_dirty_ = false;
     void*   pso_fill_  = nullptr;
     void*   pso_stamp_ = nullptr;
+    Texture world_grid_verify_{};        // scratch full-rebuild grid (verify_fill only)
+    Buffer  diff_count_[RING]{};         // atomic mismatch counter readback ring
+    void*   pso_diff_  = nullptr;
 };
 }

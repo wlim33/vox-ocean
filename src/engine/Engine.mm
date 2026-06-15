@@ -182,6 +182,8 @@ void engine_render(Engine* e) {
                      wake.data(), (int)wake.size());
     e->field.encode_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->ripple.front_texture(), e->frame_index);
     e->field.encode_stamp((__bridge void*)ce, e->app->config(), e->stamp, e->frame_index);
+    e->field.encode_verify((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(),
+                           e->ripple.front_texture(), e->stamp, e->frame_index);
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
