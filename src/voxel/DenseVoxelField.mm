@@ -83,12 +83,10 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     surface_tex_  = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent,
                                     TexFormat::RG32F);
 
-    destroy_buffer(prev_water_);
     prev_water_ = make_buffer(ctx, (size_t)extent * extent * sizeof(int32_t), true);
     std::memset(prev_water_.cpu_ptr, 0xFF, prev_water_.size);   // every column = -1 (sentinel)
     prev_stamp_count_ = 0;
 
-    destroy_texture(world_grid_verify_);
     if (cfg.render.verify_fill)
         world_grid_verify_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
                                              TexFormat::R8Uint, /*storage_write=*/true);
@@ -296,6 +294,7 @@ void DenseVoxelField::encode_verify(void* compute_encoder, const Config& cfg,
 
     // (b) stamp current entities into the scratch grid (same deduplicated list as live stamp).
     int raw_cnt = std::min(stamp.count(), built_stamp_cap_);
+    // reuses the live stamp ring slot — safe ONLY because verify dedups byte-identically to the live path
     int cnt = (raw_cnt > 0) ? dedup_stamp(stamp.idx.data(), stamp.mat.data(), raw_cnt,
                                           (uint32_t*)stamp_cells_[slot].cpu_ptr,
                                           (uint8_t*)stamp_mats_[slot].cpu_ptr) : 0;
@@ -310,7 +309,7 @@ void DenseVoxelField::encode_verify(void* compute_encoder, const Config& cfg,
         [ce dispatchThreads:MTLSizeMake((NSUInteger)cnt, 1, 1) threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
     }
 
-    // (c) diff live vs scratch. Clear this slot's counter, dispatch, log the PREVIOUS slot (completed).
+    // (c) diff live vs scratch. Clear this slot's counter, dispatch, read the oldest slot's counter (dev log only; value settles within a few frames).
     *(uint32_t*)diff_count_[slot].cpu_ptr = 0;
     [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_diff_];
     [ce setBuffer:(__bridge id<MTLBuffer>)fill_uniforms_[slot].handle offset:0 atIndex:0];
@@ -319,6 +318,7 @@ void DenseVoxelField::encode_verify(void* compute_encoder, const Config& cfg,
     [ce setTexture:(__bridge id<MTLTexture>)world_grid_verify_.handle atIndex:1];
     [ce dispatchThreadgroups:MTLSizeMake((extent+3)/4, (hc+3)/4, (extent+3)/4)
         threadsPerThreadgroup:MTLSizeMake(4, 4, 4)];
+    // read the oldest slot's counter (dev log only; value settles within a few frames)
     uint32_t prev = *(const uint32_t*)diff_count_[(frame_index + 1) % RING].cpu_ptr;
     if (prev > 0) fprintf(stderr, "[vox][verify_fill] %u cell mismatches\n", prev);
 }

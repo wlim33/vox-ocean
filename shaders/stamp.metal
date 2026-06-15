@@ -37,7 +37,7 @@ kernel void destamp_cells(
     VgCell c = vg_decode_index(g, (int)i);
     if (c.iz >= U.grid_extent) return;
     uint t = terrain.read(uint3((uint)c.ix, (uint)c.iy, (uint)c.iz)).r;
-    int wtop = prev_water[c.iz * U.grid_extent + c.ix];
+    int wtop = prev_water[c.iz * U.grid_extent + c.ix]; // prev_water already holds THIS frame's water_top (world_fill_incremental ran first)
     uint m = (t != MAT_AIR) ? t : ((c.iy < wtop) ? MAT_WATER : MAT_AIR);
     world.write(uint4(m, 0, 0, 0), uint3((uint)c.ix, (uint)c.iy, (uint)c.iz));
 }

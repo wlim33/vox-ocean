@@ -7,7 +7,11 @@ struct PipelineCache;
 
 class DenseVoxelField : public VoxelField {
 public:
-    static constexpr int RING = 3;
+    // RING > max in-flight frames (3): encode_destamp adds a reader of the stamp
+    // ring one frame AFTER encode_stamp, so a slot's latest reader is frame f+1;
+    // it must not be reused until f+1 completes. With <=3 in flight, reuse at
+    // f+RING waits for f+RING-3, so RING must be >= 4.
+    static constexpr int RING = 4;
     void init(const MetalContext&, PipelineCache&);
     VoxelGridDesc desc(const Config&) const override;
     void rebuild_if_dirty(const MetalContext&, const Config&) override;
