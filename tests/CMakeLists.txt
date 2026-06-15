@@ -100,5 +100,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/core/AxisCamera.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    contact_sheet_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/io/ContactSheet.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
