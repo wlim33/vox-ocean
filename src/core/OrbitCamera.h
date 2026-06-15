@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include "core/CameraView.h"
 
 namespace vox {
 class OrbitCamera {
@@ -15,6 +16,7 @@ public:
     glm::mat4 view() const;
     glm::mat4 proj() const;
     glm::mat4 view_proj() const;
+    CameraView camera_view() const;   // perspective -> ortho_backup = 0
 
     float yaw_rad = 0.0f;
     float pitch_rad = 0.3f;

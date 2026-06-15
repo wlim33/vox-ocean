@@ -39,5 +39,8 @@ glm::mat4 OrbitCamera::proj() const {
     return glm::perspective(glm::radians(fov_deg_), aspect_, near_, far_);
 }
 glm::mat4 OrbitCamera::view_proj() const { return proj() * view(); }
+CameraView OrbitCamera::camera_view() const {
+    return { view_proj(), position(), 0.0f };
+}
 
 }
