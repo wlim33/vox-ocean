@@ -94,7 +94,8 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     u.base_depth_m = cfg.voxel.base_depth_m;
     u.max_steps = cfg.march.max_steps;
     u.water_ior = cfg.shading.water_ior;
-    u._mpad3 = u._mpad4 = 0.0f;
+    u.ortho_backup = 0.0f;   // perspective; the snapshot path overrides via CameraView (Task 6)
+    u._mpad4 = 0.0f;
     u.boat_color = (simd_float3){ cfg.shading.boat_color.x, cfg.shading.boat_color.y, cfg.shading.boat_color.z };
     u._mpad5 = 0.0f;
     u.kelp_color = (simd_float3){ cfg.shading.kelp_color.x, cfg.shading.kelp_color.y, cfg.shading.kelp_color.z };

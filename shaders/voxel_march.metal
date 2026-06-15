@@ -100,8 +100,11 @@ fragment float4 march_fs(
 
     float4 p0 = U.inv_view_proj * float4(in.ndc, 0.0, 1.0);
     float4 p1 = U.inv_view_proj * float4(in.ndc, 1.0, 1.0);
-    float3 dir = normalize(p1.xyz / p1.w - p0.xyz / p0.w);
-    float3 org = U.camera_pos;
+    float3 near_pt = p0.xyz / p0.w;
+    float3 dir = normalize(p1.xyz / p1.w - near_pt);
+    // Perspective (ortho_backup == 0): keep the eye origin exactly. Orthographic:
+    // parallel rays need per-pixel origins, backed up beyond the grid AABB.
+    float3 org = U.ortho_backup > 0.0 ? near_pt - dir * U.ortho_backup : U.camera_pos;
 
     VoxelGridDesc vg = {U.grid_extent, U.height_cells, U.voxel_size_m, U.height_step_m, U.base_depth_m};
     float half_patch = vg_half_patch(vg);
