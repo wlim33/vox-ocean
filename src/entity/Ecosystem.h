@@ -34,6 +34,7 @@ private:
     FishSchools fish_;
     std::vector<FloorColumn> floor_;
     int   built_extent_ = -1, built_height_cells_ = -1, built_floor_seed_ = 0;
+    float built_floor_base_depth_ = -1.0f, built_floor_step_ = -1.0f;
     bool  built_kelp_enabled_ = false;
     float built_kelp_density_ = -1.0f, built_kelp_height_ = -1.0f;
     int   built_kelp_seed_ = 0;

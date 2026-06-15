@@ -63,7 +63,10 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     int extent = cfg.voxel.grid_extent;
     int hc     = cfg.voxel.height_cells;
     int seed   = cfg.voxel.floor_seed;
+    float bd   = cfg.voxel.base_depth_m;
+    float hs   = cfg.voxel.height_step_m;
     if (extent == built_extent_ && hc == built_height_cells_ && seed == built_seed_
+        && bd == built_base_depth_ && hs == built_height_step_
         && world_grid_.handle)
         return;
 
@@ -119,6 +122,8 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     built_extent_ = extent;
     built_height_cells_ = hc;
     built_seed_ = seed;
+    built_base_depth_ = bd;
+    built_height_step_ = hs;
     terrain_dirty_ = true;
 }
 

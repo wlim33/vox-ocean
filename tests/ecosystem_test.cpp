@@ -3,6 +3,7 @@
 #include "voxel/VoxelWorld.h"
 #include "core/Config.h"
 #include <gtest/gtest.h>
+#include <cmath>
 
 static vox::Config eco_cfg() {
     vox::Config c;
@@ -46,4 +47,33 @@ TEST(Ecosystem, DisabledEntitiesProduceNoCells) {
     eco.update(c, 1.0f/60.0f, 0.0f, [](float, float){ return 0.0f; });
     vox::StampList out; eco.build_stamp(c, eco_world(c), out);
     EXPECT_EQ(out.count(), 0);
+}
+
+// Recover the cached floor cell-count at the +X+Z corner, independent of the
+// world-y conversion (which uses live cfg): h = (floor_top_y + base) / step.
+static int corner_floor_cells(const vox::Ecosystem& eco, const vox::Config& c) {
+    float half = 0.5f * c.voxel.grid_extent * c.voxel.voxel_size_m;
+    float xz = half - 0.5f * c.voxel.voxel_size_m;             // last column center
+    float y = eco.floor_top_y(c, xz, xz);
+    return (int)std::lround((y + c.voxel.base_depth_m) / c.voxel.height_step_m);
+}
+
+TEST(Ecosystem, FloorRegeneratesWhenBaseDepthChanges) {
+    auto c = eco_cfg();                          // base_depth 10 -> sea 40, peak 56
+    vox::Ecosystem eco; eco.rebuild_if_dirty(c);
+    int before = corner_floor_cells(eco, c);
+    c.voxel.base_depth_m = 6.0f;                 // sea 24, peak 40 -> shoreline lowers
+    eco.rebuild_if_dirty(c);
+    int after = corner_floor_cells(eco, c);
+    EXPECT_NE(before, after);                     // stale floor would give equal counts
+}
+
+TEST(Ecosystem, FloorRegeneratesWhenHeightStepChanges) {
+    auto c = eco_cfg();                          // step 0.25 -> sea 40, peak 56
+    vox::Ecosystem eco; eco.rebuild_if_dirty(c);
+    int before = corner_floor_cells(eco, c);
+    c.voxel.height_step_m = 0.5f;                // sea 20, peak 28 -> shoreline lowers
+    eco.rebuild_if_dirty(c);
+    int after = corner_floor_cells(eco, c);
+    EXPECT_NE(before, after);
 }

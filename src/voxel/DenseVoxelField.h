@@ -35,6 +35,7 @@ private:
     Buffer  surface_readback_[RING]{};
     int     built_stamp_cap_ = 0;
     int     built_extent_ = 0, built_height_cells_ = 0, built_seed_ = 0;
+    float   built_base_depth_ = 0.0f, built_height_step_ = 0.0f;
     bool    terrain_dirty_ = false;
     void*   pso_fill_  = nullptr;
     void*   pso_stamp_ = nullptr;
