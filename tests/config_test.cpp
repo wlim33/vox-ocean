@@ -274,3 +274,13 @@ TEST(Config, RenderBackendParsesAndOverrides) {
     EXPECT_EQ(o.config.render.backend, "bar");
     EXPECT_NE(vox::config_hash(o.config), vox::config_hash(d.config));
 }
+
+TEST(Config, VerifyFillParsesAndOverridesAndHashes) {
+    auto r = vox::load_config_from_string("[render]\nverify_fill = true\n");
+    EXPECT_TRUE(r.config.render.verify_fill);
+    EXPECT_FALSE(vox::load_config_from_string("").config.render.verify_fill);  // default off
+    auto o = vox::apply_overrides(vox::load_config_from_string(""), {"render.verify_fill=true"});
+    EXPECT_TRUE(o.config.render.verify_fill);
+    vox::Config a, b; b.render.verify_fill = true;
+    EXPECT_NE(vox::config_hash(a), vox::config_hash(b));
+}

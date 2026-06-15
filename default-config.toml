@@ -71,3 +71,4 @@ seed         = 202
 
 [render]
 backend = "raymarch"
+verify_fill = false
