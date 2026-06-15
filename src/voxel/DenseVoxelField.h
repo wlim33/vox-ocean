@@ -15,6 +15,7 @@ public:
     void ensure_capacity(const MetalContext&, const Config&) override;
     void encode_fill(void*, const Config&, Cascade* const*, int, void* ripple_front_tex, int) override;
     void encode_stamp(void*, const Config&, const StampList&, int) override;
+    void encode_destamp(void* compute_encoder, const Config&, int frame);
     void encode_readback(void*, const Config&, int) override;
     void* world_grid_handle() const override { return world_grid_.handle; }
     void* surface_handle()    const override { return surface_tex_.handle; }
@@ -33,6 +34,10 @@ private:
     bool    terrain_dirty_ = false;
     void*   pso_fill_  = nullptr;
     void*   pso_stamp_ = nullptr;
+    Buffer  prev_water_{};               // per-column previous water_top (sentinel -1 = seed)
+    int     prev_stamp_count_ = 0;       // last frame's deduped stamp count (for destamp)
+    void*   pso_incr_ = nullptr;
+    void*   pso_destamp_ = nullptr;
     Texture world_grid_verify_{};        // scratch full-rebuild grid (verify_fill only)
     Buffer  diff_count_[RING]{};         // atomic mismatch counter readback ring
     void*   pso_diff_  = nullptr;

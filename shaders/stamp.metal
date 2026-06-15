@@ -20,3 +20,24 @@ kernel void stamp_cells(
     if (c.iz >= U.grid_extent) return;
     world.write(uint4((uint)materials[gid], 0, 0, 0), uint3((uint)c.ix, (uint)c.iy, (uint)c.iz));
 }
+
+// Revert last frame's entity cells to base material (terrain, else water/air at the
+// column's current water level from prev_water). Run before this frame's stamp.
+kernel void destamp_cells(
+    constant StampUniforms& U              [[buffer(0)]],
+    const device uint*  cells              [[buffer(1)]],
+    const device int*   prev_water         [[buffer(2)]],
+    texture3d<uint, access::read>  terrain [[texture(0)]],
+    texture3d<uint, access::write> world   [[texture(1)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if ((int)gid >= U.count) return;
+    uint i = cells[gid];
+    VoxelGridDesc g = {U.grid_extent, U.height_cells, 0.0f, 0.0f, 0.0f};
+    VgCell c = vg_decode_index(g, (int)i);
+    if (c.iz >= U.grid_extent) return;
+    uint t = terrain.read(uint3((uint)c.ix, (uint)c.iy, (uint)c.iz)).r;
+    int wtop = prev_water[c.iz * U.grid_extent + c.ix];
+    uint m = (t != MAT_AIR) ? t : ((c.iy < wtop) ? MAT_WATER : MAT_AIR);
+    world.write(uint4(m, 0, 0, 0), uint3((uint)c.ix, (uint)c.iy, (uint)c.iz));
+}

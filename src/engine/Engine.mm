@@ -181,6 +181,7 @@ void engine_render(Engine* e) {
                      (float)e->app->clock().delta_seconds(),
                      wake.data(), (int)wake.size());
     e->field.encode_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->ripple.front_texture(), e->frame_index);
+    e->field.encode_destamp((__bridge void*)ce, e->app->config(), e->frame_index);
     e->field.encode_stamp((__bridge void*)ce, e->app->config(), e->stamp, e->frame_index);
     e->field.encode_verify((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(),
                            e->ripple.front_texture(), e->stamp, e->frame_index);
