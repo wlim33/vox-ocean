@@ -28,10 +28,12 @@ void KelpBed::rebuild(const Config& cfg, const std::vector<FloorColumn>& floor) 
     int n = kelp_stalk_count(cfg);
     int max_layers = kelp_cells_per_stalk(cfg);
     uint32_t seed = (uint32_t)cfg.kelp.seed;
+    int sea = sea_level_cells(cfg.voxel.base_depth_m, cfg.voxel.height_step_m);
     for (int k = 0; k < n; ++k) {
         int ix = std::min(extent - 1, (int)(h01((uint32_t)k, 0u, seed) * extent));
         int iz = std::min(extent - 1, (int)(h01((uint32_t)k, 1u, seed) * extent));
         int base = floor[(size_t)iz * extent + ix].height;   // first cell above terrain
+        if (sea - base < kMinDepthCells) continue;           // too shallow / dry land near shore
         float hf = 0.4f + 0.6f * h01((uint32_t)k, 2u, seed);
         int layers = std::min(std::max(2, (int)(hf * max_layers)), max_layers);
         layers = std::min(layers, cfg.voxel.height_cells - base);

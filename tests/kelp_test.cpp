@@ -80,3 +80,14 @@ TEST(Kelp, LeansAlongTheWaterGradient) {
         EXPECT_NEAR(s.lean.y, 0.0f, 1e-3f);
     }
 }
+
+TEST(Kelp, SkipsShallowColumns) {
+    auto c = kelp_cfg();
+    int sea = vox::sea_level_cells(c.voxel.base_depth_m, c.voxel.height_step_m);  // 40
+    // Floor one cell below sea level everywhere -> depth 1 < kMinDepthCells -> no kelp.
+    std::vector<vox::FloorColumn> shallow(
+        (size_t)c.voxel.grid_extent * c.voxel.grid_extent,
+        { (uint8_t)(sea - 1), (uint8_t)vox::VoxMat::Sand });
+    vox::KelpBed bed; bed.rebuild(c, shallow);
+    EXPECT_EQ(bed.stalks().size(), 0u);
+}
