@@ -1,6 +1,6 @@
 #import "render/RayMarchRenderer.h"
 #import "render/SkyRenderer.h"
-#import "core/OrbitCamera.h"
+#import "core/CameraView.h"
 #import "core/Config.h"
 #import "gpu/MetalContext.h"
 #import "gpu/PipelineCache.h"
@@ -60,16 +60,16 @@ void RayMarchRenderer::resize(const MetalContext& ctx, int drawable_w, int drawa
 }
 
 void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
-                              const OrbitCamera& cam, const Config& cfg,
+                              const CameraView& cam, const Config& cfg,
                               const SkyRenderer& sky, int frame_index) {
     if (!field.world_grid_handle() || !march_target_.handle) return;
     id<MTLCommandBuffer> cb = (__bridge id<MTLCommandBuffer>)command_buffer;
     int slot = frame_index % RING;
 
     MarchUniforms u{};
-    glm::mat4 inv_vp = glm::inverse(cam.view_proj());
+    glm::mat4 inv_vp = glm::inverse(cam.view_proj);
     std::memcpy(&u.inv_view_proj, &inv_vp[0][0], 64);
-    u.camera_pos = (simd_float3){ cam.position().x, cam.position().y, cam.position().z };
+    u.camera_pos = (simd_float3){ cam.position.x, cam.position.y, cam.position.z };
     u._mpad0 = 0.0f;
     // sun_dir MUST be unit length (shader contract) — mirror SkyRenderer's
     // elevation/azimuth -> direction formula so sky and specular agree.
@@ -94,7 +94,7 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     u.base_depth_m = cfg.voxel.base_depth_m;
     u.max_steps = cfg.march.max_steps;
     u.water_ior = cfg.shading.water_ior;
-    u.ortho_backup = 0.0f;   // perspective; the snapshot path overrides via CameraView (Task 6)
+    u.ortho_backup = cam.ortho_backup;
     u._mpad4 = 0.0f;
     u.boat_color = (simd_float3){ cfg.shading.boat_color.x, cfg.shading.boat_color.y, cfg.shading.boat_color.z };
     u._mpad5 = 0.0f;

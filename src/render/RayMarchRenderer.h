@@ -8,7 +8,7 @@ public:
     static constexpr int RING = 3;
     void init(const MetalContext&, PipelineCache&) override;
     void resize(const MetalContext&, int w, int h, const Config&) override;
-    void encode(void* command_buffer, const VoxelField&, const OrbitCamera&,
+    void encode(void* command_buffer, const VoxelField&, const CameraView&,
                 const Config&, const SkyRenderer&, int frame) override;
     void draw_into_drawable(void* render_encoder) override;
     const char* name() const override { return "raymarch"; }

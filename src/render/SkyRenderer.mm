@@ -3,7 +3,7 @@
 #import "gpu/PipelineCache.h"
 #import "gpu/Texture.h"
 #import "core/Hash.h"
-#import "core/OrbitCamera.h"
+#import "core/CameraView.h"
 #import "core/Config.h"
 #import "shader_types.h"
 #import <Metal/Metal.h>
@@ -34,16 +34,16 @@ void SkyRenderer::init(const MetalContext& ctx, PipelineCache& cache) {
     dss_off_ = (__bridge_retained void*)[dev newDepthStencilStateWithDescriptor:dd];
 }
 
-void SkyRenderer::encode_full_screen(void* encoder, const OrbitCamera& cam, const Config& cfg) {
+void SkyRenderer::encode_full_screen(void* encoder, const CameraView& cam, const Config& cfg) {
     id<MTLRenderCommandEncoder> enc = (__bridge id<MTLRenderCommandEncoder>)encoder;
     SkyUniforms u;
-    glm::mat4 inv = glm::inverse(cam.view_proj());
+    glm::mat4 inv = glm::inverse(cam.view_proj);
     std::memcpy(&u.inv_view_proj, &inv[0][0], sizeof(float)*16);
     float ce = std::cos(cfg.sky.sun_elevation_rad), se = std::sin(cfg.sky.sun_elevation_rad);
     float ca = std::cos(cfg.sky.sun_azimuth_rad),   sa = std::sin(cfg.sky.sun_azimuth_rad);
     u.sun_dir = (simd_float3){ ce * sa, se, ce * ca };
     u.turbidity = cfg.sky.turbidity;
-    u.camera_pos = (simd_float3){ cam.position().x, cam.position().y, cam.position().z };
+    u.camera_pos = (simd_float3){ cam.position.x, cam.position.y, cam.position.z };
 
     [enc setRenderPipelineState:(__bridge id<MTLRenderPipelineState>)pso_];
     [enc setDepthStencilState:(__bridge id<MTLDepthStencilState>)dss_off_];

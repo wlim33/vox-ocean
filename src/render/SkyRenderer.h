@@ -4,13 +4,13 @@
 namespace vox {
 struct MetalContext;
 struct PipelineCache;
-class  OrbitCamera;
+struct CameraView;
 struct Config;
 
 class SkyRenderer {
 public:
     void init(const MetalContext& ctx, PipelineCache& cache);
-    void encode_full_screen(void* encoder, const OrbitCamera& cam, const Config& cfg);
+    void encode_full_screen(void* encoder, const CameraView& cam, const Config& cfg);
     void bake_cubemap_if_dirty(const MetalContext& ctx, void* command_buffer, const Config& cfg);
     void* cubemap_handle() const { return cubemap_.handle; }
 

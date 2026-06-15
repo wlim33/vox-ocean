@@ -11,6 +11,7 @@
 #include "voxel/DenseVoxelField.h"
 #include "voxel/RippleSim.h"
 #include "render/IVoxelRenderer.h"
+#include "core/CameraView.h"
 #include "render/RendererFactory.h"
 #include "ui/ImGuiBackend.h"
 #include "ui/DebugPanel.h"
@@ -192,11 +193,12 @@ void engine_render(Engine* e) {
     e->field.encode_readback((__bridge void*)blit, e->app->config(), e->frame_index);
     [blit endEncoding];
 
-    e->renderer->encode((__bridge void*)cb, e->field, e->app->camera(), e->app->config(),
+    CameraView cam = e->app->camera().camera_view();
+    e->renderer->encode((__bridge void*)cb, e->field, cam, e->app->config(),
                         e->sky, e->frame_index);
 
     id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
-    e->sky.encode_full_screen((__bridge void*)enc, e->app->camera(), e->app->config());
+    e->sky.encode_full_screen((__bridge void*)enc, cam, e->app->config());
     e->renderer->draw_into_drawable((__bridge void*)enc);
     if (ui) e->imgui.render((__bridge void*)cb, (__bridge void*)rp, (__bridge void*)enc);
     [enc endEncoding];
