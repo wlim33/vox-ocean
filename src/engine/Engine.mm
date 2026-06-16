@@ -305,10 +305,12 @@ int engine_snapshot(const char* config_path, const char* overrides,
     // 1. Fixed-dt warmup: settle FFT / ripple / entities to a reproducible state.
     const float dt = 1.0f / 60.0f;
     for (int i = 0; i < std::max(1, warmup_frames); ++i) {
-        id<MTLCommandBuffer> cb = [queue commandBuffer];
-        advance_and_voxelize(e, cb, (float)i * dt, dt);
-        [cb commit];
-        [cb waitUntilCompleted];
+        @autoreleasepool {
+            id<MTLCommandBuffer> cb = [queue commandBuffer];
+            advance_and_voxelize(e, cb, (float)i * dt, dt);
+            [cb commit];
+            [cb waitUntilCompleted];
+        }
         e->frame_index++;
     }
 
@@ -328,11 +330,13 @@ int engine_snapshot(const char* config_path, const char* overrides,
     dtd.storageMode = MTLStorageModePrivate;
     id<MTLTexture> depthTex = [dev newTextureWithDescriptor:dtd];
 
-    std::vector<AxisShot> shots = snapshot_parse_views(views_csv);
+    std::vector<AxisShot> shots = snapshot_parse_views(views_csv ? views_csv : "");
     std::vector<RgbImage> cells;
     std::vector<std::string> labels;
+    bool sep_ok = true;
 
     for (AxisShot shot : shots) {
+        @autoreleasepool {
         e->renderer->resize(e->ctx, S, S, cfg);
         Texture color = make_texture_2d(e->ctx, (uint32_t)S, (uint32_t)S,
                                         TexFormat::BGRA8Unorm_sRGB,
@@ -366,18 +370,22 @@ int engine_snapshot(const char* config_path, const char* overrides,
             std::string base(out_path);
             auto dot = base.rfind('.');
             std::string stem = (dot == std::string::npos) ? base : base.substr(0, dot);
-            std::string lbl = snapshot_label(shot);
-            std::string tag = lbl.substr(0, lbl.find(' '));
-            for (auto& ch : tag) ch = (char)std::tolower((unsigned char)ch);
-            write_png(stem + "." + tag + ".png", img);
+            std::string tag;
+            switch (shot.axis) {
+                case ViewAxis::Y: tag = shot.from_positive ? "top"   : "bottom"; break;
+                case ViewAxis::Z: tag = shot.from_positive ? "front" : "back";   break;
+                case ViewAxis::X: tag = shot.from_positive ? "right" : "left";   break;
+            }
+            sep_ok &= write_png(stem + "." + tag + ".png", img);
         }
         cells.push_back(std::move(img));
         labels.push_back(snapshot_label(shot));
+        } // @autoreleasepool
     }
     depthTex = nil;
 
     RgbImage sheet = make_contact_sheet(cells, labels);
-    bool ok = write_png(out_path, sheet);
+    bool ok = write_png(out_path, sheet) && sep_ok;
     fprintf(stderr, "[vox] snapshot %s -> %s (%dx%d, %zu views)\n",
             ok ? "wrote" : "FAILED", out_path, sheet.w, sheet.h, shots.size());
 
