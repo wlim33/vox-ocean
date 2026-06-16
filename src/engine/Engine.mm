@@ -113,6 +113,54 @@ void engine_resize(Engine* e, int w, int h) {
 void engine_push_input(Engine* e, InputEvent ev) { e->input.push(ev); }
 bool engine_bench_should_exit(Engine* e) { return e->bench.should_exit(); }
 
+// Evolve the simulation by one frame and voxelize the world into the field's
+// grid/surface textures. Camera-independent. `sim_time` is absolute seconds;
+// `dt` is the step. Shared by the live render loop and the headless snapshot.
+static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
+                                 float sim_time, float dt) {
+    const Config& cfg = e->app->config();
+    e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, cfg);
+    e->sim.rebuild_if_dirty(e->ctx, cfg);
+    e->field.rebuild_if_dirty(e->ctx, cfg);
+    e->ripple.rebuild_if_dirty(e->ctx, cfg);
+    e->field.ensure_capacity(e->ctx, cfg);
+    e->field.upload_terrain_if_dirty((__bridge void*)cb);
+    e->ripple.upload_zero_if_dirty((__bridge void*)cb);
+
+    e->ecosystem.rebuild_if_dirty(cfg);
+    e->ecosystem.update(cfg, dt, sim_time,
+        [&](float x, float z) { return e->field.height_at(x, z, cfg, e->frame_index); });
+
+    std::vector<RippleSplash> wake;
+    glm::vec2 stern;
+    if (e->ecosystem.shed_boat_wake(cfg, stern)) {
+        float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
+        wake.push_back({ (stern.x + half) / cfg.voxel.voxel_size_m,
+                         (stern.y + half) / cfg.voxel.voxel_size_m,
+                         1.5f, -cfg.entity.wake_amp });
+    }
+    VoxelWorld world({cfg.voxel.grid_extent, cfg.voxel.height_cells,
+                      cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
+                      cfg.voxel.base_depth_m});
+    e->ecosystem.build_stamp(cfg, world, e->stamp);
+
+    id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
+    e->sim.encode((__bridge void*)ce, sim_time, cfg);
+    e->ripple.encode((__bridge void*)ce, cfg, dt, wake.data(), (int)wake.size());
+    e->field.encode_fill((__bridge void*)ce, cfg, e->sim.data(), e->sim.count(),
+                         e->ripple.front_texture(), e->frame_index);
+    e->field.encode_destamp((__bridge void*)ce, cfg, e->frame_index);
+    e->field.encode_stamp((__bridge void*)ce, cfg, e->stamp, e->frame_index);
+    e->field.encode_verify((__bridge void*)ce, cfg, e->sim.data(), e->sim.count(),
+                           e->ripple.front_texture(), e->stamp, e->frame_index);
+    [ce endEncoding];
+
+    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+    e->sim.encode_mipgen((__bridge void*)blit, cfg);
+    e->field.encode_readback((__bridge void*)blit, cfg, e->frame_index);
+    [blit endEncoding];
+}
+
 void engine_render(Engine* e) {
     MTKView* view = e->view;
     if (!view) return;
@@ -145,53 +193,12 @@ void engine_render(Engine* e) {
     const bool ui = e->imgui_ready;
     if (ui) { e->imgui.begin_frame((__bridge void*)view); draw_debug_panel(*e->app); }
 
-    e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, e->app->config());
-    e->sim.rebuild_if_dirty(e->ctx, e->app->config());
-    e->field.rebuild_if_dirty(e->ctx, e->app->config());
-    e->ripple.rebuild_if_dirty(e->ctx, e->app->config());
     CGSize dsz = view.drawableSize;
-    e->renderer->resize(e->ctx, (int)dsz.width, (int)dsz.height,
-                        e->app->config());
-    e->field.ensure_capacity(e->ctx, e->app->config());
-    e->field.upload_terrain_if_dirty((__bridge void*)cb);
-    e->ripple.upload_zero_if_dirty((__bridge void*)cb);
+    e->renderer->resize(e->ctx, (int)dsz.width, (int)dsz.height, e->app->config());
+
     float sim_time = (float)e->app->clock().total_seconds();
-
-    const Config& cfg = e->app->config();
     float dt = (float)e->app->clock().delta_seconds();
-    e->ecosystem.rebuild_if_dirty(cfg);
-    e->ecosystem.update(cfg, dt, sim_time,
-        [&](float x, float z) { return e->field.height_at(x, z, cfg, e->frame_index); });
-
-    std::vector<RippleSplash> wake;
-    glm::vec2 stern;
-    if (e->ecosystem.shed_boat_wake(cfg, stern)) {
-        float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
-        wake.push_back({ (stern.x + half) / cfg.voxel.voxel_size_m,
-                         (stern.y + half) / cfg.voxel.voxel_size_m,
-                         1.5f, -cfg.entity.wake_amp });
-    }
-    VoxelWorld world({cfg.voxel.grid_extent, cfg.voxel.height_cells,
-                      cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
-                      cfg.voxel.base_depth_m});
-    e->ecosystem.build_stamp(cfg, world, e->stamp);
-
-    id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
-    e->sim.encode((__bridge void*)ce, sim_time, e->app->config());
-    e->ripple.encode((__bridge void*)ce, e->app->config(),
-                     (float)e->app->clock().delta_seconds(),
-                     wake.data(), (int)wake.size());
-    e->field.encode_fill((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(), e->ripple.front_texture(), e->frame_index);
-    e->field.encode_destamp((__bridge void*)ce, e->app->config(), e->frame_index);
-    e->field.encode_stamp((__bridge void*)ce, e->app->config(), e->stamp, e->frame_index);
-    e->field.encode_verify((__bridge void*)ce, e->app->config(), e->sim.data(), e->sim.count(),
-                           e->ripple.front_texture(), e->stamp, e->frame_index);
-    [ce endEncoding];
-
-    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-    e->sim.encode_mipgen((__bridge void*)blit, e->app->config());
-    e->field.encode_readback((__bridge void*)blit, e->app->config(), e->frame_index);
-    [blit endEncoding];
+    advance_and_voxelize(e, cb, sim_time, dt);
 
     CameraView cam = e->app->camera().camera_view();
     e->renderer->encode((__bridge void*)cb, e->field, cam, e->app->config(),
