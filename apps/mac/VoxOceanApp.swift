@@ -1,7 +1,6 @@
 import SwiftUI
 import MetalKit
 
-@main
 struct VoxOceanApp: App {
     var body: some Scene {
         WindowGroup { MetalSurface().frame(minWidth: 960, minHeight: 540) }
