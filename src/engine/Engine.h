@@ -17,4 +17,12 @@ void engine_resize(Engine* e, int width, int height);
 void engine_render(Engine* e);                        // call from MTKViewDelegate.draw
 void engine_push_input(Engine* e, InputEvent ev);
 bool engine_bench_should_exit(Engine* e);
+
+// Headless: render orthographic axis views of the settled scene to a contact-
+// sheet PNG (and optional per-view PNGs), then return 0 on success. Creates and
+// destroys its own Engine; never attaches a view. views_csv: comma list of
+// top|bottom|front|back|side|left|right, or "all". Runs windowless.
+int engine_snapshot(const char* config_path, const char* overrides,
+                    const char* out_path, const char* views_csv,
+                    int cell_size, bool separate, int warmup_frames);
 }

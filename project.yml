@@ -18,6 +18,7 @@ settings:
       - $(SRCROOT)/third_party/tomlplusplus/include
       - $(SRCROOT)/third_party/imgui
       - $(SRCROOT)/third_party/imgui/backends
+      - $(SRCROOT)/third_party/stb
     MTL_HEADER_SEARCH_PATHS: $(SRCROOT)/shaders
 targets:
   vox-ocean-mac:

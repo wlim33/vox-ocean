@@ -12,6 +12,15 @@
 #include "voxel/RippleSim.h"
 #include "render/IVoxelRenderer.h"
 #include "core/CameraView.h"
+#include "core/AxisCamera.h"
+#include "gpu/Buffer.h"
+#include "gpu/Texture.h"
+#include "io/Image.h"
+#include "io/PngWriter.h"
+#include "io/ContactSheet.h"
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
 #include "render/RendererFactory.h"
 #include "ui/ImGuiBackend.h"
 #include "ui/DebugPanel.h"
@@ -227,4 +236,153 @@ void engine_render(Engine* e) {
     [cb commit];
     e->frame_index++;
 }
+static std::vector<AxisShot> snapshot_parse_views(const std::string& csv) {
+    auto one = [](const std::string& s) -> std::vector<AxisShot> {
+        if (s == "top")                  return {{ViewAxis::Y, true}};
+        if (s == "bottom")               return {{ViewAxis::Y, false}};
+        if (s == "front")                return {{ViewAxis::Z, true}};
+        if (s == "back")                 return {{ViewAxis::Z, false}};
+        if (s == "side" || s == "right") return {{ViewAxis::X, true}};
+        if (s == "left")                 return {{ViewAxis::X, false}};
+        if (s == "all")                  return {{ViewAxis::Y, true}, {ViewAxis::Z, true}, {ViewAxis::X, true},
+                                                 {ViewAxis::Y, false}, {ViewAxis::Z, false}, {ViewAxis::X, false}};
+        return {};
+    };
+    std::vector<AxisShot> out;
+    std::stringstream ss(csv);
+    std::string tok;
+    while (std::getline(ss, tok, ',')) {
+        while (!tok.empty() && tok.front() == ' ') tok.erase(tok.begin());
+        while (!tok.empty() && tok.back() == ' ')  tok.pop_back();
+        for (auto& v : one(tok)) out.push_back(v);
+    }
+    if (out.empty())
+        out = {{ViewAxis::Y, true}, {ViewAxis::Z, true}, {ViewAxis::X, true}};
+    return out;
+}
+
+static std::string snapshot_label(AxisShot s) {
+    switch (s.axis) {
+        case ViewAxis::Y: return s.from_positive ? "TOP +Y"   : "BOT -Y";
+        case ViewAxis::Z: return s.from_positive ? "FRONT +Z" : "BACK -Z";
+        case ViewAxis::X: return s.from_positive ? "SIDE +X"  : "SIDE -X";
+    }
+    return "?";
+}
+
+static RgbImage snapshot_readback(const MetalContext& ctx, id<MTLTexture> tex, int w, int h) {
+    Buffer buf = make_buffer(ctx, (size_t)w * h * 4, /*shared=*/true);
+    id<MTLCommandQueue> q = (__bridge id<MTLCommandQueue>)ctx.queue;
+    id<MTLCommandBuffer> cb = [q commandBuffer];
+    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+    [blit copyFromTexture:tex sourceSlice:0 sourceLevel:0
+             sourceOrigin:MTLOriginMake(0, 0, 0) sourceSize:MTLSizeMake(w, h, 1)
+                 toBuffer:(__bridge id<MTLBuffer>)buf.handle destinationOffset:0
+        destinationBytesPerRow:(NSUInteger)w * 4 destinationBytesPerImage:(NSUInteger)w * h * 4];
+    [blit endEncoding];
+    [cb commit];
+    [cb waitUntilCompleted];
+
+    RgbImage img{w, h, std::vector<uint8_t>((size_t)w * h * 3)};
+    const uint8_t* src = (const uint8_t*)buf.cpu_ptr;
+    for (int i = 0; i < w * h; ++i) {       // BGRA8 -> RGB
+        img.rgb[i * 3 + 0] = src[i * 4 + 2];
+        img.rgb[i * 3 + 1] = src[i * 4 + 1];
+        img.rgb[i * 3 + 2] = src[i * 4 + 0];
+    }
+    destroy_buffer(buf);
+    return img;
+}
+
+int engine_snapshot(const char* config_path, const char* overrides,
+                    const char* out_path, const char* views_csv,
+                    int cell_size, bool separate, int warmup_frames) {
+    Engine* e = engine_create(config_path, overrides);
+    const Config& cfg = e->app->config();
+    id<MTLDevice> dev = (__bridge id<MTLDevice>)e->ctx.device;
+    id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>)e->ctx.queue;
+
+    // 1. Fixed-dt warmup: settle FFT / ripple / entities to a reproducible state.
+    const float dt = 1.0f / 60.0f;
+    for (int i = 0; i < std::max(1, warmup_frames); ++i) {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        advance_and_voxelize(e, cb, (float)i * dt, dt);
+        [cb commit];
+        [cb waitUntilCompleted];
+        e->frame_index++;
+    }
+
+    // 2. Per-axis offscreen render of the settled world grid.
+    VoxelGridDesc grid{cfg.voxel.grid_extent, cfg.voxel.height_cells,
+                       cfg.voxel.voxel_size_m, cfg.voxel.height_step_m, cfg.voxel.base_depth_m};
+    const float spanY = vg_world_top_y(grid) + cfg.voxel.base_depth_m;
+    const float pad = 0.04f * (2.0f * vg_half_patch(grid) + spanY);
+    const int S = std::max(8, cell_size);
+
+    // Depth attachment to satisfy the sky/composite PSOs (which declare
+    // Depth32Float to match the live drawable). Never read; the depth state is
+    // compare-Always / no-write. Reused across axes (all SxS).
+    MTLTextureDescriptor* dtd = [MTLTextureDescriptor
+        texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float width:S height:S mipmapped:NO];
+    dtd.usage = MTLTextureUsageRenderTarget;
+    dtd.storageMode = MTLStorageModePrivate;
+    id<MTLTexture> depthTex = [dev newTextureWithDescriptor:dtd];
+
+    std::vector<AxisShot> shots = snapshot_parse_views(views_csv);
+    std::vector<RgbImage> cells;
+    std::vector<std::string> labels;
+
+    for (AxisShot shot : shots) {
+        e->renderer->resize(e->ctx, S, S, cfg);
+        Texture color = make_texture_2d(e->ctx, (uint32_t)S, (uint32_t)S,
+                                        TexFormat::BGRA8Unorm_sRGB,
+                                        /*storage_write=*/false, /*render_target=*/true);
+        CameraView cam = axis_ortho_view(shot, grid, pad, 1.0f);
+
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        e->renderer->encode((__bridge void*)cb, e->field, cam, cfg, e->sky, e->frame_index);
+
+        MTLRenderPassDescriptor* rp = [MTLRenderPassDescriptor renderPassDescriptor];
+        rp.colorAttachments[0].texture = (__bridge id<MTLTexture>)color.handle;
+        rp.colorAttachments[0].loadAction = MTLLoadActionClear;
+        rp.colorAttachments[0].clearColor = MTLClearColorMake(0.02, 0.05, 0.10, 1.0);
+        rp.colorAttachments[0].storeAction = MTLStoreActionStore;
+        rp.depthAttachment.texture = depthTex;
+        rp.depthAttachment.loadAction = MTLLoadActionClear;
+        rp.depthAttachment.clearDepth = 1.0;
+        rp.depthAttachment.storeAction = MTLStoreActionDontCare;
+
+        id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
+        e->sky.encode_full_screen((__bridge void*)enc, cam, cfg);
+        e->renderer->draw_into_drawable((__bridge void*)enc);
+        [enc endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+
+        RgbImage img = snapshot_readback(e->ctx, (__bridge id<MTLTexture>)color.handle, S, S);
+        destroy_texture(color);
+
+        if (separate) {
+            std::string base(out_path);
+            auto dot = base.rfind('.');
+            std::string stem = (dot == std::string::npos) ? base : base.substr(0, dot);
+            std::string lbl = snapshot_label(shot);
+            std::string tag = lbl.substr(0, lbl.find(' '));
+            for (auto& ch : tag) ch = (char)std::tolower((unsigned char)ch);
+            write_png(stem + "." + tag + ".png", img);
+        }
+        cells.push_back(std::move(img));
+        labels.push_back(snapshot_label(shot));
+    }
+    depthTex = nil;
+
+    RgbImage sheet = make_contact_sheet(cells, labels);
+    bool ok = write_png(out_path, sheet);
+    fprintf(stderr, "[vox] snapshot %s -> %s (%dx%d, %zu views)\n",
+            ok ? "wrote" : "FAILED", out_path, sheet.w, sheet.h, shots.size());
+
+    engine_destroy(e);
+    return ok ? 0 : 1;
+}
+
 } // namespace vox
