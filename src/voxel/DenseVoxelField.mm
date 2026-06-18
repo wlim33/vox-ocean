@@ -12,44 +12,16 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <unordered_map>
 #include <vector>
 
 namespace vox {
 
-// Dedup stamp list: if multiple entries target the same cell, keep only the last
-// (last-writer-wins, preserving priority order kelp < fish < boat). Without this,
-// concurrent GPU threads writing the same cell produce non-deterministic results
-// that differ between independent dispatches (live vs verify).
-static int dedup_stamp(const uint32_t* in_cells, const uint8_t* in_mats, int count,
-                       uint32_t* out_cells, uint8_t* out_mats) {
-    // Record the last index at which each cell appears.
-    std::unordered_map<uint32_t, int> last;
-    last.reserve((size_t)count);
-    for (int i = 0; i < count; ++i) last[in_cells[i]] = i;
-    // Emit entries in-order, keeping only the final occurrence of each cell.
-    int n = 0;
-    for (int i = 0; i < count; ++i) {
-        if (last[in_cells[i]] == i) {
-            out_cells[n] = in_cells[i];
-            out_mats[n]  = in_mats[i];
-            ++n;
-        }
-    }
-    return n;
-}
-
 void DenseVoxelField::init(const MetalContext& ctx, PipelineCache& cache) {
-    pso_fill_  = cache.compute_pso(ctx, "world_fill");
-    pso_stamp_ = cache.compute_pso(ctx, "stamp_cells");
-    pso_incr_ = cache.compute_pso(ctx, "world_fill_incremental");
-    pso_destamp_ = cache.compute_pso(ctx, "destamp_cells");
+    pso_fill_        = cache.compute_pso(ctx, "world_fill");
     pso_apply_edits_ = cache.compute_pso(ctx, "apply_edits");
 
-    for (int i = 0; i < RING; ++i) {
-        fill_uniforms_[i]  = make_buffer(ctx, sizeof(WorldFillUniforms), true);
-        stamp_uniforms_[i] = make_buffer(ctx, sizeof(StampUniforms), true);
-    }
+    for (int i = 0; i < RING; ++i)
+        fill_uniforms_[i] = make_buffer(ctx, sizeof(WorldFillUniforms), true);
 }
 
 VoxelGridDesc DenseVoxelField::desc(const Config& c) const {
@@ -65,92 +37,28 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     float hs   = cfg.voxel.height_step_m;
     if (extent == built_extent_ && hc == built_height_cells_ && seed == built_seed_
         && bd == built_base_depth_ && hs == built_height_step_
-        && world_grid_.handle)
+        && surface_tex_.handle)
         return;
 
-    destroy_texture(terrain_grid_);
-    destroy_texture(world_grid_);
     destroy_texture(surface_tex_);
     destroy_texture(discrete_grid_);
-    destroy_buffer(terrain_staging_);
-    destroy_buffer(prev_water_);
+    destroy_buffer(discrete_staging_);
 
-    // terrain_grid_ is blit-uploaded once then read-only; world_grid_ is
-    // compute-written each frame; surface_tex_ carries per-column water state.
-    terrain_grid_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
-                                    TexFormat::R8Uint, /*storage_write=*/false);
-    world_grid_   = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
-                                    TexFormat::R8Uint, /*storage_write=*/true);
     surface_tex_  = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent,
                                     TexFormat::RG32F);
 
-    prev_water_ = make_buffer(ctx, (size_t)extent * extent * sizeof(int32_t), true);
-    std::memset(prev_water_.cpu_ptr, 0xFF, prev_water_.size);   // every column = -1 (sentinel)
-    prev_stamp_count_ = 0;
-
     discrete_grid_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
                                      TexFormat::R8Uint, /*storage_write=*/true);
-    destroy_buffer(discrete_staging_);
     discrete_staging_ = make_buffer(ctx, (size_t)extent * hc * extent, true);
-
-    // Terrain bytes are owned by the CPU World now; allocate staging and fill
-    // it at upload time from the supplied terrain_cells (single source of truth).
-    terrain_staging_ = make_buffer(ctx, (size_t)extent * hc * extent, true);
 
     built_extent_ = extent;
     built_height_cells_ = hc;
     built_seed_ = seed;
     built_base_depth_ = bd;
     built_height_step_ = hs;
-    terrain_dirty_ = true;
-}
-
-void DenseVoxelField::upload_terrain_if_dirty(void* command_buffer,
-                                              const std::vector<uint8_t>& terrain_cells) {
-    if (!terrain_dirty_) return;
-    assert(!terrain_cells.empty() && terrain_cells.size() >= terrain_staging_.size
-           && "World terrain_cells must be populated and match staging size before upload");
-    // Copy the CPU World's dense terrain into staging before the blit. Layout is
-    // identical (x fastest, then y, then z), so sizes must match exactly.
-    if (terrain_staging_.cpu_ptr && !terrain_cells.empty()) {
-        size_t n = std::min(terrain_staging_.size, terrain_cells.size());
-        std::memcpy(terrain_staging_.cpu_ptr, terrain_cells.data(), n);
-    }
-    id<MTLCommandBuffer> cb = (__bridge id<MTLCommandBuffer>)command_buffer;
-    int extent = built_extent_;
-    int hc     = built_height_cells_;
-
-    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-
-    [blit copyFromBuffer:(__bridge id<MTLBuffer>)terrain_staging_.handle
-            sourceOffset:0
-       sourceBytesPerRow:(NSUInteger)extent
-     sourceBytesPerImage:(NSUInteger)extent * (NSUInteger)hc
-              sourceSize:MTLSizeMake((NSUInteger)extent, (NSUInteger)hc, (NSUInteger)extent)
-               toTexture:(__bridge id<MTLTexture>)terrain_grid_.handle
-        destinationSlice:0
-        destinationLevel:0
-       destinationOrigin:MTLOriginMake(0, 0, 0)];
-    terrain_dirty_ = false;
-
-    [blit endEncoding];
-
-    // Reclaim the staging buffer (2.25 MiB at default extent); it is
-    // regenerated on the next rebuild_if_dirty.
-    destroy_buffer(terrain_staging_);
 }
 
 void DenseVoxelField::ensure_capacity(const MetalContext& ctx, const Config& cfg) {
-    int cap = std::max(1, max_stamp_cells(cfg));
-    if (cap <= built_stamp_cap_ && stamp_cells_[0].handle) return;   // grow-only
-    for (int i = 0; i < RING; ++i) {
-        destroy_buffer(stamp_cells_[i]);
-        destroy_buffer(stamp_mats_[i]);
-        stamp_cells_[i] = make_buffer(ctx, sizeof(uint32_t) * (size_t)cap, true);
-        stamp_mats_[i]  = make_buffer(ctx, sizeof(uint8_t)  * (size_t)cap, true);
-    }
-    built_stamp_cap_ = cap;
-
     int ecap = std::max(1, 2 * max_stamp_cells(cfg));
     if (ecap > built_edit_cap_ || !edit_cells_[0].handle) {
         for (int i = 0; i < RING; ++i) {
@@ -166,7 +74,7 @@ void DenseVoxelField::ensure_capacity(const MetalContext& ctx, const Config& cfg
 void DenseVoxelField::encode_fill(void* compute_encoder, const Config& cfg,
                                   Cascade* const* cascades, int cascade_count,
                                   void* ripple_front_tex, int frame_index) {
-    if (!world_grid_.handle) return;
+    if (!surface_tex_.handle) return;
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
     int slot = frame_index % RING;
     int extent = cfg.voxel.grid_extent;
@@ -184,78 +92,20 @@ void DenseVoxelField::encode_fill(void* compute_encoder, const Config& cfg,
         u.cascade_size[i] = i < n ? cfg.cascades[i].size_m : 0.0f;
     std::memcpy(fill_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
-    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_incr_];
+    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_fill_];
     [ce setBuffer:(__bridge id<MTLBuffer>)fill_uniforms_[slot].handle offset:0 atIndex:0];
-    [ce setBuffer:(__bridge id<MTLBuffer>)prev_water_.handle offset:0 atIndex:1];
-    [ce setTexture:(__bridge id<MTLTexture>)terrain_grid_.handle atIndex:0];
-    [ce setTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:1];
-    [ce setTexture:(__bridge id<MTLTexture>)surface_tex_.handle atIndex:2];
+    [ce setTexture:(__bridge id<MTLTexture>)surface_tex_.handle atIndex:0];
     for (int i = 0; i < n; ++i) {
-        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->displacement_handle() atIndex:3 + i];
-        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->normal_handle() atIndex:3 + MAX_CASCADES + i];
+        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->displacement_handle() atIndex:1 + i];
+        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->normal_handle() atIndex:1 + MAX_CASCADES + i];
     }
     [ce setTexture:(__bridge id<MTLTexture>)ripple_front_tex
-           atIndex:3 + 2 * MAX_CASCADES];
+           atIndex:1 + 2 * MAX_CASCADES];
 
     MTLSize tg = MTLSizeMake(16, 16, 1);
     NSUInteger groups = (NSUInteger)((extent + 15) / 16);
     MTLSize grid = MTLSizeMake(groups, groups, 1);
     [ce dispatchThreadgroups:grid threadsPerThreadgroup:tg];
-}
-
-void DenseVoxelField::encode_stamp(void* compute_encoder, const Config& cfg,
-                                   const StampList& stamp, int frame_index) {
-    int count = stamp.count();
-    if (!world_grid_.handle || count <= 0 || built_stamp_cap_ <= 0) return;
-    id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
-    int slot = frame_index % RING;
-    int raw = std::min(count, built_stamp_cap_);
-    if (count > built_stamp_cap_) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            fprintf(stderr, "[vox] stamp truncated: %d cells exceed capacity %d\n", count, built_stamp_cap_);
-        }
-    }
-
-    // Dedup so each grid cell has at most one writer; without this, concurrent
-    // GPU threads writing the same cell produce non-deterministic results that
-    // diverge between independent dispatches (live vs verify). Keeps last-wins
-    // semantics (kelp < fish < boat priority preserved in list order).
-    int n = dedup_stamp(stamp.idx.data(), stamp.mat.data(), raw,
-                        (uint32_t*)stamp_cells_[slot].cpu_ptr,
-                        (uint8_t*)stamp_mats_[slot].cpu_ptr);
-
-    StampUniforms u{};
-    u.grid_extent  = cfg.voxel.grid_extent;
-    u.height_cells = cfg.voxel.height_cells;
-    u.count        = n;
-    std::memcpy(stamp_uniforms_[slot].cpu_ptr, &u, sizeof(u));
-
-    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_stamp_];
-    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_uniforms_[slot].handle offset:0 atIndex:0];
-    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_cells_[slot].handle offset:0 atIndex:1];
-    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_mats_[slot].handle offset:0 atIndex:2];
-    [ce setTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:0];
-    [ce dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
-        threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
-    prev_stamp_count_ = n;   // this frame's deduped cells become next frame's destamp target
-}
-
-void DenseVoxelField::encode_destamp(void* compute_encoder, const Config& cfg, int frame_index) {
-    if (prev_stamp_count_ <= 0 || !world_grid_.handle) return;
-    id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
-    int prev_slot = (frame_index + RING - 1) % RING;
-    StampUniforms u{ cfg.voxel.grid_extent, cfg.voxel.height_cells, prev_stamp_count_ };
-    std::memcpy(stamp_uniforms_[prev_slot].cpu_ptr, &u, sizeof(u));
-    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_destamp_];
-    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_uniforms_[prev_slot].handle offset:0 atIndex:0];
-    [ce setBuffer:(__bridge id<MTLBuffer>)stamp_cells_[prev_slot].handle offset:0 atIndex:1];
-    [ce setBuffer:(__bridge id<MTLBuffer>)prev_water_.handle offset:0 atIndex:2];
-    [ce setTexture:(__bridge id<MTLTexture>)terrain_grid_.handle atIndex:0];
-    [ce setTexture:(__bridge id<MTLTexture>)world_grid_.handle atIndex:1];
-    [ce dispatchThreads:MTLSizeMake((NSUInteger)prev_stamp_count_, 1, 1)
-        threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
 }
 
 bool DenseVoxelField::discrete_needs_resync(const EditList& edits) const {

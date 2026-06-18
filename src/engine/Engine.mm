@@ -145,7 +145,6 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->field.rebuild_if_dirty(e->ctx, cfg);
     e->ripple.rebuild_if_dirty(e->ctx, cfg);
     e->field.ensure_capacity(e->ctx, cfg);
-    e->field.upload_terrain_if_dirty((__bridge void*)cb, e->world.terrain_cells());
     e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
     e->ecosystem.rebuild_if_dirty(cfg, e->world);
@@ -184,8 +183,6 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->ripple.encode((__bridge void*)ce, cfg, dt, wake.data(), (int)wake.size());
     e->field.encode_fill((__bridge void*)ce, cfg, e->sim.data(), e->sim.count(),
                          e->ripple.front_texture(), e->frame_index);
-    e->field.encode_destamp((__bridge void*)ce, cfg, e->frame_index);
-    e->field.encode_stamp((__bridge void*)ce, cfg, e->stamp, e->frame_index);
     if (!discrete_resync)
         e->field.encode_apply_edits((__bridge void*)ce, cfg, e->frame.edits, e->frame_index);
     [ce endEncoding];

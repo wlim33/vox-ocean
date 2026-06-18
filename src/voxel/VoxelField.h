@@ -1,6 +1,5 @@
 #pragma once
 #include "voxel_grid.h"
-#include "entity/StampBudget.h"
 #include <cstdint>
 #include <vector>
 namespace vox {
@@ -14,13 +13,9 @@ public:
     virtual ~VoxelField() = default;
     virtual VoxelGridDesc desc(const Config&) const = 0;
     virtual void rebuild_if_dirty(const MetalContext&, const Config&) = 0;
-    virtual void upload_terrain_if_dirty(void* command_buffer,
-                                         const std::vector<uint8_t>& terrain_cells) = 0;
     virtual void ensure_capacity(const MetalContext&, const Config&) = 0;
     virtual void encode_fill(void* compute_encoder, const Config&, Cascade* const* cascades,
                              int cascade_count, void* ripple_front_tex, int frame) = 0;
-    virtual void encode_stamp(void* compute_encoder, const Config&, const StampList&, int frame) = 0;
-    virtual void* world_grid_handle()    const = 0;
     virtual void* discrete_grid_handle() const = 0;
     virtual void* surface_handle()       const = 0;
 };
