@@ -156,7 +156,9 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
                          (stern.y + half) / cfg.voxel.voxel_size_m,
                          1.5f, -cfg.entity.wake_amp });
     }
+    e->world.begin_frame();
     e->ecosystem.build_stamp(cfg, e->world.grid(), e->stamp);
+    e->world.ingest(e->stamp);   // composite entities into the authoritative grid
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, cfg);
