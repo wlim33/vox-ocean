@@ -20,6 +20,7 @@
 #include "io/ContactSheet.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include "render/RendererFactory.h"
 #include "ui/ImGuiBackend.h"
@@ -45,6 +46,7 @@ public:
     Simulation sim;
     SkyRenderer sky;
     DenseVoxelField field;
+    WaterModel water;   // CPU analytical surface; replaces the GPU height readback
     RippleSim ripple;
     std::unique_ptr<IVoxelRenderer> renderer;
     ImGuiBackend imgui;
@@ -137,8 +139,26 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
     e->ecosystem.rebuild_if_dirty(cfg);
+    e->water.configure(cfg.wave);
     e->ecosystem.update(cfg, dt, sim_time,
-        [&](float x, float z) { return e->field.height_at(x, z, cfg, e->frame_index); });
+        [&](float x, float z) { return e->water.height_at(x, z, sim_time); });
+
+    // TEMP parity gate (removed in the cut-readback task): compare the CPU model
+    // to the GPU readback at a few columns; log worst disagreement periodically.
+    {
+        static int parity_n = 0;
+        if ((parity_n++ % 120) == 0) {
+            const float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
+            const float pts[][2] = {{0,0}, {half*0.5f,-half*0.3f}, {-half*0.4f,half*0.6f}};
+            float worst = 0.0f;
+            for (auto& p : pts) {
+                float gpu = e->field.height_at(p[0], p[1], cfg, e->frame_index);
+                float cpu = e->water.height_at(p[0], p[1], sim_time);
+                worst = std::max(worst, std::fabs(gpu - cpu));
+            }
+            fprintf(stderr, "[vox][water-parity] worst |gpu-cpu| = %.3f m\n", worst);
+        }
+    }
 
     std::vector<RippleSplash> wake;
     glm::vec2 stern;
