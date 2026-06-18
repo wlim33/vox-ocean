@@ -7,6 +7,7 @@
 #include "gpu/MetalContext.h"
 #include "gpu/PipelineCache.h"
 #include "ocean/Simulation.h"
+#include "ocean/WaterModel.h"
 #include "render/SkyRenderer.h"
 #include "voxel/DenseVoxelField.h"
 #include "voxel/RippleSim.h"
@@ -20,6 +21,7 @@
 #include "io/ContactSheet.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include "render/RendererFactory.h"
 #include "ui/ImGuiBackend.h"
@@ -45,6 +47,7 @@ public:
     Simulation sim;
     SkyRenderer sky;
     DenseVoxelField field;
+    WaterModel water;   // CPU analytical surface; replaces the GPU height readback
     RippleSim ripple;
     std::unique_ptr<IVoxelRenderer> renderer;
     ImGuiBackend imgui;
@@ -137,8 +140,9 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
     e->ecosystem.rebuild_if_dirty(cfg);
+    e->water.configure(cfg.wave);
     e->ecosystem.update(cfg, dt, sim_time,
-        [&](float x, float z) { return e->field.height_at(x, z, cfg, e->frame_index); });
+        [&](float x, float z) { return e->water.height_at(x, z, sim_time); });
 
     std::vector<RippleSplash> wake;
     glm::vec2 stern;
@@ -166,7 +170,6 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
     e->sim.encode_mipgen((__bridge void*)blit, cfg);
-    e->field.encode_readback((__bridge void*)blit, cfg, e->frame_index);
     [blit endEncoding];
 }
 
