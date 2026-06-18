@@ -38,11 +38,15 @@ void World::begin_frame() {
 }
 
 void World::ingest(const StampList& stamps) {
-    for (int i = 0; i < stamps.count(); ++i)
-        cells_[stamps.idx[i]] = stamps.mat[i];   // last writer wins
+    for (int i = 0; i < stamps.count(); ++i) {
+        uint32_t idx = stamps.idx[i];
+        if (idx < cells_.size())
+            cells_[idx] = stamps.mat[i];   // last writer wins; ignore stale/out-of-range
+    }
 }
 
 float World::floor_top_y(float x, float z) const {
+    if (!grid_.has_value()) return 0.0f;
     const VoxelWorldParams& p = grid_->params();
     if (floor_.empty()) return -p.base_depth_m;
     float half = 0.5f * p.extent * p.voxel_size_m;

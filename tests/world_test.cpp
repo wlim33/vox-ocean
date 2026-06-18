@@ -85,3 +85,13 @@ TEST(World, ConfigureIdempotent) {
     w.configure(small_cfg(7));   // same params -> no change
     EXPECT_EQ(w.terrain_cells(), snapshot);
 }
+
+TEST(World, IngestIgnoresOutOfRangeIndex) {
+    vox::World w;
+    w.configure(small_cfg());
+    w.begin_frame();
+    vox::StampList s;
+    s.push((uint32_t)w.cells().size() + 100, vox::VoxMat::Boat);   // out of range
+    w.ingest(s);                                                   // must not crash/corrupt
+    EXPECT_EQ(w.cells(), w.terrain_cells());                       // nothing changed
+}
