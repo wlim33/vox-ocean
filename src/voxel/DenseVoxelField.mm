@@ -7,6 +7,7 @@
 #include "entity/StampBudget.h"
 #import <Metal/Metal.h>
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -107,6 +108,8 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
 void DenseVoxelField::upload_terrain_if_dirty(void* command_buffer,
                                               const std::vector<uint8_t>& terrain_cells) {
     if (!terrain_dirty_) return;
+    assert(!terrain_cells.empty() && terrain_cells.size() >= terrain_staging_.size
+           && "World terrain_cells must be populated and match staging size before upload");
     // Copy the CPU World's dense terrain into staging before the blit. Layout is
     // identical (x fastest, then y, then z), so sizes must match exactly.
     if (terrain_staging_.cpu_ptr && !terrain_cells.empty()) {
