@@ -30,6 +30,10 @@ public:
     // Dev gate: full-rebuild into a scratch grid + diff vs the live grid; logs mismatches.
     void encode_verify(void* compute_encoder, const Config&, Cascade* const* cascades,
                        int cascade_count, void* ripple_front_tex, const StampList&, int frame);
+    // Dev gate: upload World::cells() into a reference texture and diff vs discrete_grid_;
+    // logs nonzero mismatch counts. Takes both encoders (blit for upload, compute for diff).
+    void encode_verify_discrete(void* compute_encoder, void* blit_encoder, const Config&,
+                                const std::vector<uint8_t>& cells, int frame);
 private:
     Texture terrain_grid_{}, world_grid_{}, surface_tex_{};
     Buffer  terrain_staging_{};
@@ -53,5 +57,8 @@ private:
     Buffer  edit_cells_[RING]{}, edit_mats_[RING]{}, apply_uniforms_[RING]{};
     int     built_edit_cap_ = 0;
     void*   pso_apply_edits_ = nullptr;
+    Texture discrete_ref_{};                  // verify: fresh upload of World::cells() (verify_fill only)
+    Buffer  discrete_ref_staging_{};          // verify: separate staging for discrete_ref_ (no alias with discrete_staging_)
+    Buffer  discrete_diff_count_[RING]{};     // verify: mismatch counter ring for discrete_grid_ check
 };
 }
