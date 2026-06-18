@@ -5,7 +5,6 @@
 #include "entity/StampBudget.h"
 #include "voxel/VoxelWorld.h"
 #include <functional>
-#include <vector>
 #include <glm/glm.hpp>
 namespace vox {
 struct Config;

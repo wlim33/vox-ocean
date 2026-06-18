@@ -1,8 +1,6 @@
 #include "entity/Ecosystem.h"
 #include "world/World.h"
 #include "core/Config.h"
-#include <algorithm>
-#include <cmath>
 namespace vox {
 
 void Ecosystem::rebuild_if_dirty(const Config& cfg, const World& world) {
