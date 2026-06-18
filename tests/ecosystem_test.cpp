@@ -1,6 +1,7 @@
 #include "entity/Ecosystem.h"
 #include "entity/StampBudget.h"
 #include "voxel/VoxelWorld.h"
+#include "world/World.h"
 #include "core/Config.h"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -21,9 +22,11 @@ static vox::VoxelWorld eco_world(const vox::Config& c) {
 
 TEST(Ecosystem, BuildStampStaysWithinBudget) {
     auto c = eco_cfg();
+    vox::World world;
+    world.configure(c);
     vox::Ecosystem eco;
-    eco.rebuild_if_dirty(c);
-    eco.update(c, 1.0f/60.0f, 0.0f, [](float, float){ return 0.0f; });
+    eco.rebuild_if_dirty(c, world);
+    eco.update(c, 1.0f/60.0f, 0.0f, [](float, float){ return 0.0f; }, world);
     vox::StampList out; eco.build_stamp(c, eco_world(c), out);
     EXPECT_GT(out.count(), 0);
     EXPECT_LE(out.count(), vox::max_stamp_cells(c));   // never exceeds the buffer
@@ -32,8 +35,11 @@ TEST(Ecosystem, BuildStampStaysWithinBudget) {
 TEST(Ecosystem, BoatOnlyStampsBoat) {
     auto c = eco_cfg();
     c.kelp.enabled = false; c.fish.enabled = false;
-    vox::Ecosystem eco; eco.rebuild_if_dirty(c);
-    eco.update(c, 1.0f/60.0f, 0.0f, [](float, float){ return 0.0f; });
+    vox::World world;
+    world.configure(c);
+    vox::Ecosystem eco;
+    eco.rebuild_if_dirty(c, world);
+    eco.update(c, 1.0f/60.0f, 0.0f, [](float, float){ return 0.0f; }, world);
     vox::StampList out; eco.build_stamp(c, eco_world(c), out);
     EXPECT_GT(out.count(), 0);
     for (int i = 0; i < out.count(); ++i)
@@ -43,37 +49,48 @@ TEST(Ecosystem, BoatOnlyStampsBoat) {
 TEST(Ecosystem, DisabledEntitiesProduceNoCells) {
     auto c = eco_cfg();
     c.kelp.enabled = false; c.fish.enabled = false; c.entity.boat_enabled = false;
-    vox::Ecosystem eco; eco.rebuild_if_dirty(c);
-    eco.update(c, 1.0f/60.0f, 0.0f, [](float, float){ return 0.0f; });
+    vox::World world;
+    world.configure(c);
+    vox::Ecosystem eco;
+    eco.rebuild_if_dirty(c, world);
+    eco.update(c, 1.0f/60.0f, 0.0f, [](float, float){ return 0.0f; }, world);
     vox::StampList out; eco.build_stamp(c, eco_world(c), out);
     EXPECT_EQ(out.count(), 0);
 }
 
 // Recover the cached floor cell-count at the +X+Z corner, independent of the
 // world-y conversion (which uses live cfg): h = (floor_top_y + base) / step.
-static int corner_floor_cells(const vox::Ecosystem& eco, const vox::Config& c) {
+static int corner_floor_cells(const vox::World& world, const vox::Config& c) {
     float half = 0.5f * c.voxel.grid_extent * c.voxel.voxel_size_m;
     float xz = half - 0.5f * c.voxel.voxel_size_m;             // last column center
-    float y = eco.floor_top_y(c, xz, xz);
+    float y = world.floor_top_y(xz, xz);
     return (int)std::lround((y + c.voxel.base_depth_m) / c.voxel.height_step_m);
 }
 
 TEST(Ecosystem, FloorRegeneratesWhenBaseDepthChanges) {
     auto c = eco_cfg();                          // base_depth 10 -> sea 40, peak 56
-    vox::Ecosystem eco; eco.rebuild_if_dirty(c);
-    int before = corner_floor_cells(eco, c);
+    vox::World world;
+    world.configure(c);
+    vox::Ecosystem eco;
+    eco.rebuild_if_dirty(c, world);
+    int before = corner_floor_cells(world, c);
     c.voxel.base_depth_m = 6.0f;                 // sea 24, peak 40 -> shoreline lowers
-    eco.rebuild_if_dirty(c);
-    int after = corner_floor_cells(eco, c);
+    world.configure(c);
+    eco.rebuild_if_dirty(c, world);
+    int after = corner_floor_cells(world, c);
     EXPECT_NE(before, after);                     // stale floor would give equal counts
 }
 
 TEST(Ecosystem, FloorRegeneratesWhenHeightStepChanges) {
     auto c = eco_cfg();                          // step 0.25 -> sea 40, peak 56
-    vox::Ecosystem eco; eco.rebuild_if_dirty(c);
-    int before = corner_floor_cells(eco, c);
+    vox::World world;
+    world.configure(c);
+    vox::Ecosystem eco;
+    eco.rebuild_if_dirty(c, world);
+    int before = corner_floor_cells(world, c);
     c.voxel.height_step_m = 0.5f;                // sea 20, peak 28 -> shoreline lowers
-    eco.rebuild_if_dirty(c);
-    int after = corner_floor_cells(eco, c);
+    world.configure(c);
+    eco.rebuild_if_dirty(c, world);
+    int after = corner_floor_cells(world, c);
     EXPECT_NE(before, after);
 }

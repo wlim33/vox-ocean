@@ -93,6 +93,7 @@ target_sources(vox-ocean-tests PRIVATE
 target_sources(vox-ocean-tests PRIVATE
     ecosystem_test.cpp
     ${CMAKE_SOURCE_DIR}/src/entity/Ecosystem.cpp
+    ${CMAKE_SOURCE_DIR}/src/world/World.cpp
 )
 
 target_sources(vox-ocean-tests PRIVATE

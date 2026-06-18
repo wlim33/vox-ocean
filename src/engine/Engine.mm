@@ -142,10 +142,11 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->field.upload_terrain_if_dirty((__bridge void*)cb, e->world.terrain_cells());
     e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
-    e->ecosystem.rebuild_if_dirty(cfg);
+    e->ecosystem.rebuild_if_dirty(cfg, e->world);
     e->water.configure(cfg.wave);
     e->ecosystem.update(cfg, dt, sim_time,
-        [&](float x, float z) { return e->water.height_at(x, z, sim_time); });
+        [&](float x, float z) { return e->water.height_at(x, z, sim_time); },
+        e->world);
 
     std::vector<RippleSplash> wake;
     glm::vec2 stern;
