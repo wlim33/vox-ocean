@@ -84,6 +84,13 @@ struct StampUniforms {
     int count;
 };
 
+struct ApplyEditsUniforms {
+    int grid_extent;
+    int height_cells;
+    int edit_count;
+    int _pad;
+};
+
 struct MarchUniforms {
     mat4  inv_view_proj;
     vec3  camera_pos;        float _mpad0;

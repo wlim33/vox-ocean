@@ -2,6 +2,7 @@
 #include "voxel/VoxelField.h"
 #include "gpu/Buffer.h"
 #include "gpu/Texture.h"
+#include "world/EditList.h"
 namespace vox {
 struct PipelineCache;
 
@@ -21,6 +22,9 @@ public:
     void encode_fill(void*, const Config&, Cascade* const*, int, void* ripple_front_tex, int) override;
     void encode_stamp(void*, const Config&, const StampList&, int) override;
     void encode_destamp(void* compute_encoder, const Config&, int frame);
+    bool discrete_needs_resync(const EditList& edits) const;
+    void encode_apply_edits(void* compute_encoder, const Config&, const EditList& edits, int frame);
+    void encode_discrete_resync(void* blit_encoder, const Config&, const std::vector<uint8_t>& cells, int frame);
     void* world_grid_handle() const override { return world_grid_.handle; }
     void* surface_handle()    const override { return surface_tex_.handle; }
     // Dev gate: full-rebuild into a scratch grid + diff vs the live grid; logs mismatches.
@@ -44,5 +48,10 @@ private:
     Texture world_grid_verify_{};        // scratch full-rebuild grid (verify_fill only)
     Buffer  diff_count_[RING]{};         // atomic mismatch counter readback ring
     void*   pso_diff_  = nullptr;
+    Texture discrete_grid_{};                 // persistent terrain+entities mirror (no water)
+    Buffer  discrete_staging_{};              // CPU->GPU staging for resync full uploads
+    Buffer  edit_cells_[RING]{}, edit_mats_[RING]{}, apply_uniforms_[RING]{};
+    int     built_edit_cap_ = 0;
+    void*   pso_apply_edits_ = nullptr;
 };
 }

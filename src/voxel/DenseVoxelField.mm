@@ -45,6 +45,7 @@ void DenseVoxelField::init(const MetalContext& ctx, PipelineCache& cache) {
     pso_diff_ = cache.compute_pso(ctx, "grid_diff");
     pso_incr_ = cache.compute_pso(ctx, "world_fill_incremental");
     pso_destamp_ = cache.compute_pso(ctx, "destamp_cells");
+    pso_apply_edits_ = cache.compute_pso(ctx, "apply_edits");
     for (int i = 0; i < RING; ++i) diff_count_[i] = make_buffer(ctx, sizeof(uint32_t), true);
 
     for (int i = 0; i < RING; ++i) {
@@ -73,6 +74,7 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     destroy_texture(world_grid_);
     destroy_texture(surface_tex_);
     destroy_texture(world_grid_verify_);
+    destroy_texture(discrete_grid_);
     destroy_buffer(terrain_staging_);
     destroy_buffer(prev_water_);
 
@@ -92,6 +94,11 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     if (cfg.render.verify_fill)
         world_grid_verify_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
                                              TexFormat::R8Uint, /*storage_write=*/true);
+
+    discrete_grid_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
+                                     TexFormat::R8Uint, /*storage_write=*/true);
+    destroy_buffer(discrete_staging_);
+    discrete_staging_ = make_buffer(ctx, (size_t)extent * hc * extent, true);
 
     // Terrain bytes are owned by the CPU World now; allocate staging and fill
     // it at upload time from the supplied terrain_cells (single source of truth).
@@ -150,6 +157,17 @@ void DenseVoxelField::ensure_capacity(const MetalContext& ctx, const Config& cfg
         stamp_mats_[i]  = make_buffer(ctx, sizeof(uint8_t)  * (size_t)cap, true);
     }
     built_stamp_cap_ = cap;
+
+    int ecap = std::max(1, 2 * max_stamp_cells(cfg));
+    if (ecap > built_edit_cap_ || !edit_cells_[0].handle) {
+        for (int i = 0; i < RING; ++i) {
+            destroy_buffer(edit_cells_[i]); destroy_buffer(edit_mats_[i]); destroy_buffer(apply_uniforms_[i]);
+            edit_cells_[i]    = make_buffer(ctx, sizeof(uint32_t) * (size_t)ecap, true);
+            edit_mats_[i]     = make_buffer(ctx, sizeof(uint8_t)  * (size_t)ecap, true);
+            apply_uniforms_[i]= make_buffer(ctx, sizeof(ApplyEditsUniforms), true);
+        }
+        built_edit_cap_ = ecap;
+    }
 }
 
 void DenseVoxelField::encode_fill(void* compute_encoder, const Config& cfg,
@@ -299,6 +317,46 @@ void DenseVoxelField::encode_verify(void* compute_encoder, const Config& cfg,
     // read the oldest slot's counter (dev log only; value settles within a few frames)
     uint32_t prev = *(const uint32_t*)diff_count_[(frame_index + 1) % RING].cpu_ptr;
     if (prev > 0) fprintf(stderr, "[vox][verify_fill] %u cell mismatches\n", prev);
+}
+
+bool DenseVoxelField::discrete_needs_resync(const EditList& edits) const {
+    return edits.resync || edits.count() > built_edit_cap_;
+}
+
+void DenseVoxelField::encode_apply_edits(void* compute_encoder, const Config& cfg,
+                                         const EditList& edits, int frame) {
+    if (edits.count() == 0) return;                 // nothing moved this frame
+    int slot = frame % RING;
+    int n = edits.count();
+    std::memcpy(edit_cells_[slot].cpu_ptr, edits.idx.data(), (size_t)n * sizeof(uint32_t));
+    std::memcpy(edit_mats_[slot].cpu_ptr,  edits.mat.data(), (size_t)n * sizeof(uint8_t));
+    ApplyEditsUniforms u{ cfg.voxel.grid_extent, cfg.voxel.height_cells, n, 0 };
+    std::memcpy(apply_uniforms_[slot].cpu_ptr, &u, sizeof(u));
+    id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
+    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_apply_edits_];
+    [ce setBuffer:(__bridge id<MTLBuffer>)apply_uniforms_[slot].handle offset:0 atIndex:0];
+    [ce setBuffer:(__bridge id<MTLBuffer>)edit_cells_[slot].handle     offset:0 atIndex:1];
+    [ce setBuffer:(__bridge id<MTLBuffer>)edit_mats_[slot].handle      offset:0 atIndex:2];
+    [ce setTexture:(__bridge id<MTLTexture>)discrete_grid_.handle atIndex:0];
+    [ce dispatchThreads:MTLSizeMake((NSUInteger)n, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
+}
+
+void DenseVoxelField::encode_discrete_resync(void* blit_encoder, const Config& cfg,
+                                             const std::vector<uint8_t>& cells, int frame) {
+    (void)frame;
+    int extent = cfg.voxel.grid_extent, hc = cfg.voxel.height_cells;
+    size_t want = (size_t)extent * hc * extent;
+    if (!discrete_staging_.cpu_ptr || cells.size() < want) return;   // guarded
+    std::memcpy(discrete_staging_.cpu_ptr, cells.data(), want);
+    id<MTLBlitCommandEncoder> blit = (__bridge id<MTLBlitCommandEncoder>)blit_encoder;
+    [blit copyFromBuffer:(__bridge id<MTLBuffer>)discrete_staging_.handle
+            sourceOffset:0
+       sourceBytesPerRow:(NSUInteger)extent
+     sourceBytesPerImage:(NSUInteger)extent * (NSUInteger)hc
+              sourceSize:MTLSizeMake((NSUInteger)extent, (NSUInteger)hc, (NSUInteger)extent)
+               toTexture:(__bridge id<MTLTexture>)discrete_grid_.handle
+        destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
 }
 
 }

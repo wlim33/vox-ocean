@@ -169,13 +169,15 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->world.build_edits(e->frame.edits);
 #ifndef NDEBUG
     // Validate the edit stream reconstructs the discrete world (step 4 moves
-    // this apply onto the GPU). applied_dbg is only ever mutated via apply()
+    // this apply onto the GPU). applied_dbg is only ever mutated via apply_edits()
     // or a wholesale resync — never copied from cells() mid-stream.
     if (e->frame.edits.resync) e->applied_dbg = e->world.cells();
     else vox::apply_edits(e->applied_dbg, e->frame.edits);
     assert(e->applied_dbg == e->world.cells()
            && "EditList stream diverged from World::cells()");
 #endif
+
+    bool discrete_resync = e->field.discrete_needs_resync(e->frame.edits);
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, cfg);
@@ -186,10 +188,14 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->field.encode_stamp((__bridge void*)ce, cfg, e->stamp, e->frame_index);
     e->field.encode_verify((__bridge void*)ce, cfg, e->sim.data(), e->sim.count(),
                            e->ripple.front_texture(), e->stamp, e->frame_index);
+    if (!discrete_resync)
+        e->field.encode_apply_edits((__bridge void*)ce, cfg, e->frame.edits, e->frame_index);
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
     e->sim.encode_mipgen((__bridge void*)blit, cfg);
+    if (discrete_resync)
+        e->field.encode_discrete_resync((__bridge void*)blit, cfg, e->world.cells(), e->frame_index);
     [blit endEncoding];
 }
 
