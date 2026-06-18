@@ -8,6 +8,7 @@
 #include "gpu/PipelineCache.h"
 #include "ocean/Simulation.h"
 #include "ocean/WaterModel.h"
+#include "world/World.h"
 #include "render/SkyRenderer.h"
 #include "voxel/DenseVoxelField.h"
 #include "voxel/RippleSim.h"
@@ -47,6 +48,7 @@ public:
     Simulation sim;
     SkyRenderer sky;
     DenseVoxelField field;
+    World world;
     WaterModel water;   // CPU analytical surface; replaces the GPU height readback
     RippleSim ripple;
     std::unique_ptr<IVoxelRenderer> renderer;
@@ -133,16 +135,18 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     const Config& cfg = e->app->config();
     e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, cfg);
     e->sim.rebuild_if_dirty(e->ctx, cfg);
+    e->world.configure(cfg);
     e->field.rebuild_if_dirty(e->ctx, cfg);
     e->ripple.rebuild_if_dirty(e->ctx, cfg);
     e->field.ensure_capacity(e->ctx, cfg);
-    e->field.upload_terrain_if_dirty((__bridge void*)cb);
+    e->field.upload_terrain_if_dirty((__bridge void*)cb, e->world.terrain_cells());
     e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
-    e->ecosystem.rebuild_if_dirty(cfg);
+    e->ecosystem.rebuild_if_dirty(cfg, e->world);
     e->water.configure(cfg.wave);
     e->ecosystem.update(cfg, dt, sim_time,
-        [&](float x, float z) { return e->water.height_at(x, z, sim_time); });
+        [&](float x, float z) { return e->water.height_at(x, z, sim_time); },
+        e->world);
 
     std::vector<RippleSplash> wake;
     glm::vec2 stern;
@@ -152,10 +156,9 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
                          (stern.y + half) / cfg.voxel.voxel_size_m,
                          1.5f, -cfg.entity.wake_amp });
     }
-    VoxelWorld world({cfg.voxel.grid_extent, cfg.voxel.height_cells,
-                      cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
-                      cfg.voxel.base_depth_m});
-    e->ecosystem.build_stamp(cfg, world, e->stamp);
+    e->world.begin_frame();
+    e->ecosystem.build_stamp(cfg, e->world.grid(), e->stamp);
+    e->world.ingest(e->stamp);   // composite entities into the authoritative grid
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, cfg);

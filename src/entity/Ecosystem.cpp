@@ -1,19 +1,15 @@
 #include "entity/Ecosystem.h"
+#include "world/World.h"
 #include "core/Config.h"
-#include <algorithm>
-#include <cmath>
 namespace vox {
 
-void Ecosystem::rebuild_if_dirty(const Config& cfg) {
+void Ecosystem::rebuild_if_dirty(const Config& cfg, const World& world) {
     bool floor_dirty = cfg.voxel.grid_extent != built_extent_
                     || cfg.voxel.height_cells != built_height_cells_
                     || cfg.voxel.floor_seed   != built_floor_seed_
                     || cfg.voxel.base_depth_m  != built_floor_base_depth_
                     || cfg.voxel.height_step_m != built_floor_step_;
     if (floor_dirty) {
-        floor_ = generate_floor({ cfg.voxel.grid_extent, cfg.voxel.height_cells,
-                                  (uint32_t)cfg.voxel.floor_seed,
-                                  cfg.voxel.base_depth_m, cfg.voxel.height_step_m });
         built_extent_            = cfg.voxel.grid_extent;
         built_height_cells_      = cfg.voxel.height_cells;
         built_floor_seed_        = cfg.voxel.floor_seed;
@@ -26,7 +22,7 @@ void Ecosystem::rebuild_if_dirty(const Config& cfg) {
         || cfg.kelp.max_height_m != built_kelp_height_
         || cfg.kelp.seed         != built_kelp_seed_
         || cfg.voxel.height_step_m != built_kelp_step_) {
-        kelp_.rebuild(cfg, floor_);
+        kelp_.rebuild(cfg, world.floor());
         built_kelp_enabled_ = cfg.kelp.enabled;
         built_kelp_density_ = cfg.kelp.density;
         built_kelp_height_  = cfg.kelp.max_height_m;
@@ -47,14 +43,15 @@ void Ecosystem::rebuild_if_dirty(const Config& cfg) {
     }
 }
 
-void Ecosystem::update(const Config& cfg, float dt, float t, const HeightFn& water_height) {
+void Ecosystem::update(const Config& cfg, float dt, float t, const HeightFn& water_height,
+                       const World& world) {
     if (cfg.entity.boat_enabled) {
         float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
         boat_.update(dt, t, water_height, cfg.entity.boat_speed_mps, half, cfg.voxel.voxel_size_m);
     }
     kelp_.update(cfg, t, water_height);
     fish_.update(cfg, dt, t, water_height,
-                 [&](float x, float z) { return floor_top_y(cfg, x, z); });
+                 [&](float x, float z) { return world.floor_top_y(x, z); });
 }
 
 void Ecosystem::build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out) const {
@@ -72,13 +69,4 @@ bool Ecosystem::shed_boat_wake(const Config& cfg, glm::vec2& out_world) {
     return boat_.shed_wake(cfg.voxel.voxel_size_m, out_world);
 }
 
-float Ecosystem::floor_top_y(const Config& cfg, float x, float z) const {
-    int extent = cfg.voxel.grid_extent;
-    if (floor_.empty()) return -cfg.voxel.base_depth_m;
-    float half = 0.5f * extent * cfg.voxel.voxel_size_m;
-    int ix = std::clamp((int)std::floor((x + half) / cfg.voxel.voxel_size_m), 0, extent - 1);
-    int iz = std::clamp((int)std::floor((z + half) / cfg.voxel.voxel_size_m), 0, extent - 1);
-    int h = floor_[(size_t)iz * extent + ix].height;
-    return -cfg.voxel.base_depth_m + (float)h * cfg.voxel.height_step_m;
-}
 }

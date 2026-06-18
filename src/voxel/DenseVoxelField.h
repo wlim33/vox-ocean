@@ -15,7 +15,8 @@ public:
     void init(const MetalContext&, PipelineCache&);
     VoxelGridDesc desc(const Config&) const override;
     void rebuild_if_dirty(const MetalContext&, const Config&) override;
-    void upload_terrain_if_dirty(void* command_buffer) override;
+    void upload_terrain_if_dirty(void* command_buffer,
+                                 const std::vector<uint8_t>& terrain_cells) override;
     void ensure_capacity(const MetalContext&, const Config&) override;
     void encode_fill(void*, const Config&, Cascade* const*, int, void* ripple_front_tex, int) override;
     void encode_stamp(void*, const Config&, const StampList&, int) override;
