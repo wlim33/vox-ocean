@@ -148,7 +148,7 @@ TEST(World, EditStreamReconstructsWorld) {
         w.ingest(s);
         vox::EditList e; w.build_edits(e);
         if (e.resync) replica = w.cells();
-        else vox::apply(replica, e);
+        else vox::apply_edits(replica, e);
         EXPECT_EQ(replica, w.cells());   // stream reconstructs the world each frame
     }
 }

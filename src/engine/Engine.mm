@@ -172,7 +172,7 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     // this apply onto the GPU). applied_dbg is only ever mutated via apply()
     // or a wholesale resync — never copied from cells() mid-stream.
     if (e->frame.edits.resync) e->applied_dbg = e->world.cells();
-    else vox::apply(e->applied_dbg, e->frame.edits);
+    else vox::apply_edits(e->applied_dbg, e->frame.edits);
     assert(e->applied_dbg == e->world.cells()
            && "EditList stream diverged from World::cells()");
 #endif
