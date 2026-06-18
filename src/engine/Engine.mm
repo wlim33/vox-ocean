@@ -7,6 +7,7 @@
 #include "gpu/MetalContext.h"
 #include "gpu/PipelineCache.h"
 #include "ocean/Simulation.h"
+#include "ocean/WaterModel.h"
 #include "render/SkyRenderer.h"
 #include "voxel/DenseVoxelField.h"
 #include "voxel/RippleSim.h"

@@ -1,6 +1,5 @@
 #pragma once
 #include "core/InputEvent.h"
-#include "ocean/WaterModel.h"
 
 // Threading contract: all functions must be called from the thread that owns
 // the MTKView (the main thread), except engine_push_input, which may be called
