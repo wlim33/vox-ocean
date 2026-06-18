@@ -20,10 +20,8 @@ public:
     void encode_fill(void*, const Config&, Cascade* const*, int, void* ripple_front_tex, int) override;
     void encode_stamp(void*, const Config&, const StampList&, int) override;
     void encode_destamp(void* compute_encoder, const Config&, int frame);
-    void encode_readback(void*, const Config&, int) override;
     void* world_grid_handle() const override { return world_grid_.handle; }
     void* surface_handle()    const override { return surface_tex_.handle; }
-    float height_at(float x, float z, const Config&, int frame) const override;
     // Dev gate: full-rebuild into a scratch grid + diff vs the live grid; logs mismatches.
     void encode_verify(void* compute_encoder, const Config&, Cascade* const* cascades,
                        int cascade_count, void* ripple_front_tex, const StampList&, int frame);
@@ -32,7 +30,6 @@ private:
     Buffer  terrain_staging_{};
     Buffer  fill_uniforms_[RING]{};
     Buffer  stamp_uniforms_[RING]{}, stamp_cells_[RING]{}, stamp_mats_[RING]{};
-    Buffer  surface_readback_[RING]{};
     int     built_stamp_cap_ = 0;
     int     built_extent_ = 0, built_height_cells_ = 0, built_seed_ = 0;
     float   built_base_depth_ = 0.0f, built_height_step_ = 0.0f;

@@ -94,14 +94,6 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
         world_grid_verify_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
                                              TexFormat::R8Uint, /*storage_write=*/true);
 
-    // Surface readback ring: CPU-readable buffers for height_at.
-    // Zeroed so the boat reads height 0 until real data lands.
-    for (int i = 0; i < RING; ++i) {
-        destroy_buffer(surface_readback_[i]);
-        surface_readback_[i] = make_buffer(ctx, (size_t)extent * extent * 2 * sizeof(float), true);
-        std::memset(surface_readback_[i].cpu_ptr, 0, surface_readback_[i].size);
-    }
-
     VoxelWorld world({ extent, hc, cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
                        cfg.voxel.base_depth_m });
     std::vector<FloorColumn> floor = generate_floor({ extent, hc, (uint32_t)seed,
@@ -260,22 +252,6 @@ void DenseVoxelField::encode_destamp(void* compute_encoder, const Config& cfg, i
         threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
 }
 
-void DenseVoxelField::encode_readback(void* blit_encoder, const Config& cfg,
-                                      int frame_index) {
-    if (!surface_tex_.handle) return;
-    id<MTLBlitCommandEncoder> blit = (__bridge id<MTLBlitCommandEncoder>)blit_encoder;
-    int slot = frame_index % RING;
-    int extent = cfg.voxel.grid_extent;
-    [blit copyFromTexture:(__bridge id<MTLTexture>)surface_tex_.handle
-              sourceSlice:0 sourceLevel:0
-             sourceOrigin:MTLOriginMake(0, 0, 0)
-               sourceSize:MTLSizeMake(extent, extent, 1)
-                 toBuffer:(__bridge id<MTLBuffer>)surface_readback_[slot].handle
-        destinationOffset:0
-   destinationBytesPerRow:(NSUInteger)extent * 2 * sizeof(float)
- destinationBytesPerImage:(NSUInteger)extent * extent * 2 * sizeof(float)];
-}
-
 void DenseVoxelField::encode_verify(void* compute_encoder, const Config& cfg,
                                     Cascade* const* cascades, int cascade_count,
                                     void* ripple_front_tex, const StampList& stamp, int frame_index) {
@@ -328,16 +304,6 @@ void DenseVoxelField::encode_verify(void* compute_encoder, const Config& cfg,
     // read the oldest slot's counter (dev log only; value settles within a few frames)
     uint32_t prev = *(const uint32_t*)diff_count_[(frame_index + 1) % RING].cpu_ptr;
     if (prev > 0) fprintf(stderr, "[vox][verify_fill] %u cell mismatches\n", prev);
-}
-
-float DenseVoxelField::height_at(float x, float z, const Config& cfg,
-                                 int frame_index) const {
-    int slot = frame_index % RING;   // written 3 frames ago: complete (in-flight <= 3)
-    if (!surface_readback_[slot].cpu_ptr) return 0.0f;
-    int extent = cfg.voxel.grid_extent;
-    const float* buf = (const float*)surface_readback_[slot].cpu_ptr;
-    VgCol c = vg_column_at(desc(cfg), x, z);
-    return buf[((size_t)c.iz * extent + c.ix) * 2];   // RG32F: .r = water top_y
 }
 
 }
