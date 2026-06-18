@@ -10,20 +10,59 @@ Real-time voxelized FFT ocean for macOS and iOS. Metal + SwiftUI,
 C++20 / Objective-C++ engine with direct Swift↔C++ interop.
 
 - Phillips spectrum with directional swell, Stockham radix-2 inverse FFT in compute
-- True voxel world: per-frame compute fills a 3D material grid (water, sand, rock)
-  from the displacement maps, floor-quantized; procedural seeded ocean floor
-- Ray-marched rendering: full-screen DDA through the grid, refraction +
+- CPU-authoritative voxel world: the dense terrain+entity material grid (sand,
+  rock, boat, kelp, fish) is owned on the CPU and mirrored to the GPU each frame
+  as a compact edit delta; procedural seeded ocean floor, floor-quantized
+- Ray-marched rendering: full-screen DDA through the GPU grid, with water
+  reconstructed analytically from the per-column surface height — refraction +
   Beer–Lambert transmission through the water volume, composited over the
   sky; scalable march resolution (`march.render_scale`)
 - Interactive ripple layer: damped wave-equation sim summed with the FFT,
   splash injection (`ripple.rain_rate`), absorbing diorama borders
-- Autonomous voxel boat: hull stamped into the grid, buoyancy from the live
-  surface heights, deterministic wandering course, stern wake in the ripple layer
+- Autonomous voxel boat: hull composited into the CPU world, buoyancy from a
+  CPU analytical wave model, deterministic wandering course, stern wake in the ripple layer
 - Living ecosystem: a seeded kelp bed rooted across the floor that sways with
   the live water field (and the boat's wake), and fish in deterministic
-  wandering schools — all stamped through one multi-material cell pass
+  wandering schools — all composited into the CPU world and shipped to the GPU
+  in a single per-frame edit list
 - Finite diorama with volumetric Beer–Lambert attenuation along the in-water path, Jacobian foam on crest voxels
 - Preetham sky baked to a cubemap; ACES tonemap
+
+## Architecture
+
+The engine keeps a hard wall between **world state (CPU)** and **render state
+(GPU)**, joined by a single one-way interface — the CPU is authoritative and
+nothing flows back from the GPU.
+
+```
+┌──────────────── CPU (authoritative, Metal-free, unit-tested) ───────────────┐
+│  World         dense discrete grid: terrain + entities, mutated each frame   │
+│  WaterModel    analytical wave height for buoyancy/physics (no GPU readback) │
+│  Ecosystem     boat / fish / kelp — query WaterModel, composite into World   │
+│      └─ build_frame() ─► RenderFrame { EditList edits; WaterState water; }    │
+└────────────────────────────────────┬────────────────────────────────────────┘
+                                      │  consume_frame(cb)        one way ▼
+┌──────────────────────────────────────▼──────────────────── GPU (Metal) ──────┐
+│  discrete_grid_   persistent terrain+entity texture; apply_edits applies the  │
+│                   per-frame EditList (full re-upload of World on resync)      │
+│  FFT + ripple     driven by WaterState → surface_tex_ (per-column water top)  │
+│  raymarch         DDA over discrete_grid_; water DERIVED in-shader from       │
+│                   surface_tex_ (an air cell below the surface top is water)   │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **`build_frame()`** (CPU) advances the sim and entities, writes them into
+  `World`, and diffs `World`'s discrete grid against the previous frame to emit
+  an `EditList` (only the cells that changed).
+- **`consume_frame(cb)`** (GPU) encodes everything: `apply_edits` updates the
+  persistent `discrete_grid_` from the edit list, the FFT/ripple passes write
+  `surface_tex_`, and the raymarch renders the grid with water composited as a
+  surface layer rather than stored as voxels.
+- The camera is a per-view argument, not part of `RenderFrame` (the headless
+  `--snapshot` renders one built frame from six orthographic cameras).
+
+The split makes the world logic testable without Metal and lets the two halves
+evolve independently behind the `RenderFrame` boundary.
 
 ## Building
 
