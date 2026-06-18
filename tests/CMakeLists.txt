@@ -116,5 +116,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/world/World.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    edit_list_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/world/EditList.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)

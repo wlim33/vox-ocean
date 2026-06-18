@@ -27,6 +27,7 @@ void World::configure(const Config& cfg) {
                 terrain_[grid_->cell_index(ix, iy, iz)] = fc.material;
         }
     cells_ = terrain_;   // initial overlay = bare terrain
+    resync_ = true;      // terrain/grid changed -> next build_edits re-seeds
 
     built_extent_     = v.grid_extent;   built_height_cells_ = v.height_cells;
     built_seed_       = v.floor_seed;    built_base_depth_   = v.base_depth_m;
@@ -43,6 +44,18 @@ void World::ingest(const StampList& stamps) {
         if (idx < cells_.size())
             cells_[idx] = stamps.mat[i];   // last writer wins; ignore stale/out-of-range
     }
+}
+
+void World::build_edits(EditList& out) {
+    out.clear();
+    if (resync_ || prev_cells_.size() != cells_.size()) {
+        out.resync = true;          // consumer re-seeds wholesale from cells()
+        prev_cells_ = cells_;
+        resync_ = false;
+        return;
+    }
+    diff(prev_cells_, cells_, out);
+    prev_cells_ = cells_;
 }
 
 float World::floor_top_y(float x, float z) const {

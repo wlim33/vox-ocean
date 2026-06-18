@@ -9,6 +9,7 @@
 #include "ocean/Simulation.h"
 #include "ocean/WaterModel.h"
 #include "world/World.h"
+#include "world/RenderFrame.h"
 #include "render/SkyRenderer.h"
 #include "voxel/DenseVoxelField.h"
 #include "voxel/RippleSim.h"
@@ -21,6 +22,7 @@
 #include "io/PngWriter.h"
 #include "io/ContactSheet.h"
 #include <algorithm>
+#include <cassert>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -50,6 +52,10 @@ public:
     DenseVoxelField field;
     World world;
     WaterModel water;   // CPU analytical surface; replaces the GPU height readback
+    RenderFrame frame;
+#ifndef NDEBUG
+    std::vector<uint8_t> applied_dbg;   // debug-only: replica rebuilt from the edit stream
+#endif
     RippleSim ripple;
     std::unique_ptr<IVoxelRenderer> renderer;
     ImGuiBackend imgui;
@@ -159,6 +165,17 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     e->world.begin_frame();
     e->ecosystem.build_stamp(cfg, e->world.grid(), e->stamp);
     e->world.ingest(e->stamp);   // composite entities into the authoritative grid
+
+    e->world.build_edits(e->frame.edits);
+#ifndef NDEBUG
+    // Validate the edit stream reconstructs the discrete world (step 4 moves
+    // this apply onto the GPU). applied_dbg is only ever mutated via apply()
+    // or a wholesale resync — never copied from cells() mid-stream.
+    if (e->frame.edits.resync) e->applied_dbg = e->world.cells();
+    else vox::apply(e->applied_dbg, e->frame.edits);
+    assert(e->applied_dbg == e->world.cells()
+           && "EditList stream diverged from World::cells()");
+#endif
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
     e->sim.encode((__bridge void*)ce, sim_time, cfg);

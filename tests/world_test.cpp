@@ -1,4 +1,5 @@
 #include "world/World.h"
+#include "world/EditList.h"
 #include "voxel/VoxelWorld.h"
 #include "entity/StampBudget.h"
 #include "core/Config.h"
@@ -94,4 +95,74 @@ TEST(World, IngestIgnoresOutOfRangeIndex) {
     s.push((uint32_t)w.cells().size() + 100, vox::VoxMat::Boat);   // out of range
     w.ingest(s);                                                   // must not crash/corrupt
     EXPECT_EQ(w.cells(), w.terrain_cells());                       // nothing changed
+}
+
+TEST(World, BuildEditsFirstFrameResyncs) {
+    vox::World w;
+    w.configure(small_cfg());
+    w.begin_frame();
+    vox::StampList s; s.push(5, vox::VoxMat::Kelp);
+    w.ingest(s);
+    vox::EditList e;
+    w.build_edits(e);
+    EXPECT_TRUE(e.resync);      // first frame after configure
+    EXPECT_EQ(e.count(), 0);
+}
+
+TEST(World, BuildEditsDeltaBetweenFrames) {
+    vox::World w;
+    w.configure(small_cfg());
+    // frame 0: resync
+    w.begin_frame();
+    vox::StampList s0; s0.push(5, vox::VoxMat::Kelp);
+    w.ingest(s0);
+    vox::EditList e0; w.build_edits(e0);
+    ASSERT_TRUE(e0.resync);
+    // frame 1: kelp moves from cell 5 to cell 6
+    w.begin_frame();
+    vox::StampList s1; s1.push(6, vox::VoxMat::Kelp);
+    w.ingest(s1);
+    vox::EditList e1; w.build_edits(e1);
+    EXPECT_FALSE(e1.resync);
+    // cell 5 reverts to terrain, cell 6 becomes Kelp -> exactly 2 edits
+    ASSERT_EQ(e1.count(), 2);
+    // find the two edits regardless of order
+    bool five_reverted = false, six_kelp = false;
+    for (int k = 0; k < e1.count(); ++k) {
+        if (e1.idx[k] == 5u) { EXPECT_EQ(e1.mat[k], w.terrain_cells()[5]); five_reverted = true; }
+        if (e1.idx[k] == 6u) { EXPECT_EQ(e1.mat[k], (uint8_t)vox::VoxMat::Kelp); six_kelp = true; }
+    }
+    EXPECT_TRUE(five_reverted);
+    EXPECT_TRUE(six_kelp);
+}
+
+TEST(World, EditStreamReconstructsWorld) {
+    vox::World w;
+    w.configure(small_cfg());
+    std::vector<uint8_t> replica;
+    // drive several frames with different entity placements
+    const uint32_t cells[] = {5, 6, 6, 100, 5};
+    for (uint32_t c : cells) {
+        w.begin_frame();
+        vox::StampList s; s.push(c, vox::VoxMat::Fish);
+        w.ingest(s);
+        vox::EditList e; w.build_edits(e);
+        if (e.resync) replica = w.cells();
+        else vox::apply(replica, e);
+        EXPECT_EQ(replica, w.cells());   // stream reconstructs the world each frame
+    }
+}
+
+TEST(World, ReconfigureResyncs) {
+    vox::World w;
+    w.configure(small_cfg(7));
+    w.begin_frame(); { vox::StampList s; s.push(5, vox::VoxMat::Kelp); w.ingest(s); }
+    vox::EditList e0; w.build_edits(e0);   // resync (first frame)
+    w.begin_frame(); { vox::StampList s; s.push(6, vox::VoxMat::Kelp); w.ingest(s); }
+    vox::EditList e1; w.build_edits(e1);   // delta
+    ASSERT_FALSE(e1.resync);
+    w.configure(small_cfg(8));             // terrain rebuild -> must resync next build
+    w.begin_frame(); { vox::StampList s; s.push(6, vox::VoxMat::Kelp); w.ingest(s); }
+    vox::EditList e2; w.build_edits(e2);
+    EXPECT_TRUE(e2.resync);
 }

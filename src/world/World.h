@@ -2,6 +2,7 @@
 #include "voxel/VoxelWorld.h"      // VoxelWorld, VoxMat
 #include "voxel/FloorGen.h"        // FloorColumn
 #include "entity/StampBudget.h"    // StampList
+#include "world/EditList.h"
 #include <optional>
 #include <vector>
 #include <cstdint>
@@ -22,6 +23,9 @@ public:
     void begin_frame();
     // Composite an entity stamp list onto cells_ (last writer wins per cell).
     void ingest(const StampList& stamps);
+    // Produce the per-frame delta from the previous frame's cells_ to the
+    // current. Sets out.resync (empty) on the first frame after configure().
+    void build_edits(EditList& out);
 
     // Terrain (static) -------------------------------------------------------
     const std::vector<uint8_t>& terrain_cells() const { return terrain_; }
@@ -38,6 +42,8 @@ private:
     std::vector<FloorColumn>  floor_;       // procedural floor (terrain truth)
     std::vector<uint8_t>      terrain_;     // dense static terrain materials
     std::vector<uint8_t>      cells_;       // dense composited discrete grid
+    std::vector<uint8_t>      prev_cells_;  // previous frame's cells_ (diff baseline)
+    bool                      resync_ = true; // true until first build_edits after configure
     int   built_extent_ = -1, built_height_cells_ = -1, built_seed_ = 0;
     float built_base_depth_ = -1.0f, built_height_step_ = -1.0f, built_voxel_size_ = -1.0f;
 };
