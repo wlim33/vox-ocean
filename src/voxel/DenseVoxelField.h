@@ -25,8 +25,9 @@ public:
     bool discrete_needs_resync(const EditList& edits) const;
     void encode_apply_edits(void* compute_encoder, const Config&, const EditList& edits, int frame);
     void encode_discrete_resync(void* blit_encoder, const Config&, const std::vector<uint8_t>& cells, int frame);
-    void* world_grid_handle() const override { return world_grid_.handle; }
-    void* surface_handle()    const override { return surface_tex_.handle; }
+    void* world_grid_handle()    const override { return world_grid_.handle; }
+    void* discrete_grid_handle() const override { return discrete_grid_.handle; }
+    void* surface_handle()       const override { return surface_tex_.handle; }
     // Dev gate: full-rebuild into a scratch grid + diff vs the live grid; logs mismatches.
     void encode_verify(void* compute_encoder, const Config&, Cascade* const* cascades,
                        int cascade_count, void* ripple_front_tex, const StampList&, int frame);

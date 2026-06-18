@@ -84,6 +84,20 @@ static float3 terrain_color(uint mat, float3 n, float3 sun,
     return base * (0.35 + 0.65 * max(dot(n, sun), 0.0));
 }
 
+// Material at a cell: the discrete grid value, or derived water (an air cell
+// below the column's quantized water top is MAT_WATER). Mirrors world_fill's
+// classification exactly via vg_water_cells_from_top(surface_tex_.x), so the
+// rendered result is identical to reading the old water-baked world grid.
+static uint read_material(VoxelGridDesc vg,
+                          texture3d<uint, access::read> discrete,
+                          texture2d<float> surface, int3 idx) {
+    uint m = vox_read(vg, discrete, idx);
+    if (m != MAT_AIR) return m;
+    float top = surface.read(uint2(idx.x, idx.z)).x;
+    int water_cells = vg_water_cells_from_top(vg, top);
+    return (idx.y < water_cells) ? MAT_WATER : MAT_AIR;
+}
+
 // See-through water marcher: phase 1 march to first hit, phase 2 bend once
 // at the water interface, phase 3 transmit accumulating Beer-Lambert path.
 // CPU mirror of the walk: src/voxel/Dda.cpp dda_march_transmit — keep in
@@ -122,7 +136,7 @@ fragment float4 march_fs(
     int steps = 0;
     while (steps < U.max_steps) {
         steps++;
-        mat = vox_read(vg, world, S.idx);
+        mat = read_material(vg, world, surface, S.idx);
         if (mat != MAT_AIR) break;
         if (!dda_step(S, G)) return float4(0.0);
     }
@@ -161,7 +175,7 @@ fragment float4 march_fs(
     bool  exited_up = false;
     while (walking && steps < U.max_steps) {
         steps++;
-        uint m = vox_read(vg, world, W.idx);
+        uint m = read_material(vg, world, surface, W.idx);
         if (m != MAT_AIR && m != MAT_WATER) { end_mat = m; end_axis = W.axis; break; }
         float t_enter = W.t_cur;
         bool alive = dda_step(W, G);

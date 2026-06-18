@@ -62,7 +62,7 @@ void RayMarchRenderer::resize(const MetalContext& ctx, int drawable_w, int drawa
 void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
                               const CameraView& cam, const Config& cfg,
                               const SkyRenderer& sky, int frame_index) {
-    if (!field.world_grid_handle() || !march_target_.handle) return;
+    if (!field.discrete_grid_handle() || !march_target_.handle) return;
     id<MTLCommandBuffer> cb = (__bridge id<MTLCommandBuffer>)command_buffer;
     int slot = frame_index % RING;
 
@@ -113,7 +113,7 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
     [enc setRenderPipelineState:(__bridge id<MTLRenderPipelineState>)pso_march_];
     [enc setFragmentBuffer:(__bridge id<MTLBuffer>)march_uniforms_[slot].handle offset:0 atIndex:0];
-    [enc setFragmentTexture:(__bridge id<MTLTexture>)field.world_grid_handle() atIndex:0];
+    [enc setFragmentTexture:(__bridge id<MTLTexture>)field.discrete_grid_handle() atIndex:0];
     [enc setFragmentTexture:(__bridge id<MTLTexture>)field.surface_handle() atIndex:1];
     [enc setFragmentTexture:(__bridge id<MTLTexture>)sky.cubemap_handle() atIndex:2];
     [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
