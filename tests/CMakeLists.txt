@@ -110,5 +110,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/io/ContactSheet.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    world_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/world/World.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
