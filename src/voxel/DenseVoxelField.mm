@@ -3,8 +3,6 @@
 #import "core/Config.h"
 #import "gpu/MetalContext.h"
 #import "gpu/PipelineCache.h"
-#import "voxel/VoxelWorld.h"
-#import "voxel/FloorGen.h"
 #import "shader_types.h"
 #include "entity/StampBudget.h"
 #import <Metal/Metal.h>
@@ -94,22 +92,9 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
         world_grid_verify_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
                                              TexFormat::R8Uint, /*storage_write=*/true);
 
-    VoxelWorld world({ extent, hc, cfg.voxel.voxel_size_m, cfg.voxel.height_step_m,
-                       cfg.voxel.base_depth_m });
-    std::vector<FloorColumn> floor = generate_floor({ extent, hc, (uint32_t)seed,
-                                                      cfg.voxel.base_depth_m,
-                                                      cfg.voxel.height_step_m });
-
-    size_t cells = (size_t)world.cells();
-    terrain_staging_ = make_buffer(ctx, cells, true);
-    uint8_t* dst = (uint8_t*)terrain_staging_.cpu_ptr;
-    std::memset(dst, (int)VoxMat::Air, cells);
-    for (int iz = 0; iz < extent; ++iz)
-        for (int ix = 0; ix < extent; ++ix) {
-            const FloorColumn& fc = floor[(size_t)iz * extent + ix];
-            for (int iy = 0; iy < fc.height && iy < hc; ++iy)
-                dst[world.cell_index(ix, iy, iz)] = fc.material;
-        }
+    // Terrain bytes are owned by the CPU World now; allocate staging and fill
+    // it at upload time from the supplied terrain_cells (single source of truth).
+    terrain_staging_ = make_buffer(ctx, (size_t)extent * hc * extent, true);
 
     built_extent_ = extent;
     built_height_cells_ = hc;
@@ -119,8 +104,15 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     terrain_dirty_ = true;
 }
 
-void DenseVoxelField::upload_terrain_if_dirty(void* command_buffer) {
+void DenseVoxelField::upload_terrain_if_dirty(void* command_buffer,
+                                              const std::vector<uint8_t>& terrain_cells) {
     if (!terrain_dirty_) return;
+    // Copy the CPU World's dense terrain into staging before the blit. Layout is
+    // identical (x fastest, then y, then z), so sizes must match exactly.
+    if (terrain_staging_.cpu_ptr && !terrain_cells.empty()) {
+        size_t n = std::min(terrain_staging_.size, terrain_cells.size());
+        std::memcpy(terrain_staging_.cpu_ptr, terrain_cells.data(), n);
+    }
     id<MTLCommandBuffer> cb = (__bridge id<MTLCommandBuffer>)command_buffer;
     int extent = built_extent_;
     int hc     = built_height_cells_;
