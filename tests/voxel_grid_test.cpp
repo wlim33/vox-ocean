@@ -40,6 +40,14 @@ TEST(VoxelGrid, WaterTopCellCountsFromBase) {
     EXPECT_EQ(vg_water_top_cell(g, -50.0f), 1);
     EXPECT_EQ(vg_water_top_cell(g, 1e6f),  48);
 }
+TEST(VoxelGrid, WaterCellsFromTopMatchesWaterTopCell) {
+    VoxelGridDesc g{ 64, 48, 0.5f, 0.25f, 4.0f };   // base 4.0 = 16 steps
+    for (float h = -5.0f; h <= 8.0f; h += 0.013f) {
+        float top = vg_quantize_height(g, h);
+        EXPECT_EQ(vg_water_cells_from_top(g, top), vg_water_top_cell(g, h))
+            << "h=" << h << " top=" << top;
+    }
+}
 TEST(VoxelGrid, ColumnAtClampsToGrid) {
     auto g = desc();   // half_patch 1.0, spans [-1, 1]
     VgCol a = vg_column_at(g, -0.9f, -0.9f); EXPECT_EQ(a.ix, 0); EXPECT_EQ(a.iz, 0);

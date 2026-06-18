@@ -48,11 +48,17 @@ inline float vg_quantize_height(VoxelGridDesc g, float h) {
     float q = VG_FLOOR(h / g.height_step_m) * g.height_step_m;
     return VG_MAXF(q, -g.base_depth_m + g.height_step_m);
 }
-// Water cells from the base for surface height h; clamped [1, height_cells].
-inline int vg_water_top_cell(VoxelGridDesc g, float h) {
-    float top = vg_quantize_height(g, h);
+// Water cells from the base for an ALREADY-quantized surface top (world-y).
+// This is the second half of vg_water_top_cell, usable when only the quantized
+// top is available (e.g. the marcher reading surface_tex_.x). For any h,
+// vg_water_cells_from_top(g, vg_quantize_height(g, h)) == vg_water_top_cell(g, h).
+inline int vg_water_cells_from_top(VoxelGridDesc g, float top) {
     int n = (int)VG_FLOOR((top + g.base_depth_m) / g.height_step_m + 0.5f);
     return VG_CLAMPI(n, 1, g.height_cells);
+}
+// Water cells from the base for surface height h; clamped [1, height_cells].
+inline int vg_water_top_cell(VoxelGridDesc g, float h) {
+    return vg_water_cells_from_top(g, vg_quantize_height(g, h));
 }
 // World (x, z) -> clamped column indices (the lookup behind surface height_at).
 inline VgCol vg_column_at(VoxelGridDesc g, float x, float z) {
