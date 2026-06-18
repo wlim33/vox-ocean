@@ -2,7 +2,7 @@
 // Single source of truth for voxel-grid math, included by BOTH C++ and Metal
 // (mirrors the shared-header pattern in fft_common.h / shader_types.h). Replaces
 // the grid math previously duplicated across VoxelWorld, Dda.cpp, world_fill.metal,
-// voxel_march.metal, and stamp.metal. Tests: tests/voxel_grid_test.cpp.
+// voxel_march.metal, and apply_edits.metal. Tests: tests/voxel_grid_test.cpp.
 
 #ifdef __METAL_VERSION__
   #define VG_FLOOR(x)         floor(x)
@@ -27,7 +27,7 @@ struct VoxelGridDesc {
 struct VgCell { int ix, iy, iz; };
 struct VgCol  { int ix, iz; };
 
-// Linear index for the terrain staging upload + the stamp kernel: x fastest, then y, then z.
+// Linear index for the terrain staging upload + the edit kernel: x fastest, then y, then z.
 inline int vg_cell_index(VoxelGridDesc g, int ix, int iy, int iz) {
     return (iz * g.height_cells + iy) * g.extent + ix;
 }

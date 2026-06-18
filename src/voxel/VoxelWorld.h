@@ -49,8 +49,8 @@ public:
     // Linear index matching the 3D-texture upload layout: x fastest, then y,
     // then z (bytesPerRow = extent, bytesPerImage = extent * height_cells).
     int   cell_index(int ix, int iy, int iz) const { return vg_cell_index(desc_(), ix, iy, iz); }
-    // Inverse of cell_index — lockstep mirror of the decode in
-    // shaders/stamp.metal's stamp_cells kernel.
+    // Inverse of cell_index — lockstep mirror of the index decode used by
+    // shaders/apply_edits.metal.
     void decode_cell_index(int i, int& ix, int& iy, int& iz) const {
         VgCell c = vg_decode_index(desc_(), i); ix = c.ix; iy = c.iy; iz = c.iz;
     }

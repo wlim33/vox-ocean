@@ -78,12 +78,6 @@ struct RippleSplash {   // injected into the ripple field this frame
     float amp;           // meters; negative = depression (raindrop)
 };
 
-struct StampUniforms {
-    int grid_extent;
-    int height_cells;
-    int count;
-};
-
 struct ApplyEditsUniforms {
     int grid_extent;
     int height_cells;

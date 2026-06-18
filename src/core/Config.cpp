@@ -78,7 +78,6 @@ void load_march(const toml::table& t, MarchConfig& m, LoadResult& r) {
 
 void load_render(const toml::table& t, RenderConfig& rc) {
     if (auto v = t["backend"].value<std::string>()) rc.backend = *v;
-    if (auto v = t["verify_fill"].value<bool>()) rc.verify_fill = *v;
 }
 
 void load_entity(const toml::table& t, EntityConfig& e, LoadResult& r) {
@@ -263,7 +262,6 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 in.config.march.render_scale = clamp(f, 0.25f, 1.0f);
             }
             else if (key == "render.backend") in.config.render.backend = val;
-            else if (key == "render.verify_fill") in.config.render.verify_fill = (val == "true" || val == "1");
             else if (key == "bench.bench_mode")           in.config.bench.bench_mode    = (val == "true" || val == "1");
             else if (key == "ripple.wave_speed_mps") {
                 float f = std::stof(val);
@@ -424,7 +422,6 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(c.bench.output_path.data(), c.bench.output_path.size(), h);
     // Render backend: hash the string content, not raw bytes
     h = fnv1a64(c.render.backend.data(), c.render.backend.size(), h);
-    h = fnv1a64(&c.render.verify_fill, sizeof(c.render.verify_fill), h);
     // Frame controls
     h = fnv1a64(&c.max_in_flight_frames,  sizeof(c.max_in_flight_frames),  h);
     return h;

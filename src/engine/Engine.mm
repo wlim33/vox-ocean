@@ -133,19 +133,16 @@ void engine_resize(Engine* e, int w, int h) {
 void engine_push_input(Engine* e, InputEvent ev) { e->input.push(ev); }
 bool engine_bench_should_exit(Engine* e) { return e->bench.should_exit(); }
 
-// Evolve the simulation by one frame and voxelize the world into the field's
-// grid/surface textures. Camera-independent. `sim_time` is absolute seconds;
-// `dt` is the step. Shared by the live render loop and the headless snapshot.
-static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
-                                 float sim_time, float dt) {
+// CPU-only work: evolve the simulation and voxelize the world into e->frame.
+// Camera-independent. `sim_time` is absolute seconds; `dt` is the step.
+// Shared by the live render loop and the headless snapshot.
+static void build_frame(Engine* e, float sim_time, float dt) {
     const Config& cfg = e->app->config();
-    e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, cfg);
     e->sim.rebuild_if_dirty(e->ctx, cfg);
     e->world.configure(cfg);
     e->field.rebuild_if_dirty(e->ctx, cfg);
     e->ripple.rebuild_if_dirty(e->ctx, cfg);
     e->field.ensure_capacity(e->ctx, cfg);
-    e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
     e->ecosystem.rebuild_if_dirty(cfg, e->world);
     e->water.configure(cfg.wave);
@@ -153,13 +150,15 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
         [&](float x, float z) { return e->water.height_at(x, z, sim_time); },
         e->world);
 
-    std::vector<RippleSplash> wake;
+    e->frame.water.time = sim_time;
+    e->frame.water.dt   = dt;
+    e->frame.water.wake.clear();
     glm::vec2 stern;
     if (e->ecosystem.shed_boat_wake(cfg, stern)) {
         float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
-        wake.push_back({ (stern.x + half) / cfg.voxel.voxel_size_m,
-                         (stern.y + half) / cfg.voxel.voxel_size_m,
-                         1.5f, -cfg.entity.wake_amp });
+        e->frame.water.wake.push_back({ (stern.x + half) / cfg.voxel.voxel_size_m,
+                                        (stern.y + half) / cfg.voxel.voxel_size_m,
+                                        1.5f, -cfg.entity.wake_amp });
     }
     e->world.begin_frame();
     e->ecosystem.build_stamp(cfg, e->world.grid(), e->stamp);
@@ -175,12 +174,21 @@ static void advance_and_voxelize(Engine* e, id<MTLCommandBuffer> cb,
     assert(e->applied_dbg == e->world.cells()
            && "EditList stream diverged from World::cells()");
 #endif
+}
+
+// GPU encoding: read e->frame and issue all command-buffer work.
+// Shared by the live render loop and the headless snapshot.
+static void consume_frame(Engine* e, id<MTLCommandBuffer> cb) {
+    const Config& cfg = e->app->config();
+    e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, cfg);
+    e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
     bool discrete_resync = e->field.discrete_needs_resync(e->frame.edits);
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
-    e->sim.encode((__bridge void*)ce, sim_time, cfg);
-    e->ripple.encode((__bridge void*)ce, cfg, dt, wake.data(), (int)wake.size());
+    e->sim.encode((__bridge void*)ce, e->frame.water.time, cfg);
+    e->ripple.encode((__bridge void*)ce, cfg, e->frame.water.dt,
+                     e->frame.water.wake.data(), (int)e->frame.water.wake.size());
     e->field.encode_fill((__bridge void*)ce, cfg, e->sim.data(), e->sim.count(),
                          e->ripple.front_texture(), e->frame_index);
     if (!discrete_resync)
@@ -231,7 +239,8 @@ void engine_render(Engine* e) {
 
     float sim_time = (float)e->app->clock().total_seconds();
     float dt = (float)e->app->clock().delta_seconds();
-    advance_and_voxelize(e, cb, sim_time, dt);
+    build_frame(e, sim_time, dt);
+    consume_frame(e, cb);
 
     CameraView cam = e->app->camera().camera_view();
     e->renderer->encode((__bridge void*)cb, e->field, cam, e->app->config(),
@@ -331,7 +340,8 @@ int engine_snapshot(const char* config_path, const char* overrides,
     for (int i = 0; i < std::max(1, warmup_frames); ++i) {
         @autoreleasepool {
             id<MTLCommandBuffer> cb = [queue commandBuffer];
-            advance_and_voxelize(e, cb, (float)i * dt, dt);
+            build_frame(e, (float)i * dt, dt);
+            consume_frame(e, cb);
             [cb commit];
             [cb waitUntilCompleted];
         }

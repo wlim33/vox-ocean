@@ -1,7 +1,5 @@
 #pragma once
 #include "voxel_grid.h"
-#include <cstdint>
-#include <vector>
 namespace vox {
 struct MetalContext; struct Config; class Cascade;
 
