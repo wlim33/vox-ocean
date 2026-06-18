@@ -61,6 +61,11 @@ target_sources(vox-ocean-tests PRIVATE
 )
 
 target_sources(vox-ocean-tests PRIVATE
+    water_model_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/ocean/WaterModel.cpp
+)
+
+target_sources(vox-ocean-tests PRIVATE
     boat_test.cpp
     ${CMAKE_SOURCE_DIR}/src/entity/Boat.cpp
 )
