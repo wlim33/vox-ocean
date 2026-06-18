@@ -54,7 +54,7 @@ void World::build_edits(EditList& out) {
         resync_ = false;
         return;
     }
-    diff(prev_cells_, cells_, out);
+    diff_cells(prev_cells_, cells_, out);
     prev_cells_ = cells_;
 }
 
