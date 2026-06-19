@@ -14,7 +14,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "cascade_count",
     "max_in_flight_frames",
-    "cascades","wave","sky","shading","bench","voxel","march","render","ripple","entity","kelp","fish"
+    "cascades","wave","sky","shading","bench","voxel","march","render","ripple","entity","kelp","fish","sand"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -173,6 +173,20 @@ void load_fish(const toml::table& t, FishConfig& f, LoadResult& r) {
     if (auto v = t["seed"].value<int64_t>()) f.seed = (int)*v;
 }
 
+void load_sand(const toml::table& t, SandConfig& s, LoadResult& r) {
+    if (auto v = t["enabled"].value<bool>()) s.enabled = *v;
+    if (auto v = t["spawn_radius"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 1 || val > 64) r.warnings.push_back("sand.spawn_radius out of [1,64], clamped");
+        s.spawn_radius = clamp(val, 1, 64);
+    }
+    if (auto v = t["spawn_thickness"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 1 || val > 64) r.warnings.push_back("sand.spawn_thickness out of [1,64], clamped");
+        s.spawn_thickness = clamp(val, 1, 64);
+    }
+}
+
 } // namespace
 
 LoadResult load_config_from_string(const std::string& text) {
@@ -202,6 +216,7 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* en = tbl["entity"].as_table()) load_entity(*en, c.entity, r);
     if (auto* kp = tbl["kelp"].as_table()) load_kelp(*kp, c.kelp, r);
     if (auto* fp = tbl["fish"].as_table()) load_fish(*fp, c.fish, r);
+    if (auto* sp = tbl["sand"].as_table()) load_sand(*sp, c.sand, r);
     // sky, shading, cascades, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -344,6 +359,17 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 in.config.fish.spread_m = clamp(f, 0.0f, 20.0f);
             }
             else if (key == "fish.seed") in.config.fish.seed = std::stoi(val);
+            else if (key == "sand.enabled") in.config.sand.enabled = (val == "true" || val == "1");
+            else if (key == "sand.spawn_radius") {
+                int n = std::stoi(val);
+                if (n < 1 || n > 64) in.warnings.push_back("sand.spawn_radius out of [1,64], clamped");
+                in.config.sand.spawn_radius = clamp(n, 1, 64);
+            }
+            else if (key == "sand.spawn_thickness") {
+                int n = std::stoi(val);
+                if (n < 1 || n > 64) in.warnings.push_back("sand.spawn_thickness out of [1,64], clamped");
+                in.config.sand.spawn_thickness = clamp(n, 1, 64);
+            }
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
             in.warnings.push_back("invalid value for " + key + ": " + val);
@@ -396,6 +422,10 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.fish.depth_frac,    sizeof(c.fish.depth_frac),    h);
     h = fnv1a64(&c.fish.spread_m,      sizeof(c.fish.spread_m),      h);
     h = fnv1a64(&c.fish.seed,          sizeof(c.fish.seed),          h);
+    // Sand
+    h = fnv1a64(&c.sand.enabled,         sizeof(c.sand.enabled),         h);
+    h = fnv1a64(&c.sand.spawn_radius,    sizeof(c.sand.spawn_radius),    h);
+    h = fnv1a64(&c.sand.spawn_thickness, sizeof(c.sand.spawn_thickness), h);
     // Grid / cascades
     h = fnv1a64(&c.cascade_count,       sizeof(c.cascade_count),       h);
     for (int i = 0; i < 4; ++i) {
