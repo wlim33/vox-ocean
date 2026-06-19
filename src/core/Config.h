@@ -37,11 +37,6 @@ struct ShadingConfig {
     float sun_shininess        = 256.0f;
     glm::vec3 sun_color        {1.4f, 1.25f, 1.0f};
     float water_ior = 1.33f;   // refraction index at the water surface (1.0 = no bend)
-    glm::vec3 sand_color       {0.76f, 0.70f, 0.50f};
-    glm::vec3 rock_color       {0.35f, 0.33f, 0.30f};
-    glm::vec3 boat_color       {0.45f, 0.30f, 0.18f};
-    glm::vec3 kelp_color       {0.13f, 0.32f, 0.15f};
-    glm::vec3 fish_color       {1.0f, 0.08f, 0.55f};   // bright pink, rendered opaque
 };
 
 struct VoxelConfig {

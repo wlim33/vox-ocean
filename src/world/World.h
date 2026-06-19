@@ -37,7 +37,6 @@ private:
 
     std::optional<VoxelWorld> grid_;
     std::vector<FloorColumn>  floor_;
-    std::vector<uint8_t>      terrain_top_;   // extent²: first dynamic cell per column
     std::vector<uint8_t>      material_;      // THE dense grid (terrain + sand)
     MaterialCa                ca_;
     MaterialCaDims            dims_{0, 0};

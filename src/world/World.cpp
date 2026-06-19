@@ -22,13 +22,11 @@ void World::configure(const Config& cfg) {
                                   v.base_depth_m, v.height_step_m });
         dims_ = { v.grid_extent, v.height_cells };
         int extent = v.grid_extent, hc = v.height_cells;
-        terrain_top_.assign((size_t)extent * extent, 0);
         material_.assign((size_t)extent * extent * hc, (uint8_t)VoxMat::Air);
         for (int iz = 0; iz < extent; ++iz)
             for (int ix = 0; ix < extent; ++ix) {
                 const FloorColumn& fc = floor_[(size_t)iz * extent + ix];
                 int h = std::min((int)fc.height, hc);
-                terrain_top_[(size_t)iz * extent + ix] = (uint8_t)std::min(h, 255);
                 for (int iy = 0; iy < h; ++iy)
                     material_[ca_cell_index(dims_, ix, iy, iz)] = fc.material;
             }
@@ -65,7 +63,7 @@ void World::seed_sand(const Config& cfg) {
     for (int iz = std::max(0, cz - r); iz <= std::min(extent - 1, cz + r); ++iz)
         for (int ix = std::max(0, cx - r); ix <= std::min(extent - 1, cx + r); ++ix)
             for (int iy = bot; iy <= top; ++iy)
-                material_[ca_cell_index(dims_, ix, iy, iz)] = (uint8_t)VoxMat::Sand;
+                material_[ca_cell_index(dims_, ix, iy, iz)] = (uint8_t)VoxMat::SandGrain;
     ca_.wake_box(cx - r, bot, cz - r, cx + r, top, cz + r);
 }
 
@@ -93,7 +91,7 @@ void World::step(const Config& cfg, float /*dt*/, const StampList& entities, Edi
 
     // 1. Advance the CA over material_ (dynamic sand only).
     std::vector<uint32_t> ca_changed;
-    if (ca_.awake()) ca_.step(material_, dims_, terrain_top_, ca_changed);
+    if (ca_.awake()) ca_.step(material_, dims_, ca_changed);
 
     // 2. Dirty union: CA changes ∪ last frame's overlay ∪ this frame's overlay.
     dirty_.clear();

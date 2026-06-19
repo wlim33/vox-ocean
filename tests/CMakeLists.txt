@@ -125,5 +125,9 @@ target_sources(vox-ocean-tests PRIVATE
     material_ca_test.cpp
     ${CMAKE_SOURCE_DIR}/src/voxel/MaterialCa.cpp)
 
+target_sources(vox-ocean-tests PRIVATE material_registry_test.cpp)
+
+target_sources(vox-ocean-tests PRIVATE march_palette_test.cpp)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)

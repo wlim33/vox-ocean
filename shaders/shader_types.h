@@ -51,6 +51,8 @@ struct FftPassUniforms {
 #define MAT_BOAT  4
 #define MAT_KELP  5
 #define MAT_FISH  6
+#define MAT_SANDGRAIN 7
+#define NUM_MATERIALS 8
 
 struct WorldFillUniforms {
     int   grid_extent;
@@ -92,11 +94,9 @@ struct MarchUniforms {
     vec3  sun_color;         float sun_shininess;
     vec3  deep_water_color;  float depth_fog_density;
     vec3  extinction_rgb;    float foam_threshold;
-    vec3  sand_color;        float foam_strength;
-    vec3  rock_color;        float height_step_m;
     int   grid_extent;       int height_cells; float voxel_size_m; float base_depth_m;
     int   max_steps;         float water_ior; float ortho_backup, _mpad4;
-    vec3  boat_color;        float _mpad5;
-    vec3  kelp_color;        float _mpad6;
-    vec3  fish_color;        float _mpad7;
+    // Each row above is exactly 16 bytes; palette[] relies on this for host/device layout parity.
+    float foam_strength;     float height_step_m; float _mpad5, _mpad6;
+    vec3  palette[NUM_MATERIALS];   // per-material albedo, uploaded from kMaterials
 };
