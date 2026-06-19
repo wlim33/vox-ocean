@@ -121,5 +121,9 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/world/EditList.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    material_ca_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/voxel/MaterialCa.cpp)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
