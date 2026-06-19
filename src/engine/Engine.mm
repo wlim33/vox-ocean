@@ -6,8 +6,6 @@
 #include "voxel/VoxelWorld.h"
 #include "gpu/MetalContext.h"
 #include "gpu/PipelineCache.h"
-#include "ocean/Simulation.h"
-#include "ocean/WaterModel.h"
 #include "world/World.h"
 #include "world/RenderFrame.h"
 #include "render/SkyRenderer.h"
@@ -41,17 +39,17 @@
 
 namespace vox {
 
+namespace { constexpr float kSeaLevelY = 0.0f; }  // mean sea level (flat water)
+
 class Engine {
 public:
     MetalContext ctx;
     PipelineCache cache;
     InputBridge input;
     std::unique_ptr<App> app;
-    Simulation sim;
     SkyRenderer sky;
     DenseVoxelField field;
     World world;
-    WaterModel water;   // CPU analytical surface; replaces the GPU height readback
     RenderFrame frame;
 #ifndef NDEBUG
     std::vector<uint8_t> applied_dbg;   // debug-only: replica rebuilt from the edit stream
@@ -96,7 +94,6 @@ Engine* engine_create(const char* config_path, const char* overrides) {
     e->app = std::make_unique<App>(load.config);
 
     e->sky.init(e->ctx, e->cache);
-    e->sim.init(e->ctx, e->cache, e->app->config());
     e->field.init(e->ctx, e->cache);
     e->ripple.init(e->ctx, e->cache);
     e->renderer = make_renderer(e->app->config().render.backend);
@@ -138,19 +135,16 @@ bool engine_bench_should_exit(Engine* e) { return e->bench.should_exit(); }
 // Shared by the live render loop and the headless snapshot.
 static void build_frame(Engine* e, float sim_time, float dt) {
     const Config& cfg = e->app->config();
-    e->sim.rebuild_if_dirty(e->ctx, cfg);
     e->world.configure(cfg);
     e->field.rebuild_if_dirty(e->ctx, cfg);
     e->ripple.rebuild_if_dirty(e->ctx, cfg);
     e->field.ensure_capacity(e->ctx, cfg);
 
     e->ecosystem.rebuild_if_dirty(cfg, e->world);
-    e->water.configure(cfg.wave);
     e->ecosystem.update(cfg, dt, sim_time,
-        [&](float x, float z) { return e->water.height_at(x, z, sim_time); },
+        [](float, float) { return kSeaLevelY; },
         e->world);
 
-    e->frame.water.time = sim_time;
     e->frame.water.dt   = dt;
     e->frame.water.wake.clear();
     glm::vec2 stern;
@@ -180,7 +174,6 @@ static void consume_frame(Engine* e, id<MTLCommandBuffer> cb) {
     bool discrete_resync = e->field.discrete_needs_resync(e->frame.edits);
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
-    e->sim.encode((__bridge void*)ce, e->frame.water.time, cfg);
     e->ripple.encode((__bridge void*)ce, cfg, e->frame.water.dt,
                      e->frame.water.wake.data(), (int)e->frame.water.wake.size());
     e->field.encode_fill((__bridge void*)ce, cfg, e->ripple.front_texture(), e->frame_index);
@@ -189,7 +182,6 @@ static void consume_frame(Engine* e, id<MTLCommandBuffer> cb) {
     [ce endEncoding];
 
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-    e->sim.encode_mipgen((__bridge void*)blit, cfg);
     if (discrete_resync)
         e->field.encode_discrete_resync((__bridge void*)blit, cfg, e->world.materialize_composite(), e->frame_index);
     [blit endEncoding];
