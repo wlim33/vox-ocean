@@ -51,6 +51,8 @@ struct FftPassUniforms {
 #define MAT_BOAT  4
 #define MAT_KELP  5
 #define MAT_FISH  6
+#define MAT_SANDGRAIN 7
+#define NUM_MATERIALS 8
 
 struct WorldFillUniforms {
     int   grid_extent;

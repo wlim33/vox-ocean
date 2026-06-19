@@ -1,0 +1,34 @@
+#include <gtest/gtest.h>
+#include "voxel/MaterialRegistry.h"
+#include "voxel/VoxelWorld.h"
+
+using namespace vox;
+
+TEST(MaterialRegistry, TableSizeMatchesEnum) {
+    EXPECT_EQ(kMaterials.size(), (size_t)kNumMaterials);
+    EXPECT_EQ((int)kNumMaterials, 8);
+}
+
+TEST(MaterialRegistry, PhasesAreCorrect) {
+    EXPECT_EQ(material_props(VoxMat::Air).phase,       Phase::Empty);
+    EXPECT_EQ(material_props(VoxMat::SandGrain).phase,  Phase::Granular);
+    // Terrain + entity materials are immovable barriers in SP1.
+    for (VoxMat m : {VoxMat::Sand, VoxMat::Rock, VoxMat::Boat, VoxMat::Kelp, VoxMat::Fish})
+        EXPECT_EQ(material_props(m).phase, Phase::Solid);
+}
+
+TEST(MaterialRegistry, FillPaletteProjectsColorColumn) {
+    float rgb[3 * kNumMaterials];
+    fill_palette(rgb);
+    for (size_t i = 0; i < (size_t)kNumMaterials; ++i) {
+        EXPECT_FLOAT_EQ(rgb[3*i+0], kMaterials[i].r);
+        EXPECT_FLOAT_EQ(rgb[3*i+1], kMaterials[i].g);
+        EXPECT_FLOAT_EQ(rgb[3*i+2], kMaterials[i].b);
+    }
+}
+
+TEST(MaterialRegistry, SandGrainTintDiffersFromTerrainSand) {
+    const auto& g = material_props(VoxMat::SandGrain);
+    const auto& s = material_props(VoxMat::Sand);
+    EXPECT_TRUE(g.r != s.r || g.g != s.g || g.b != s.b);
+}
