@@ -6,6 +6,7 @@
 #import "gpu/PipelineCache.h"
 #import "shader_types.h"
 #import "voxel/VoxelField.h"
+#import "voxel/MaterialRegistry.h"
 #import <Metal/Metal.h>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/mat4x4.hpp>
@@ -84,10 +85,6 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     u.depth_fog_density = cfg.shading.depth_fog_density;
     u.extinction_rgb = (simd_float3){ cfg.shading.extinction_rgb.x, cfg.shading.extinction_rgb.y, cfg.shading.extinction_rgb.z };
     u.foam_threshold = cfg.shading.foam_threshold;
-    u.sand_color = (simd_float3){ cfg.shading.sand_color.x, cfg.shading.sand_color.y, cfg.shading.sand_color.z };
-    u.foam_strength = cfg.shading.foam_strength;
-    u.rock_color = (simd_float3){ cfg.shading.rock_color.x, cfg.shading.rock_color.y, cfg.shading.rock_color.z };
-    u.height_step_m = cfg.voxel.height_step_m;
     u.grid_extent = cfg.voxel.grid_extent;
     u.height_cells = cfg.voxel.height_cells;
     u.voxel_size_m = cfg.voxel.voxel_size_m;
@@ -96,12 +93,16 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     u.water_ior = cfg.shading.water_ior;
     u.ortho_backup = cam.ortho_backup;
     u._mpad4 = 0.0f;
-    u.boat_color = (simd_float3){ cfg.shading.boat_color.x, cfg.shading.boat_color.y, cfg.shading.boat_color.z };
+    u.foam_strength = cfg.shading.foam_strength;
+    u.height_step_m = cfg.voxel.height_step_m;
     u._mpad5 = 0.0f;
-    u.kelp_color = (simd_float3){ cfg.shading.kelp_color.x, cfg.shading.kelp_color.y, cfg.shading.kelp_color.z };
     u._mpad6 = 0.0f;
-    u.fish_color = (simd_float3){ cfg.shading.fish_color.x, cfg.shading.fish_color.y, cfg.shading.fish_color.z };
-    u._mpad7 = 0.0f;
+    {
+        float rgb[3 * vox::kNumMaterials];
+        vox::fill_palette(rgb);
+        for (int i = 0; i < NUM_MATERIALS; ++i)
+            u.palette[i] = (simd_float3){ rgb[3*i+0], rgb[3*i+1], rgb[3*i+2] };
+    }
     std::memcpy(march_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
     MTLRenderPassDescriptor* rp = [MTLRenderPassDescriptor renderPassDescriptor];
