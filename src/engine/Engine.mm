@@ -183,8 +183,7 @@ static void consume_frame(Engine* e, id<MTLCommandBuffer> cb) {
     e->sim.encode((__bridge void*)ce, e->frame.water.time, cfg);
     e->ripple.encode((__bridge void*)ce, cfg, e->frame.water.dt,
                      e->frame.water.wake.data(), (int)e->frame.water.wake.size());
-    e->field.encode_fill((__bridge void*)ce, cfg, e->sim.data(), e->sim.count(),
-                         e->ripple.front_texture(), e->frame_index);
+    e->field.encode_fill((__bridge void*)ce, cfg, e->ripple.front_texture(), e->frame_index);
     if (!discrete_resync)
         e->field.encode_apply_edits((__bridge void*)ce, cfg, e->frame.edits, e->frame_index);
     [ce endEncoding];
