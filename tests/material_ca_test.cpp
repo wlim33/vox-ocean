@@ -68,3 +68,37 @@ TEST(MaterialCa, SweepLeavesTerrainSandInPlace) {
         EXPECT_EQ(g[ca_cell_index(d, 1, iy, 1)], (uint8_t)VoxMat::Sand);  // terrain unmoved
     EXPECT_TRUE(changed.empty());
 }
+
+TEST(MaterialCa, GrainFallsToFloorOverSteps) {
+    MaterialCaDims d{4, 16};
+    std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
+    auto tt = no_terrain(d);
+    g[ca_cell_index(d, 2, 12, 2)] = (uint8_t)VoxMat::Sand;
+    MaterialCa ca;
+    ca.wake_box(2, 12, 2, 2, 12, 2);
+    for (int s = 0; s < 40 && ca.awake(); ++s) {
+        std::vector<uint32_t> changed;
+        ca.step(g, d, tt, changed);
+    }
+    EXPECT_EQ(g[ca_cell_index(d, 2, 0, 2)], (uint8_t)VoxMat::Sand);  // landed on the floor
+    EXPECT_EQ(sand_count(g), 1);
+    EXPECT_FALSE(ca.awake());                                        // settled -> asleep
+}
+
+TEST(MaterialCa, SettledSceneSleeps) {
+    MaterialCaDims d{4, 8};
+    std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
+    auto tt = no_terrain(d);
+    g[ca_cell_index(d, 2, 0, 2)] = (uint8_t)VoxMat::Sand;            // already on the floor
+    MaterialCa ca;
+    ca.wake_box(2, 0, 2, 2, 0, 2);
+    bool moved = false;
+    for (int s = 0; s < 8; ++s) {                                   // > one full phase cycle
+        std::vector<uint32_t> changed;
+        ca.step(g, d, tt, changed);
+        if (!changed.empty()) moved = true;
+    }
+    EXPECT_FALSE(moved);                                            // a grain on the floor never moves
+    EXPECT_FALSE(ca.awake());                                       // CA sleeps after a quiet cycle
+    EXPECT_EQ(sand_count(g), 1);
+}
