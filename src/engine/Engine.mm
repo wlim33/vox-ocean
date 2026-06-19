@@ -257,7 +257,8 @@ void engine_render(Engine* e) {
     dispatch_semaphore_t inflight = e->inflight;
     [cb addCompletedHandler:^(id<MTLCommandBuffer> b) {
         double gpu_ms = (b.GPUEndTime - b.GPUStartTime) * 1000.0;
-        e->bench.record({ e->bench.current_frame(), cpu_ms, gpu_ms, wait_ms });
+        e->bench.record({ e->bench.current_frame(), cpu_ms, gpu_ms, wait_ms,
+                          (int)e->frame.edits.count(), e->world.ca_awake() ? 1 : 0 });
         dispatch_semaphore_signal(inflight);
     }];
     [cb commit];

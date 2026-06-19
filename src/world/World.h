@@ -30,6 +30,7 @@ public:
     float floor_top_y(float x, float z) const;
     const VoxelWorld& grid() const { return *grid_; }
     bool configured() const { return grid_.has_value(); }
+    bool ca_awake() const { return ca_.awake(); }
 
 private:
     void seed_sand(const Config& cfg);
