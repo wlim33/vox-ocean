@@ -6,56 +6,80 @@ namespace vox {
 
 void World::configure(const Config& cfg) {
     const VoxelConfig& v = cfg.voxel;
-    bool unchanged = grid_
-        && v.grid_extent   == built_extent_      && v.height_cells == built_height_cells_
-        && v.floor_seed    == built_seed_        && v.base_depth_m  == built_base_depth_
-        && v.height_step_m == built_height_step_ && v.voxel_size_m  == built_voxel_size_;
-    if (unchanged) return;
+    bool grid_same = grid_
+        && v.grid_extent == built_extent_ && v.height_cells == built_height_cells_
+        && v.floor_seed == built_seed_ && v.base_depth_m == built_base_depth_
+        && v.height_step_m == built_height_step_ && v.voxel_size_m == built_voxel_size_;
+    bool sand_same = cfg.sand.enabled == built_sand_enabled_
+        && cfg.sand.spawn_radius == built_sand_radius_
+        && cfg.sand.spawn_thickness == built_sand_thick_;
+    if (grid_same && sand_same) return;
 
-    grid_.emplace(VoxelWorldParams{ v.grid_extent, v.height_cells, v.voxel_size_m,
-                                    v.height_step_m, v.base_depth_m });
-    floor_ = generate_floor({ v.grid_extent, v.height_cells, (uint32_t)v.floor_seed,
-                              v.base_depth_m, v.height_step_m });
-
-    size_t cells = (size_t)grid_->cells();
-    terrain_.assign(cells, (uint8_t)VoxMat::Air);
-    int extent = v.grid_extent, hc = v.height_cells;
-    for (int iz = 0; iz < extent; ++iz)
-        for (int ix = 0; ix < extent; ++ix) {
-            const FloorColumn& fc = floor_[(size_t)iz * extent + ix];
-            for (int iy = 0; iy < fc.height && iy < hc; ++iy)
-                terrain_[grid_->cell_index(ix, iy, iz)] = fc.material;
-        }
-    cells_ = terrain_;   // initial overlay = bare terrain
-    resync_ = true;      // terrain/grid changed -> next build_edits re-seeds
-
-    built_extent_     = v.grid_extent;   built_height_cells_ = v.height_cells;
-    built_seed_       = v.floor_seed;    built_base_depth_   = v.base_depth_m;
-    built_height_step_= v.height_step_m; built_voxel_size_   = v.voxel_size_m;
-}
-
-void World::begin_frame() {
-    cells_ = terrain_;
-}
-
-void World::ingest(const StampList& stamps) {
-    for (int i = 0; i < stamps.count(); ++i) {
-        uint32_t idx = stamps.idx[i];
-        if (idx < cells_.size())
-            cells_[idx] = stamps.mat[i];   // last writer wins; ignore stale/out-of-range
+    if (!grid_same) {
+        grid_.emplace(VoxelWorldParams{ v.grid_extent, v.height_cells, v.voxel_size_m,
+                                        v.height_step_m, v.base_depth_m });
+        floor_ = generate_floor({ v.grid_extent, v.height_cells, (uint32_t)v.floor_seed,
+                                  v.base_depth_m, v.height_step_m });
+        dims_ = { v.grid_extent, v.height_cells };
+        int extent = v.grid_extent, hc = v.height_cells;
+        terrain_top_.assign((size_t)extent * extent, 0);
+        material_.assign((size_t)extent * extent * hc, (uint8_t)VoxMat::Air);
+        for (int iz = 0; iz < extent; ++iz)
+            for (int ix = 0; ix < extent; ++ix) {
+                const FloorColumn& fc = floor_[(size_t)iz * extent + ix];
+                int h = std::min((int)fc.height, hc);
+                terrain_top_[(size_t)iz * extent + ix] = (uint8_t)std::min(h, 255);
+                for (int iy = 0; iy < h; ++iy)
+                    material_[ca_cell_index(dims_, ix, iy, iz)] = fc.material;
+            }
+    } else {
+        // Same grid, sand toggled: rebuild material_ from terrain to clear old sand.
+        int extent = v.grid_extent, hc = v.height_cells;
+        std::fill(material_.begin(), material_.end(), (uint8_t)VoxMat::Air);
+        for (int iz = 0; iz < extent; ++iz)
+            for (int ix = 0; ix < extent; ++ix) {
+                const FloorColumn& fc = floor_[(size_t)iz * extent + ix];
+                int h = std::min((int)fc.height, hc);
+                for (int iy = 0; iy < h; ++iy)
+                    material_[ca_cell_index(dims_, ix, iy, iz)] = fc.material;
+            }
     }
+
+    ca_.reset();
+    seed_sand(cfg);
+    resync_ = true;
+    prev_overlay_cells_.clear();
+
+    built_extent_ = v.grid_extent; built_height_cells_ = v.height_cells;
+    built_seed_ = v.floor_seed; built_base_depth_ = v.base_depth_m;
+    built_height_step_ = v.height_step_m; built_voxel_size_ = v.voxel_size_m;
+    built_sand_enabled_ = cfg.sand.enabled; built_sand_radius_ = cfg.sand.spawn_radius;
+    built_sand_thick_ = cfg.sand.spawn_thickness;
 }
 
-void World::build_edits(EditList& out) {
-    out.clear();
-    if (resync_ || prev_cells_.size() != cells_.size()) {
-        out.resync = true;          // consumer re-seeds wholesale from cells()
-        prev_cells_ = cells_;
-        resync_ = false;
-        return;
+void World::seed_sand(const Config& cfg) {
+    if (!cfg.sand.enabled) return;
+    int extent = dims_.extent, hc = dims_.height_cells;
+    int cx = extent / 2, cz = extent / 2, r = std::min(cfg.sand.spawn_radius, extent / 2);
+    int top = hc - 1, bot = std::max(0, hc - cfg.sand.spawn_thickness);
+    for (int iz = std::max(0, cz - r); iz <= std::min(extent - 1, cz + r); ++iz)
+        for (int ix = std::max(0, cx - r); ix <= std::min(extent - 1, cx + r); ++ix)
+            for (int iy = bot; iy <= top; ++iy)
+                material_[ca_cell_index(dims_, ix, iy, iz)] = (uint8_t)VoxMat::Sand;
+    ca_.wake_box(cx - r, bot, cz - r, cx + r, top, cz + r);
+}
+
+const std::vector<uint8_t>& World::materialize_composite() const {
+    composite_ = material_;
+    for (size_t i = 0; i < overlay_cells_.size(); ++i) {
+        uint32_t c = overlay_cells_[i];
+        if (c < composite_.size()) composite_[c] = overlay_mats_[i];   // last writer wins
     }
-    diff_cells(prev_cells_, cells_, out);
-    prev_cells_ = cells_;
+    return composite_;
+}
+
+void World::step(const Config&, float, const StampList&, EditList& out) {
+    out.clear();           // Task 5 implements the real pass
 }
 
 float World::floor_top_y(float x, float z) const {
