@@ -160,19 +160,13 @@ static void build_frame(Engine* e, float sim_time, float dt) {
                                         (stern.y + half) / cfg.voxel.voxel_size_m,
                                         1.5f, -cfg.entity.wake_amp });
     }
-    e->world.begin_frame();
     e->ecosystem.build_stamp(cfg, e->world.grid(), e->stamp);
-    e->world.ingest(e->stamp);   // composite entities into the authoritative grid
-
-    e->world.build_edits(e->frame.edits);
+    e->world.step(cfg, dt, e->stamp, e->frame.edits);
 #ifndef NDEBUG
-    // Validate the edit stream reconstructs the discrete world (step 4 moves
-    // this apply onto the GPU). applied_dbg is only ever mutated via apply_edits()
-    // or a wholesale resync — never copied from cells() mid-stream.
-    if (e->frame.edits.resync) e->applied_dbg = e->world.cells();
+    if (e->frame.edits.resync) e->applied_dbg = e->world.materialize_composite();
     else vox::apply_edits(e->applied_dbg, e->frame.edits);
-    assert(e->applied_dbg == e->world.cells()
-           && "EditList stream diverged from World::cells()");
+    assert(e->applied_dbg == e->world.materialize_composite()
+           && "EditList stream diverged from World composite");
 #endif
 }
 
@@ -198,7 +192,7 @@ static void consume_frame(Engine* e, id<MTLCommandBuffer> cb) {
     id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
     e->sim.encode_mipgen((__bridge void*)blit, cfg);
     if (discrete_resync)
-        e->field.encode_discrete_resync((__bridge void*)blit, cfg, e->world.cells(), e->frame_index);
+        e->field.encode_discrete_resync((__bridge void*)blit, cfg, e->world.materialize_composite(), e->frame_index);
     [blit endEncoding];
 }
 
