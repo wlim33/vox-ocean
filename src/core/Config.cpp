@@ -12,9 +12,8 @@ template<typename T>
 T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 
 const std::vector<std::string> KNOWN_TOP_KEYS = {
-    "cascade_count",
     "max_in_flight_frames",
-    "cascades","wave","sky","shading","bench","voxel","march","render","ripple","entity","kelp","fish","sand"
+    "sky","shading","bench","voxel","march","render","ripple","entity","kelp","fish","sand"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -23,15 +22,6 @@ void check_unknown_keys(const toml::table& t, LoadResult& r) {
         if (std::find(KNOWN_TOP_KEYS.begin(), KNOWN_TOP_KEYS.end(), key) == KNOWN_TOP_KEYS.end())
             r.warnings.push_back("unknown top-level key: " + key);
     }
-}
-
-void load_wave(const toml::table& t, WaveConfig& w) {
-    if (auto v = t["wind_speed_mps"].value<double>()) w.wind_speed_mps = (float)*v;
-    if (auto v = t["wind_dir_rad"].value<double>())   w.wind_dir_rad   = (float)*v;
-    if (auto v = t["choppiness"].value<double>())     w.choppiness     = (float)*v;
-    if (auto v = t["swell"].value<double>())          w.swell          = (float)*v;
-    if (auto v = t["amplitude"].value<double>())      w.amplitude      = (float)*v;
-    if (auto v = t["max_wavelength_m"].value<double>()) w.max_wavelength_m = (float)*v;
 }
 
 void load_voxel(const toml::table& t, VoxelConfig& v, LoadResult& r) {
@@ -200,15 +190,9 @@ LoadResult load_config_from_string(const std::string& text) {
     check_unknown_keys(tbl, r);
 
     auto& c = r.config;
-    if (auto v = tbl["cascade_count"].value<int64_t>()) {
-        int n = (int)*v;
-        if (n < 1 || n > 4) r.warnings.push_back("cascade_count out of [1,4], clamped");
-        c.cascade_count = clamp(n, 1, 4);
-    }
     if (auto v = tbl["max_in_flight_frames"].value<int64_t>())
         c.max_in_flight_frames = clamp((int)*v, 1, 3);
 
-    if (auto* w = tbl["wave"].as_table())  load_wave(*w, c.wave);
     if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel, r);
     if (auto* mc = tbl["march"].as_table()) load_march(*mc, c.march, r);
     if (auto* rd = tbl["render"].as_table()) load_render(*rd, c.render);
@@ -217,7 +201,7 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* kp = tbl["kelp"].as_table()) load_kelp(*kp, c.kelp, r);
     if (auto* fp = tbl["fish"].as_table()) load_fish(*fp, c.fish, r);
     if (auto* sp = tbl["sand"].as_table()) load_sand(*sp, c.sand, r);
-    // sky, shading, cascades, bench loaders follow the same pattern; extend as needed.
+    // sky, shading, bench loaders follow the same pattern; extend as needed.
     return r;
 }
 
@@ -234,13 +218,7 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
         std::string key = s.substr(0, eq);
         std::string val = s.substr(eq + 1);
         try {
-            if      (key == "wave.wind_speed_mps")        in.config.wave.wind_speed_mps = std::stof(val);
-            else if (key == "wave.amplitude")             in.config.wave.amplitude      = std::stof(val);
-            else if (key == "wave.choppiness")            in.config.wave.choppiness     = std::stof(val);
-            else if (key == "wave.swell")                 in.config.wave.swell          = std::stof(val);
-            else if (key == "wave.max_wavelength_m")      in.config.wave.max_wavelength_m = std::stof(val);
-            else if (key == "cascade_count")              in.config.cascade_count       = std::stoi(val);
-            else if (key == "voxel.grid_extent") {
+            if      (key == "voxel.grid_extent") {
                 int n = std::stoi(val);
                 if (n < 8 || n > 1024) in.warnings.push_back("voxel.grid_extent out of [8,1024], clamped");
                 in.config.voxel.grid_extent = clamp(n, 8, 1024);
@@ -380,13 +358,6 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
 
 uint64_t config_hash(const Config& c) {
     uint64_t h = 0xcbf29ce484222325ull;
-    // Wave
-    h = fnv1a64(&c.wave.wind_speed_mps, sizeof(c.wave.wind_speed_mps), h);
-    h = fnv1a64(&c.wave.wind_dir_rad,   sizeof(c.wave.wind_dir_rad),   h);
-    h = fnv1a64(&c.wave.choppiness,     sizeof(c.wave.choppiness),     h);
-    h = fnv1a64(&c.wave.swell,          sizeof(c.wave.swell),          h);
-    h = fnv1a64(&c.wave.amplitude,      sizeof(c.wave.amplitude),      h);
-    h = fnv1a64(&c.wave.max_wavelength_m, sizeof(c.wave.max_wavelength_m), h);
     // Voxel
     h = fnv1a64(&c.voxel.grid_extent,   sizeof(c.voxel.grid_extent),   h);
     h = fnv1a64(&c.voxel.voxel_size_m,  sizeof(c.voxel.voxel_size_m),  h);
@@ -426,12 +397,6 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.sand.enabled,         sizeof(c.sand.enabled),         h);
     h = fnv1a64(&c.sand.spawn_radius,    sizeof(c.sand.spawn_radius),    h);
     h = fnv1a64(&c.sand.spawn_thickness, sizeof(c.sand.spawn_thickness), h);
-    // Grid / cascades
-    h = fnv1a64(&c.cascade_count,       sizeof(c.cascade_count),       h);
-    for (int i = 0; i < 4; ++i) {
-        h = fnv1a64(&c.cascades[i].size_m,     sizeof(float), h);
-        h = fnv1a64(&c.cascades[i].resolution, sizeof(int),   h);
-    }
     // Sky
     h = fnv1a64(&c.sky.cubemap_resolution, sizeof(c.sky.cubemap_resolution), h);
     h = fnv1a64(&c.sky.sun_elevation_rad,  sizeof(c.sky.sun_elevation_rad),  h);

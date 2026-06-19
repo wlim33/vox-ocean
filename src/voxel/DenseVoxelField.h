@@ -13,7 +13,7 @@ public:
     VoxelGridDesc desc(const Config&) const override;
     void rebuild_if_dirty(const MetalContext&, const Config&) override;
     void ensure_capacity(const MetalContext&, const Config&) override;
-    void encode_fill(void*, const Config&, Cascade* const*, int, void* ripple_front_tex, int) override;
+    void encode_fill(void*, const Config&, void* ripple_front_tex, int) override;
     bool discrete_needs_resync(const EditList& edits) const;
     void encode_apply_edits(void* compute_encoder, const Config&, const EditList& edits, int frame);
     void encode_discrete_resync(void* blit_encoder, const Config&, const std::vector<uint8_t>& cells, int frame);

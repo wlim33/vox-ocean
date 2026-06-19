@@ -20,7 +20,7 @@ public:
     // count/seed changes. Stateful entities (fish, boat) are NOT reset on
     // unrelated config changes.
     void rebuild_if_dirty(const Config& cfg, const World& world);
-    // Advance boat + fish; refresh kelp sway. water_height = CPU WaterModel.
+    // Advance boat + fish; refresh kelp sway. water_height = ripple surface height.
     void update(const Config& cfg, float dt, float t, const HeightFn& water_height,
                 const World& world);
     // Append kelp, then fish, then boat (boat last -> wins overlaps).

@@ -1,5 +1,4 @@
 #import "voxel/DenseVoxelField.h"
-#import "ocean/Cascade.h"
 #import "core/Config.h"
 #import "gpu/MetalContext.h"
 #import "gpu/PipelineCache.h"
@@ -76,13 +75,11 @@ void DenseVoxelField::ensure_capacity(const MetalContext& ctx, const Config& cfg
 }
 
 void DenseVoxelField::encode_fill(void* compute_encoder, const Config& cfg,
-                                  Cascade* const* cascades, int cascade_count,
                                   void* ripple_front_tex, int frame_index) {
     if (!surface_tex_.handle) return;
     id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
     int slot = frame_index % RING;
     int extent = cfg.voxel.grid_extent;
-    int n = std::min(cascade_count, MAX_CASCADES);
 
     WorldFillUniforms u{};
     u.grid_extent   = extent;
@@ -90,26 +87,17 @@ void DenseVoxelField::encode_fill(void* compute_encoder, const Config& cfg,
     u.voxel_size_m  = cfg.voxel.voxel_size_m;
     u.height_step_m = cfg.voxel.height_step_m;
     u.base_depth_m  = cfg.voxel.base_depth_m;
-    u.cascade_count = n;
-    u.ripple_foam = cfg.ripple.foam; u._wpad1 = 0.0f;
-    for (int i = 0; i < MAX_CASCADES; ++i)
-        u.cascade_size[i] = i < n ? cfg.cascades[i].size_m : 0.0f;
+    u.ripple_foam   = cfg.ripple.foam;
     std::memcpy(fill_uniforms_[slot].cpu_ptr, &u, sizeof(u));
 
     [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_fill_];
     [ce setBuffer:(__bridge id<MTLBuffer>)fill_uniforms_[slot].handle offset:0 atIndex:0];
     [ce setTexture:(__bridge id<MTLTexture>)surface_tex_.handle atIndex:0];
-    for (int i = 0; i < n; ++i) {
-        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->displacement_handle() atIndex:1 + i];
-        [ce setTexture:(__bridge id<MTLTexture>)cascades[i]->normal_handle() atIndex:1 + MAX_CASCADES + i];
-    }
-    [ce setTexture:(__bridge id<MTLTexture>)ripple_front_tex
-           atIndex:1 + 2 * MAX_CASCADES];
+    [ce setTexture:(__bridge id<MTLTexture>)ripple_front_tex atIndex:1];
 
     MTLSize tg = MTLSizeMake(16, 16, 1);
     NSUInteger groups = (NSUInteger)((extent + 15) / 16);
-    MTLSize grid = MTLSizeMake(groups, groups, 1);
-    [ce dispatchThreadgroups:grid threadsPerThreadgroup:tg];
+    [ce dispatchThreadgroups:MTLSizeMake(groups, groups, 1) threadsPerThreadgroup:tg];
 }
 
 bool DenseVoxelField::discrete_needs_resync(const EditList& edits) const {

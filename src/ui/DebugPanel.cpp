@@ -10,23 +10,6 @@ void draw_debug_panel(App& app) {
     ImGui::Begin("vox-ocean");
     ImGui::Text("frame dt: %.2f ms", app.clock().delta_seconds() * 1000.0);
 
-    if (ImGui::CollapsingHeader("Cascades", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::SliderInt("count", &c.cascade_count, 1, 4);
-        for (int i = 0; i < c.cascade_count; ++i) {
-            ImGui::PushID(i);
-            ImGui::Text("Cascade %d", i);
-            ImGui::SliderFloat("size m", &c.cascades[i].size_m, 1.0f, 500.0f);
-            ImGui::PopID();
-        }
-    }
-    if (ImGui::CollapsingHeader("Wave")) {
-        ImGui::SliderFloat("wind speed", &c.wave.wind_speed_mps, 0.0f, 30.0f);
-        ImGui::SliderFloat("wind dir",   &c.wave.wind_dir_rad,  0.0f, 6.283f);
-        ImGui::SliderFloat("choppiness", &c.wave.choppiness,    0.0f, 2.0f);
-        ImGui::SliderFloat("swell",      &c.wave.swell,         0.0f, 1.0f);
-        ImGui::SliderFloat("amplitude",  &c.wave.amplitude,     0.1f, 10000.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("max wavelength", &c.wave.max_wavelength_m, 0.0f, 300.0f);
-    }
     if (ImGui::CollapsingHeader("Sky")) {
         ImGui::SliderFloat("sun elev", &c.sky.sun_elevation_rad, 0.0f, 1.57f);
         ImGui::SliderFloat("sun azim", &c.sky.sun_azimuth_rad,  0.0f, 6.283f);

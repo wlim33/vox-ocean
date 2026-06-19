@@ -28,20 +28,6 @@ struct SkyUniforms {
     float _pad;
 };
 
-struct CascadeUniforms {
-    int   N;
-    float L;
-    float t;
-    float choppiness;
-};
-
-struct FftPassUniforms {
-    int N;
-    int direction; // 0 = horizontal, 1 = vertical
-};
-
-#define MAX_CASCADES 4
-
 // Material IDs stored in the world grid (r8Uint texture3d).
 // Lockstep mirror of vox::VoxMat in src/voxel/VoxelWorld.h.
 #define MAT_AIR   0
@@ -60,9 +46,8 @@ struct WorldFillUniforms {
     float voxel_size_m;
     float height_step_m;
     float base_depth_m;
-    int   cascade_count;
-    float ripple_foam, _wpad1;
-    float cascade_size[MAX_CASCADES];
+    float ripple_foam;
+    float _wpad0, _wpad1;   // pad to 32 bytes (16-byte multiple)
 };
 
 #define MAX_SPLASHES 64
