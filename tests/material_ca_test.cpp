@@ -6,12 +6,7 @@
 using namespace vox;
 
 static int sand_count(const std::vector<uint8_t>& g) {
-    return (int)std::count(g.begin(), g.end(), (uint8_t)VoxMat::Sand);
-}
-
-// terrain_top all-zero => entire column is dynamic (no terrain): every Sand moves.
-static std::vector<uint8_t> no_terrain(const MaterialCaDims& d) {
-    return std::vector<uint8_t>((size_t)d.extent * d.extent, 0);
+    return (int)std::count(g.begin(), g.end(), (uint8_t)VoxMat::SandGrain);
 }
 
 TEST(MaterialCa, IndexMatchesVoxelWorld) {
@@ -43,44 +38,40 @@ TEST(MaterialCa, ResolveBlockConservesSand) {
 TEST(MaterialCa, SweepDropsOneGrainOneCell) {
     MaterialCaDims d{4, 8};
     std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
-    auto tt = no_terrain(d);
     int ix = 1, iz = 1, iy = 5;
-    g[ca_cell_index(d, ix, iy, iz)] = (uint8_t)VoxMat::Sand;
+    g[ca_cell_index(d, ix, iy, iz)] = (uint8_t)VoxMat::SandGrain;
     std::vector<uint32_t> changed;
     // oy=0 puts y=4,5 in one block -> grain at 5 falls to 4.
-    margolus_sweep(g, d, tt, 0, 0, 0, 0, 0, 0, d.extent - 1, d.height_cells - 1, d.extent - 1, changed);
+    margolus_sweep(g, d, 0, 0, 0, 0, 0, 0, d.extent - 1, d.height_cells - 1, d.extent - 1, changed);
     EXPECT_EQ(g[ca_cell_index(d, ix, 5, iz)], (uint8_t)VoxMat::Air);
-    EXPECT_EQ(g[ca_cell_index(d, ix, 4, iz)], (uint8_t)VoxMat::Sand);
+    EXPECT_EQ(g[ca_cell_index(d, ix, 4, iz)], (uint8_t)VoxMat::SandGrain);
     EXPECT_EQ(sand_count(g), 1);
 }
 
 TEST(MaterialCa, SweepLeavesTerrainSandInPlace) {
     MaterialCaDims d{4, 8};
     std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
-    // column (1,1): terrain up to y<3 made of Sand; air above. terrain_top = 3.
-    std::vector<uint8_t> tt((size_t)d.extent * d.extent, 0);
-    tt[(size_t)1 * d.extent + 1] = 3;
-    for (int iy = 0; iy < 3; ++iy) g[ca_cell_index(d, 1, iy, 1)] = (uint8_t)VoxMat::Sand;
+    // column (1,1): terrain up to y<3 made of Rock (Solid); air above.
+    for (int iy = 0; iy < 3; ++iy) g[ca_cell_index(d, 1, iy, 1)] = (uint8_t)VoxMat::Rock;
     std::vector<uint32_t> changed;
     for (int s = 0; s < 4; ++s)
-        margolus_sweep(g, d, tt, 0, s % 2, 0, 0, 0, 0, d.extent-1, d.height_cells-1, d.extent-1, changed);
+        margolus_sweep(g, d, 0, s % 2, 0, 0, 0, 0, d.extent-1, d.height_cells-1, d.extent-1, changed);
     for (int iy = 0; iy < 3; ++iy)
-        EXPECT_EQ(g[ca_cell_index(d, 1, iy, 1)], (uint8_t)VoxMat::Sand);  // terrain unmoved
+        EXPECT_EQ(g[ca_cell_index(d, 1, iy, 1)], (uint8_t)VoxMat::Rock);  // terrain unmoved
     EXPECT_TRUE(changed.empty());
 }
 
 TEST(MaterialCa, GrainFallsToFloorOverSteps) {
     MaterialCaDims d{4, 16};
     std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
-    auto tt = no_terrain(d);
-    g[ca_cell_index(d, 2, 12, 2)] = (uint8_t)VoxMat::Sand;
+    g[ca_cell_index(d, 2, 12, 2)] = (uint8_t)VoxMat::SandGrain;
     MaterialCa ca;
     ca.wake_box(2, 12, 2, 2, 12, 2);
     for (int s = 0; s < 40 && ca.awake(); ++s) {
         std::vector<uint32_t> changed;
-        ca.step(g, d, tt, changed);
+        ca.step(g, d, changed);
     }
-    EXPECT_EQ(g[ca_cell_index(d, 2, 0, 2)], (uint8_t)VoxMat::Sand);  // landed on the floor
+    EXPECT_EQ(g[ca_cell_index(d, 2, 0, 2)], (uint8_t)VoxMat::SandGrain);  // landed on the floor
     EXPECT_EQ(sand_count(g), 1);
     EXPECT_FALSE(ca.awake());                                        // settled -> asleep
 }
@@ -88,17 +79,30 @@ TEST(MaterialCa, GrainFallsToFloorOverSteps) {
 TEST(MaterialCa, SettledSceneSleeps) {
     MaterialCaDims d{4, 8};
     std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
-    auto tt = no_terrain(d);
-    g[ca_cell_index(d, 2, 0, 2)] = (uint8_t)VoxMat::Sand;            // already on the floor
+    g[ca_cell_index(d, 2, 0, 2)] = (uint8_t)VoxMat::SandGrain;    // already on the floor
     MaterialCa ca;
     ca.wake_box(2, 0, 2, 2, 0, 2);
     bool moved = false;
     for (int s = 0; s < 8; ++s) {                                   // > one full phase cycle
         std::vector<uint32_t> changed;
-        ca.step(g, d, tt, changed);
+        ca.step(g, d, changed);
         if (!changed.empty()) moved = true;
     }
     EXPECT_FALSE(moved);                                            // a grain on the floor never moves
     EXPECT_FALSE(ca.awake());                                       // CA sleeps after a quiet cycle
     EXPECT_EQ(sand_count(g), 1);
+}
+
+TEST(MaterialCa, FallingGrainKeepsSandGrainIdentity) {
+    MaterialCaDims d{6, 16};
+    std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d, 2, 12, 2)] = (uint8_t)VoxMat::SandGrain;
+    MaterialCa ca;
+    ca.wake_box(2, 12, 2, 2, 12, 2);
+    std::vector<uint32_t> changed;
+    for (int s = 0; s < 40 && ca.awake(); ++s) { changed.clear(); ca.step(g, d, changed); }
+    // Landed grain is still SandGrain, never rewritten to Sand; count conserved.
+    EXPECT_EQ(g[ca_cell_index(d, 2, 0, 2)], (uint8_t)VoxMat::SandGrain);
+    EXPECT_EQ(std::count(g.begin(), g.end(), (uint8_t)VoxMat::SandGrain), 1);
+    EXPECT_EQ(std::count(g.begin(), g.end(), (uint8_t)VoxMat::Sand), 0);
 }

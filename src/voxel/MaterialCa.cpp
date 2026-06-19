@@ -1,5 +1,6 @@
 #include "voxel/MaterialCa.h"
 #include "voxel/VoxelWorld.h"   // VoxMat
+#include "voxel/MaterialRegistry.h"
 #include <algorithm>
 namespace vox {
 
@@ -26,15 +27,17 @@ void resolve_block(uint8_t cls[8]) {
 }
 
 namespace {
-// Classify a world cell into {EMPTY, SAND, BARRIER}. Out-of-grid is BARRIER.
-// Sand below its column's terrain_top is static terrain → BARRIER; at/above is dynamic.
+// Classify a world cell into {EMPTY, SAND, BARRIER} by material phase.
+// Out-of-grid is BARRIER. Granular→CA_SAND; Empty→CA_EMPTY; Solid→CA_BARRIER.
 inline uint8_t classify(const std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                        const std::vector<uint8_t>& terrain_top, int ix, int iy, int iz) {
+                        int ix, int iy, int iz) {
     if (ix < 0 || ix >= d.extent || iy < 0 || iy >= d.height_cells || iz < 0 || iz >= d.extent)
         return CA_BARRIER;
-    uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
-    if (m == (uint8_t)VoxMat::Air) return CA_EMPTY;
-    if (m == (uint8_t)VoxMat::Sand && iy >= terrain_top[(size_t)iz * d.extent + ix]) return CA_SAND;
+    switch (material_props((VoxMat)cells[ca_cell_index(d, ix, iy, iz)]).phase) {
+        case Phase::Empty:    return CA_EMPTY;
+        case Phase::Granular: return CA_SAND;
+        case Phase::Solid:    return CA_BARRIER;
+    }
     return CA_BARRIER;
 }
 }
@@ -46,14 +49,14 @@ void MaterialCa::wake_box(int x0, int y0, int z0, int x1, int y1, int z1) {
 }
 
 void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                      const std::vector<uint8_t>& terrain_top, std::vector<uint32_t>& changed) {
+                      std::vector<uint32_t>& changed) {
     if (!awake()) return;
     // Phase schedule: alternate oy every step (continuous fall); cycle ox,oz so
     // piles can spread. 4-phase deterministic sequence keyed off the step counter.
     static const int OX[4] = {0, 1, 0, 1}, OY[4] = {0, 1, 0, 1}, OZ[4] = {0, 0, 1, 1};
     int p = phase_ & 3;
     int x0 = ax0_, y0 = ay0_, z0 = az0_, x1 = ax1_, y1 = ay1_, z1 = az1_;
-    margolus_sweep(cells, d, terrain_top, OX[p], OY[p], OZ[p], x0, y0, z0, x1, y1, z1, changed);
+    margolus_sweep(cells, d, OX[p], OY[p], OZ[p], x0, y0, z0, x1, y1, z1, changed);
     ++phase_;
     // A single no-motion phase is ambiguous: under the Margolus partition a grain
     // can be the lower cell of its block this phase (so it cannot move) yet fall on
@@ -82,7 +85,6 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
 }
 
 void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                    const std::vector<uint8_t>& terrain_top,
                     int ox, int oy, int oz,
                     int x0, int y0, int z0, int x1, int y1, int z1,
                     std::vector<uint32_t>& changed) {
@@ -92,13 +94,20 @@ void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     for (int bz = bz0; bz <= z1; bz += 2)
         for (int by = by0; by <= y1; by += 2)
             for (int bx = bx0; bx <= x1; bx += 2) {
-                uint8_t cls[8], before[8];
+                uint8_t cls[8], before[8], mat[8];
+                uint8_t granular_id = (uint8_t)VoxMat::Air;   // id of the dynamic grain in this block
                 for (int lz = 0; lz < 2; ++lz)
                     for (int ly = 0; ly < 2; ++ly)
                         for (int lx = 0; lx < 2; ++lx) {
-                            uint8_t c = classify(cells, d, terrain_top, bx + lx, by + ly, bz + lz);
-                            cls[lx + 2 * ly + 4 * lz] = c;
-                            before[lx + 2 * ly + 4 * lz] = c;
+                            int wx = bx + lx, wy = by + ly, wz = bz + lz;
+                            bool in = wx >= 0 && wx < d.extent && wy >= 0 && wy < d.height_cells &&
+                                      wz >= 0 && wz < d.extent;
+                            uint8_t m = in ? cells[ca_cell_index(d, wx, wy, wz)] : (uint8_t)VoxMat::Air;
+                            uint8_t c = classify(cells, d, wx, wy, wz);
+                            int l = lx + 2 * ly + 4 * lz;
+                            cls[l] = before[l] = c;
+                            mat[l] = m;
+                            if (c == CA_SAND) granular_id = m;   // single dynamic id per block in SP1
                         }
                 resolve_block(cls);
                 for (int lz = 0; lz < 2; ++lz)
@@ -110,8 +119,7 @@ void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                             if (wx < 0 || wx >= d.extent || wy < 0 || wy >= d.height_cells ||
                                 wz < 0 || wz >= d.extent) continue;            // never write OOB
                             int idx = ca_cell_index(d, wx, wy, wz);
-                            cells[idx] = (cls[l] == CA_SAND) ? (uint8_t)VoxMat::Sand
-                                                            : (uint8_t)VoxMat::Air;
+                            cells[idx] = (cls[l] == CA_SAND) ? granular_id : (uint8_t)VoxMat::Air;
                             changed.push_back((uint32_t)idx);
                         }
             }

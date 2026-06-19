@@ -21,11 +21,10 @@ enum : uint8_t { CA_EMPTY = 0, CA_SAND = 1, CA_BARRIER = 2 };
 void resolve_block(uint8_t cls[8]);
 
 // One Margolus phase over the inclusive cell box [x0,x1]x[y0,y1]x[z0,z1] with
-// block-origin offset (ox,oy,oz) in {0,1}. terrain_top[iz*extent+ix] = first cell
-// index-in-column at/above which Sand is dynamic; Sand below it is terrain (barrier).
+// block-origin offset (ox,oy,oz) in {0,1}. Routes cells by material phase from
+// the registry (Granular→CA_SAND, Solid→CA_BARRIER, Empty→CA_EMPTY).
 // Appends changed cell indices to `changed`.
 void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                    const std::vector<uint8_t>& terrain_top,
                     int ox, int oy, int oz,
                     int x0, int y0, int z0, int x1, int y1, int z1,
                     std::vector<uint32_t>& changed);
@@ -38,7 +37,7 @@ public:
     void reset() { phase_ = 0; quiet_ = 0; clear_box(); }
     void wake_box(int x0, int y0, int z0, int x1, int y1, int z1);
     void step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
-              const std::vector<uint8_t>& terrain_top, std::vector<uint32_t>& changed);
+              std::vector<uint32_t>& changed);
     bool awake() const { return ax1_ >= ax0_ && ay1_ >= ay0_ && az1_ >= az0_; }
 private:
     void clear_box() { ax0_ = ay0_ = az0_ = 1; ax1_ = ay1_ = az1_ = 0; }  // empty (min>max)
