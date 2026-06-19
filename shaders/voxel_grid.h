@@ -1,6 +1,6 @@
 #pragma once
 // Single source of truth for voxel-grid math, included by BOTH C++ and Metal
-// (mirrors the shared-header pattern in fft_common.h / shader_types.h). Replaces
+// (mirrors the shared-header pattern in shader_types.h). Replaces
 // the grid math previously duplicated across VoxelWorld, Dda.cpp, world_fill.metal,
 // voxel_march.metal, and apply_edits.metal. Tests: tests/voxel_grid_test.cpp.
 

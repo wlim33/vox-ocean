@@ -321,7 +321,7 @@ int engine_snapshot(const char* config_path, const char* overrides,
     id<MTLDevice> dev = (__bridge id<MTLDevice>)e->ctx.device;
     id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>)e->ctx.queue;
 
-    // 1. Fixed-dt warmup: settle FFT / ripple / entities to a reproducible state.
+    // 1. Fixed-dt warmup: settle ripple / entities to a reproducible state.
     const float dt = 1.0f / 60.0f;
     for (int i = 0; i < std::max(1, warmup_frames); ++i) {
         @autoreleasepool {

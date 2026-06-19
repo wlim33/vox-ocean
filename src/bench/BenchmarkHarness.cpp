@@ -41,12 +41,10 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " voxel_size_m=" << cfg.voxel.voxel_size_m
          << " height_step_m=" << cfg.voxel.height_step_m
          << " base_depth_m=" << cfg.voxel.base_depth_m
-         << " cascade_count=" << cfg.cascade_count
          << " height_cells=" << cfg.voxel.height_cells
          << " floor_seed=" << cfg.voxel.floor_seed
          << " max_steps=" << cfg.march.max_steps
          << " render_scale=" << cfg.march.render_scale
-         << " max_wavelength_m=" << cfg.wave.max_wavelength_m
          << " ripple_wave_speed=" << cfg.ripple.wave_speed_mps
          << " ripple_damping=" << cfg.ripple.damping
          << " ripple_rain_rate=" << cfg.ripple.rain_rate
@@ -57,8 +55,7 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " kelp_max_stalks=" << cfg.kelp.max_stalks
          << " fish_schools=" << cfg.fish.school_count
          << " fish_per_school=" << cfg.fish.per_school
-         << " backend=" << cfg.render.backend
-         << " fft_size=" << cfg.cascades[0].resolution << '\n';
+         << " backend=" << cfg.render.backend << '\n';
     out_ << "frame_idx,cpu_ms,gpu_total_ms,drawable_wait_ms,edits,ca_awake,config_hash\n";
 }
 

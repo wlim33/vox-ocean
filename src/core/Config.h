@@ -1,5 +1,4 @@
 #pragma once
-#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -8,24 +7,6 @@
 namespace vox {
 
 enum class CameraPath { Static, Orbit, Flyby };
-
-struct CascadeConfig {
-    float size_m = 250.0f;
-    int   resolution = 256;
-};
-
-struct WaveConfig {
-    float wind_speed_mps = 12.0f;
-    float wind_dir_rad   = 0.5f;
-    float choppiness     = 0.8f;
-    float swell          = 0.3f;
-    // Phillips spectrum amplitude. Wave height scales with sqrt(amplitude).
-    float amplitude      = 4000.0f;
-    // Suppress spectral components with wavelength beyond this (high-pass).
-    // The diorama can't host waves longer than itself; without this the
-    // largest cascade renders as a single dome. 0 disables (open ocean).
-    float max_wavelength_m = 20.0f;
-};
 
 struct ShadingConfig {
     float foam_threshold = 0.15f;
@@ -56,7 +37,7 @@ struct MarchConfig {
 struct RenderConfig { std::string backend = "raymarch"; };
 
 struct RippleConfig {
-    // Interactive surface ripples (2D wave equation), summed with the FFT.
+    // Interactive surface ripples (2D wave equation).
     float wave_speed_mps = 6.0f;   // propagation speed c
     float damping        = 0.995f; // per-step energy retention
     float rain_rate      = 0.0f;   // debug splashes per second (0 = off)
@@ -112,16 +93,6 @@ struct BenchConfig {
 };
 
 struct Config {
-    int cascade_count = 3;
-    // Patch sizes use coprime/irrational-ish ratios so the cascades don't
-    // reinforce on a regular grid (which produces visible tile seams).
-    std::array<CascadeConfig, 4> cascades {
-        CascadeConfig{271.0f, 256},
-        CascadeConfig{ 73.0f, 256},
-        CascadeConfig{ 17.0f, 256},
-        CascadeConfig{  3.7f, 256}};
-
-    WaveConfig wave;
     VoxelConfig voxel;
     MarchConfig march;
     RenderConfig render;

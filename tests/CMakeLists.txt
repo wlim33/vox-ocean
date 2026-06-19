@@ -22,22 +22,10 @@ target_sources(vox-ocean-tests PRIVATE
 
 target_sources(vox-ocean-tests PRIVATE voxel_grid_test.cpp)
 
-target_sources(vox-ocean-tests PRIVATE
-    fft_reference_test.cpp
-    support/cpu_fft_reference.cpp
-)
 target_include_directories(vox-ocean-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-
-# GPU/CPU parity: executes the butterfly schedule shared with shaders/fft.metal.
-target_sources(vox-ocean-tests PRIVATE fft_parity_test.cpp)
 target_include_directories(vox-ocean-tests PRIVATE ${CMAKE_SOURCE_DIR}/shaders)
 # stb single-header PNG writer (used by PngWriter.cpp)
 target_include_directories(vox-ocean-tests PRIVATE ${CMAKE_SOURCE_DIR}/third_party/stb)
-
-target_sources(vox-ocean-tests PRIVATE
-    spectrum_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/ocean/Spectrum.cpp
-)
 
 target_sources(vox-ocean-tests PRIVATE
     bench_test.cpp
@@ -58,11 +46,6 @@ target_sources(vox-ocean-tests PRIVATE
 target_sources(vox-ocean-tests PRIVATE
     ripple_test.cpp
     ${CMAKE_SOURCE_DIR}/src/voxel/Ripple.cpp
-)
-
-target_sources(vox-ocean-tests PRIVATE
-    water_model_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/ocean/WaterModel.cpp
 )
 
 target_sources(vox-ocean-tests PRIVATE

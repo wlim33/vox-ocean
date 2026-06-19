@@ -26,6 +26,6 @@ TEST(Bench, WritesHyperparameterHeaderAndExitsAfterMeasure) {
     std::string first; std::getline(in, first);
     EXPECT_EQ(first.rfind("# config_hash=", 0), 0u);
     EXPECT_NE(first.find("grid_extent=192"), std::string::npos);
-    EXPECT_NE(first.find("fft_size=256"), std::string::npos);
+    EXPECT_NE(first.find("ripple_wave_speed="), std::string::npos);
     std::remove("/tmp/vox-bench-test.csv");
 }
