@@ -59,7 +59,11 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
 }
 
 void DenseVoxelField::ensure_capacity(const MetalContext& ctx, const Config& cfg) {
-    int ecap = std::max(1, 2 * max_stamp_cells(cfg));
+    // Cover entity stamps AND a sand-churn budget: a generous fraction of one grid
+    // slab so a falling slab scatters via apply_edits rather than triggering a
+    // full dense resync every frame. (Crossover to resync still fires above this.)
+    int slab = cfg.voxel.grid_extent * cfg.voxel.grid_extent;     // one y-layer of cells
+    int ecap = std::max(1, std::max(2 * max_stamp_cells(cfg), 4 * slab));
     if (ecap > built_edit_cap_ || !edit_cells_[0].handle) {
         for (int i = 0; i < RING; ++i) {
             destroy_buffer(edit_cells_[i]); destroy_buffer(edit_mats_[i]); destroy_buffer(apply_uniforms_[i]);

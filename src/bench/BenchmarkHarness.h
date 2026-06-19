@@ -12,6 +12,8 @@ struct FrameTiming {
     double cpu_ms;
     double gpu_total_ms;
     double drawable_wait_ms;
+    int    edits = 0;        // EditList size this frame (sand churn + entity overlay)
+    int    ca_awake = 0;     // 1 while the CA active region is non-empty, else 0
 };
 
 class BenchmarkHarness {

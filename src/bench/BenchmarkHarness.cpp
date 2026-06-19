@@ -59,14 +59,15 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " fish_per_school=" << cfg.fish.per_school
          << " backend=" << cfg.render.backend
          << " fft_size=" << cfg.cascades[0].resolution << '\n';
-    out_ << "frame_idx,cpu_ms,gpu_total_ms,drawable_wait_ms,config_hash\n";
+    out_ << "frame_idx,cpu_ms,gpu_total_ms,drawable_wait_ms,edits,ca_awake,config_hash\n";
 }
 
 void BenchmarkHarness::record(const FrameTiming& t) {
     if (!active_) return;
     if (frame_idx_ >= warmup_) {
         out_ << t.frame_idx << ',' << t.cpu_ms << ',' << t.gpu_total_ms
-             << ',' << t.drawable_wait_ms << ',' << hash_ << '\n';
+             << ',' << t.drawable_wait_ms << ',' << t.edits << ',' << t.ca_awake
+             << ',' << hash_ << '\n';
         // Termination races the tail of the completed-handler queue; flush so
         // a buffered partial batch isn't lost when the app exits.
         out_.flush();

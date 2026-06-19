@@ -95,6 +95,12 @@ struct FishConfig {
     int   seed         = 202;
 };
 
+struct SandConfig {
+    bool enabled         = false;  // off by default — existing scenes stay identical
+    int  spawn_radius    = 6;      // half-extent (columns) of the seeded slab, clamp [1,64]
+    int  spawn_thickness = 8;      // slab height in cells, dropped from the grid top, clamp [1,64]
+};
+
 struct SkyConfig {
     int cubemap_resolution = 128;
     float sun_elevation_rad = 0.7f;
@@ -128,6 +134,7 @@ struct Config {
     EntityConfig entity;
     KelpConfig kelp;
     FishConfig fish;
+    SandConfig sand;
 
     SkyConfig sky;
     ShadingConfig shading;

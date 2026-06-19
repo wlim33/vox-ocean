@@ -69,5 +69,10 @@ depth_frac   = 0.5
 spread_m     = 2.5
 seed         = 202
 
+[sand]
+enabled         = false
+spawn_radius    = 6
+spawn_thickness = 8
+
 [render]
 backend = "raymarch"

@@ -275,3 +275,23 @@ TEST(Config, RenderBackendParsesAndOverrides) {
     EXPECT_NE(vox::config_hash(o.config), vox::config_hash(d.config));
 }
 
+TEST(Config, ParsesSandSection) {
+    auto r = vox::load_config_from_string(
+        "[sand]\nenabled = true\nspawn_radius = 10\nspawn_thickness = 20\n");
+    EXPECT_TRUE(r.config.sand.enabled);
+    EXPECT_EQ(r.config.sand.spawn_radius, 10);
+    EXPECT_EQ(r.config.sand.spawn_thickness, 20);
+}
+
+TEST(Config, SandDefaultsDisabled) {
+    auto r = vox::load_config_from_string("");
+    EXPECT_FALSE(r.config.sand.enabled);
+}
+
+TEST(Config, SandOverrideViaSet) {
+    auto r = vox::apply_overrides(vox::load_config_from_string(""),
+                                  {"sand.enabled=true", "sand.spawn_radius=3"});
+    EXPECT_TRUE(r.config.sand.enabled);
+    EXPECT_EQ(r.config.sand.spawn_radius, 3);
+}
+
