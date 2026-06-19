@@ -97,6 +97,7 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     u.height_step_m = cfg.voxel.height_step_m;
     u._mpad5 = 0.0f;
     u._mpad6 = 0.0f;
+    // Fill per-material albedo palette from the registry table (single source of truth).
     {
         float rgb[3 * vox::kNumMaterials];
         vox::fill_palette(rgb);

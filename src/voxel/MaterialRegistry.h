@@ -43,5 +43,5 @@ inline void fill_palette(float* rgb /* [3 * kNumMaterials] */) {
         rgb[3*i+1] = kMaterials[i].g;
         rgb[3*i+2] = kMaterials[i].b;
     }
-}
+}  // namespace vox
 }

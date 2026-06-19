@@ -94,7 +94,7 @@ void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     for (int bz = bz0; bz <= z1; bz += 2)
         for (int by = by0; by <= y1; by += 2)
             for (int bx = bx0; bx <= x1; bx += 2) {
-                uint8_t cls[8], before[8], mat[8];
+                uint8_t cls[8], before[8], mat[8];  // captured for SP2 multi-grain mixing; SP1 writes a single granular_id
                 uint8_t granular_id = (uint8_t)VoxMat::Air;   // id of the dynamic grain in this block
                 for (int lz = 0; lz < 2; ++lz)
                     for (int ly = 0; ly < 2; ++ly)

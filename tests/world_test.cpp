@@ -1,7 +1,6 @@
 #include "world/World.h"
 #include "world/EditList.h"
 #include "voxel/VoxelWorld.h"
-#include "voxel/MaterialCa.h"
 #include "entity/StampBudget.h"
 #include "core/Config.h"
 #include <gtest/gtest.h>

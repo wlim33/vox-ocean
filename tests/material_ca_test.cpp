@@ -1,7 +1,6 @@
 #include "voxel/MaterialCa.h"
 #include "voxel/VoxelWorld.h"
 #include <gtest/gtest.h>
-#include <numeric>
 
 using namespace vox;
 
