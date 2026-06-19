@@ -79,3 +79,67 @@ TEST(World, SandSeedAddsSandAboveTerrain) {
     int extent = g.params().extent, hc = g.params().height_cells;
     EXPECT_EQ(w.material()[g.cell_index(extent / 2, hc - 1, extent / 2)], (uint8_t)vox::VoxMat::Sand);
 }
+
+TEST(World, StepFirstFrameResyncs) {
+    vox::World w; w.configure(small_cfg());
+    vox::StampList s; s.push(5, vox::VoxMat::Kelp);
+    vox::EditList e; w.step(small_cfg(), 1.0f / 60, s, e);
+    EXPECT_TRUE(e.resync);
+    EXPECT_EQ(e.count(), 0);
+}
+
+TEST(World, StepEntityMoveRevertsAndSets) {
+    vox::Config c = small_cfg();
+    vox::World w; w.configure(c);
+    vox::EditList e0; { vox::StampList s; s.push(5, vox::VoxMat::Kelp); w.step(c, 1.0f/60, s, e0); }
+    ASSERT_TRUE(e0.resync);
+    vox::EditList e1; { vox::StampList s; s.push(6, vox::VoxMat::Kelp); w.step(c, 1.0f/60, s, e1); }
+    EXPECT_FALSE(e1.resync);
+    ASSERT_EQ(e1.count(), 2);                       // cell 5 reverts, cell 6 -> Kelp
+    bool five_reverted = false, six_kelp = false;
+    for (int k = 0; k < e1.count(); ++k) {
+        if (e1.idx[k] == 5u) { EXPECT_EQ(e1.mat[k], w.material()[5]); five_reverted = true; }
+        if (e1.idx[k] == 6u) { EXPECT_EQ(e1.mat[k], (uint8_t)vox::VoxMat::Kelp); six_kelp = true; }
+    }
+    EXPECT_TRUE(five_reverted); EXPECT_TRUE(six_kelp);
+}
+
+TEST(World, StepEntityOverlayWinsOverMaterial) {
+    vox::Config c = small_cfg();
+    vox::World w; w.configure(c);
+    vox::EditList e0; { vox::StampList s; w.step(c, 1.0f/60, s, e0); }   // resync, no entities
+    vox::EditList e1; { vox::StampList s; s.push(5, vox::VoxMat::Boat); w.step(c, 1.0f/60, s, e1); }
+    // cell 5 in the emitted edit must be Boat (overlay), not material_[5].
+    bool found = false;
+    for (int k = 0; k < e1.count(); ++k) if (e1.idx[k] == 5u) {
+        EXPECT_EQ(e1.mat[k], (uint8_t)vox::VoxMat::Boat); found = true;
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST(World, StepEditStreamReconstructsComposite) {
+    vox::Config c = small_cfg();
+    vox::World w; w.configure(c);
+    std::vector<uint8_t> replica;
+    const uint32_t cells[] = {5, 6, 6, 100, 5};
+    for (uint32_t cell : cells) {
+        vox::StampList s; s.push(cell, vox::VoxMat::Fish);
+        vox::EditList e; w.step(c, 1.0f/60, s, e);
+        if (e.resync) replica = w.materialize_composite();
+        else vox::apply_edits(replica, e);
+        EXPECT_EQ(replica, w.materialize_composite());
+    }
+}
+
+TEST(World, StepSettledSandEmitsNoEditsAfterSleep) {
+    vox::Config c = small_cfg();
+    c.sand.enabled = true; c.sand.spawn_radius = 2; c.sand.spawn_thickness = 2;
+    vox::World w; w.configure(c);
+    vox::StampList empty;
+    vox::EditList e; w.step(c, 1.0f/60, empty, e);       // frame 0: resync
+    ASSERT_TRUE(e.resync);
+    // Run until the sand settles (bounded), then assert a quiet frame emits nothing.
+    for (int i = 0; i < 200; ++i) { vox::EditList ei; w.step(c, 1.0f/60, empty, ei); if (ei.count() == 0) break; }
+    vox::EditList quiet; w.step(c, 1.0f/60, empty, quiet);
+    EXPECT_EQ(quiet.count(), 0);
+}

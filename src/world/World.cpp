@@ -78,8 +78,47 @@ const std::vector<uint8_t>& World::materialize_composite() const {
     return composite_;
 }
 
-void World::step(const Config&, float, const StampList&, EditList& out) {
-    out.clear();           // Task 5 implements the real pass
+void World::step(const Config& cfg, float /*dt*/, const StampList& entities, EditList& out) {
+    out.clear();
+    // Snapshot this frame's overlay (last-writer-wins per cell, append order).
+    overlay_cells_.assign(entities.idx.begin(), entities.idx.end());
+    overlay_mats_.assign(entities.mat.begin(), entities.mat.end());
+
+    if (resync_) {
+        out.resync = true;                          // consumer uploads materialize_composite()
+        prev_overlay_cells_ = overlay_cells_;
+        resync_ = false;
+        return;
+    }
+
+    // 1. Advance the CA over material_ (dynamic sand only).
+    std::vector<uint32_t> ca_changed;
+    if (ca_.awake()) ca_.step(material_, dims_, terrain_top_, ca_changed);
+
+    // 2. Dirty union: CA changes ∪ last frame's overlay ∪ this frame's overlay.
+    dirty_.clear();
+    dirty_.insert(dirty_.end(), ca_changed.begin(), ca_changed.end());
+    dirty_.insert(dirty_.end(), prev_overlay_cells_.begin(), prev_overlay_cells_.end());
+    dirty_.insert(dirty_.end(), overlay_cells_.begin(), overlay_cells_.end());
+    std::sort(dirty_.begin(), dirty_.end());
+    dirty_.erase(std::unique(dirty_.begin(), dirty_.end()), dirty_.end());
+
+    // 3. One composited edit per dirty cell: entity material if occupied, else material_.
+    //    Build the current overlay lookup once (last writer wins).
+    auto overlay_at = [&](uint32_t cell, uint8_t& mat) -> bool {
+        bool hit = false;
+        for (size_t i = 0; i < overlay_cells_.size(); ++i)
+            if (overlay_cells_[i] == cell) { mat = overlay_mats_[i]; hit = true; }  // last wins
+        return hit;
+    };
+    for (uint32_t cell : dirty_) {
+        if (cell >= material_.size()) continue;     // ignore out-of-range overlay cells
+        uint8_t mat;
+        out.push(cell, overlay_at(cell, mat) ? mat : material_[cell]);
+    }
+
+    // 4. Roll the overlay forward.
+    prev_overlay_cells_ = overlay_cells_;
 }
 
 float World::floor_top_y(float x, float z) const {
