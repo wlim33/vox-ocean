@@ -241,6 +241,59 @@ TEST(MaterialCa, WaterAboveSurfaceSettlesAndSleeps) {
         << "same-level sz move fired without genuine downhill (surface oscillation bug)";
 }
 
+// --- Bubble behavior tests (SP2-II) ---
+
+TEST(MaterialCa, ResolveBlockBubbleRisesThroughWater) {
+    using namespace vox;
+    uint8_t mat[8];
+    std::fill(mat, mat + 8, (uint8_t)VoxMat::Water);
+    mat[0] = (uint8_t)VoxMat::Bubble;   // lower cell (ly=0) of the lx=0,lz=0 vertical pair
+    resolve_block(mat);
+    EXPECT_EQ(mat[2], (uint8_t)VoxMat::Bubble);  // rose to the upper cell (ly=1)
+    EXPECT_EQ(mat[0], (uint8_t)VoxMat::Water);   // water sank into its place
+}
+
+TEST(MaterialCa, ResolveBlockBubbleStaysUnderAir) {
+    using namespace vox;
+    uint8_t mat[8];
+    std::fill(mat, mat + 8, (uint8_t)VoxMat::Air);
+    mat[0] = (uint8_t)VoxMat::Bubble;   // bubble below air
+    resolve_block(mat);
+    EXPECT_EQ(mat[0], (uint8_t)VoxMat::Bubble);  // did NOT rise into lighter air
+    EXPECT_EQ(mat[2], (uint8_t)VoxMat::Air);
+}
+
+TEST(MaterialCa, BubbleRisesThroughWaterAndSleepsUnderSurface) {
+    using namespace vox;
+    // Representative ocean: water fills iy=0..6 across the whole extent (free surface
+    // at iy=6, air at iy=7+). A bubble starts at the bottom centre. It rises straight up
+    // through the water and pools just under the surface; because every surface neighbour
+    // is water (not air), it cannot spill sideways. The CA must settle and sleep — the
+    // SP2-I free-surface no-oscillation property applied to a gas pocket.
+    MaterialCaDims d{6, 10};
+    std::vector<uint8_t> g((size_t)d.extent * d.extent * d.height_cells, (uint8_t)VoxMat::Air);
+    for (int iz = 0; iz < d.extent; ++iz)
+        for (int ix = 0; ix < d.extent; ++ix)
+            for (int iy = 0; iy <= 6; ++iy)
+                g[ca_cell_index(d, ix, iy, iz)] = (uint8_t)VoxMat::Water;
+    int cx = 3, cz = 3;
+    g[ca_cell_index(d, cx, 0, cz)] = (uint8_t)VoxMat::Bubble;       // bubble at the bottom centre
+    int water_before = count_of(g, VoxMat::Water);
+    MaterialCa ca; ca.wake_box(0, 0, 0, d.extent - 1, 6, d.extent - 1);
+    std::vector<uint32_t> changed;
+    for (int s = 0; s < 200 && ca.awake(); ++s) { changed.clear(); ca.step(g, d, changed); }
+    EXPECT_FALSE(ca.awake());                          // settled & sleeps — no free-surface oscillation
+    EXPECT_EQ(count_of(g, VoxMat::Bubble), 1);         // mass conserved
+    EXPECT_EQ(count_of(g, VoxMat::Water), water_before);
+    // The bubble rose to the top water layer (iy=6), just beneath the air surface.
+    int by = -1;
+    for (int iy = 0; iy < d.height_cells; ++iy)
+        for (int iz = 0; iz < d.extent; ++iz)
+            for (int ix = 0; ix < d.extent; ++ix)
+                if (g[ca_cell_index(d, ix, iy, iz)] == (uint8_t)VoxMat::Bubble) by = iy;
+    EXPECT_EQ(by, 6);
+}
+
 // Integration test: a flat-surface ocean with a patch of displaced water at the
 // surface must settle and sleep.  Uses same-sized grid as World small_cfg.
 // This confirms that the active-box sleeping mechanism works end-to-end for a
