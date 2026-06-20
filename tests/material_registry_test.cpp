@@ -32,3 +32,20 @@ TEST(MaterialRegistry, SandGrainTintDiffersFromTerrainSand) {
     const auto& s = material_props(VoxMat::Sand);
     EXPECT_TRUE(g.r != s.r || g.g != s.g || g.b != s.b);
 }
+
+TEST(MaterialRegistry, PhysicsScalars) {
+    using namespace vox;
+    // Water is a movable liquid, denser than air, lighter than sand.
+    EXPECT_EQ(material_props(VoxMat::Water).phase, Phase::Liquid);
+    EXPECT_TRUE(material_props(VoxMat::Water).movable);
+    EXPECT_TRUE(material_props(VoxMat::Water).fluidity >= 0.5f);     // levels
+    EXPECT_TRUE(material_props(VoxMat::SandGrain).fluidity < 0.5f);  // repose
+    EXPECT_GT(material_props(VoxMat::SandGrain).density, material_props(VoxMat::Water).density);
+    EXPECT_GT(material_props(VoxMat::Water).density,     material_props(VoxMat::Air).density);
+    EXPECT_GT(material_props(VoxMat::Air).density, 0.0f);            // air participates in ordering
+    // Solids/terrain are pinned.
+    for (VoxMat m : {VoxMat::Rock, VoxMat::Sand, VoxMat::Boat, VoxMat::Kelp, VoxMat::Fish})
+        EXPECT_FALSE(material_props(m).movable);
+    EXPECT_TRUE(material_props(VoxMat::Air).movable);
+    EXPECT_TRUE(material_props(VoxMat::SandGrain).movable);
+}
