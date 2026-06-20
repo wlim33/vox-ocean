@@ -200,3 +200,83 @@ TEST(MaterialCa, Determinism) {
     };
     EXPECT_EQ(make_grid(), make_grid());
 }
+
+// Regression guard unit test: a Water cell at the free surface (over a full
+// water slab) must NOT make a same-level lateral move when the cell BELOW the
+// lateral target is also Water (no genuine downhill).
+//
+// Block layout (index = lx + 2*ly + 4*lz):
+//   0=(lx=0,ly=0,lz=0) Water   lo (below bump cell 2)
+//   1=(lx=1,ly=0,lz=0) Water   dx: also below sx=3 (blocks sx guard)
+//   2=(lx=0,ly=1,lz=0) Water   up: the displaced "bump" at the free surface
+//   3=(lx=1,ly=1,lz=0) Water   sx: filled Water blocks the sx move outright
+//   4=(lx=0,ly=0,lz=1) Water   dz: directly BELOW sz=6 (the guard target)
+//   5=(lx=1,ly=0,lz=1) Water
+//   6=(lx=0,ly=1,lz=1) Air     sz: the same-level z target (no genuine downhill)
+//   7=(lx=1,ly=1,lz=1) Air
+//
+// Without the fix: up=2 tries sx=3 (Water→fail), then sz=6 (Air→succeed):
+//   Water slides from mat[2] to mat[6] and the lateral cascade continues.
+//   Net result: mat[3] changes Water→Air, mat[6] changes Air→Water (2 edits).
+// With the fix: the sz guard checks can_sink(Water, mat[dz=4]=Water)→false,
+//   blocking the slide.  Net result: nothing moves (0 edits).
+TEST(MaterialCa, WaterAboveSurfaceSettlesAndSleeps) {
+    using namespace vox;
+    uint8_t mat[8] = {
+        (uint8_t)VoxMat::Water,   // 0 lo
+        (uint8_t)VoxMat::Water,   // 1 dx / below-sx
+        (uint8_t)VoxMat::Water,   // 2 up = bump
+        (uint8_t)VoxMat::Water,   // 3 sx (Water: blocks sx move, forcing sz check)
+        (uint8_t)VoxMat::Water,   // 4 dz = below-sz (Water: no downhill → fix blocks)
+        (uint8_t)VoxMat::Water,   // 5
+        (uint8_t)VoxMat::Air,     // 6 sz = same-level z target
+        (uint8_t)VoxMat::Air,     // 7
+    };
+    uint8_t before[8];
+    std::copy(mat, mat+8, before);
+    resolve_block(mat);
+    // With the fix: nothing moves — the block must be unchanged.
+    EXPECT_EQ(std::vector<uint8_t>(mat, mat+8),
+              std::vector<uint8_t>(before, before+8))
+        << "same-level sz move fired without genuine downhill (surface oscillation bug)";
+}
+
+// Integration test: a flat-surface ocean with a patch of displaced water at the
+// surface must settle and sleep.  Uses same-sized grid as World small_cfg.
+// This confirms that the active-box sleeping mechanism works end-to-end for a
+// realistic ocean surface scenario (complementing the resolve_block unit test).
+TEST(MaterialCa, FlatOceanWithDisplacedSurfaceWaterSleeps) {
+    using namespace vox;
+    // 16x12x16, sea_top=8.  Full water slab y=0..7, 5x5 patch at y=8 (centre)
+    // simulating 25 sand-displaced surface cells.  CA must sleep within 200 steps.
+    MaterialCaDims d{16, 12};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    const int sea_top = 8;
+    for (int iz = 0; iz < d.extent; ++iz)
+        for (int ix = 0; ix < d.extent; ++ix)
+            for (int iy = 0; iy < sea_top; ++iy)
+                g[ca_cell_index(d, ix, iy, iz)] = (uint8_t)VoxMat::Water;
+    const int patch_lo = 6, patch_hi = 10;
+    int patch_cells = 0;
+    for (int iz = patch_lo; iz <= patch_hi; ++iz)
+        for (int ix = patch_lo; ix <= patch_hi; ++ix) {
+            g[ca_cell_index(d, ix, sea_top, iz)] = (uint8_t)VoxMat::Water;
+            ++patch_cells;
+        }
+    const int water_count = d.extent * d.extent * sea_top + patch_cells;
+
+    MaterialCa ca;
+    ca.wake_box(0, 0, 0, d.extent-1, d.height_cells-1, d.extent-1);
+
+    int steps_to_sleep = -1;
+    const int kBound = 200;
+    for (int s = 0; s < kBound; ++s) {
+        std::vector<uint32_t> changed;
+        ca.step(g, d, changed);
+        if (!ca.awake()) { steps_to_sleep = s + 1; break; }
+    }
+
+    EXPECT_FALSE(ca.awake()) << "CA did not sleep within " << kBound << " steps";
+    SCOPED_TRACE("steps to sleep: " + std::to_string(steps_to_sleep));
+    EXPECT_EQ(count_of(g, VoxMat::Water), water_count);
+}

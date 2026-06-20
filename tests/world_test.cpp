@@ -159,10 +159,10 @@ TEST(World, SeedsWaterBelowSeaLevelAsleep) {
 TEST(World, StepSettledSandEmitsNoEditsAfterSleep) {
     vox::Config c = small_cfg();
     c.sand.enabled = true; c.sand.spawn_radius = 2; c.sand.spawn_thickness = 2;
-    // Use a fully-submerged grid (sea == height_cells) so displaced water cannot
-    // escape above the grid top, avoiding the boundary oscillation that appears
-    // when a partial ocean has its surface inside the grid.
-    c.voxel.base_depth_m = (float)c.voxel.height_cells * c.voxel.height_step_m;
+    // Normal (realistic) grid: sea level is inside the grid (partial ocean).
+    // Sand sinks through water; the displaced water rises to the free surface.
+    // The CA must settle and sleep — the displaced-water oscillation bug must not
+    // keep the CA awake indefinitely.
     vox::World w; w.configure(c);
     vox::StampList empty;
     vox::EditList e; w.step(c, 1.0f/60, empty, e);       // frame 0: resync

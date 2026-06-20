@@ -39,8 +39,15 @@ void resolve_block(uint8_t mat[8]) {
             if (ca_levels(mat[up])) {
                 int sx = (1 - lx) + 2 + 4 * lz; // ly=1, opposite x
                 int sz = lx + 2 + 4 * (1 - lz); // ly=1, opposite z
-                if      (can_sink(mat[up], mat[sx])) { std::swap(mat[up], mat[sx]); continue; }
-                else if (can_sink(mat[up], mat[sz])) { std::swap(mat[up], mat[sz]); continue; }
+                // Guard: only allow a same-level lateral move when the cell BELOW
+                // the target is also lighter than `up`.  dx is the cell at ly=0
+                // directly below sx (opposite-x); dz is below sz (opposite-z).
+                // Without this, a 1-cell water bump at the flat sea surface slides
+                // same-level into adjacent Air even though there is no genuine
+                // downhill, causing a Water+Air pair to ping-pong indefinitely and
+                // preventing the CA from sleeping on a calm ocean.
+                if      (can_sink(mat[up], mat[sx]) && can_sink(mat[up], mat[dx])) { std::swap(mat[up], mat[sx]); continue; }
+                else if (can_sink(mat[up], mat[sz]) && can_sink(mat[up], mat[dz])) { std::swap(mat[up], mat[sz]); continue; }
             }
         }
 }
