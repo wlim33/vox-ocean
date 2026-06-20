@@ -23,7 +23,9 @@ void World::configure(const Config& cfg) {
         && cfg.fire.burn_out_chance == built_fire_.burn_out_chance
         && cfg.fire.smoke_chance == built_fire_.smoke_chance
         && cfg.fire.smoke_dissipate_chance == built_fire_.smoke_dissipate_chance
-        && cfg.fire.ignite_scale == built_fire_.ignite_scale;
+        && cfg.fire.ignite_scale == built_fire_.ignite_scale
+        && cfg.fire.boil_chance == built_fire_.boil_chance
+        && cfg.fire.condense_chance == built_fire_.condense_chance;
     if (grid_same && sand_same && bubble_same && fire_same) return;
 
     if (!grid_same) {
@@ -130,7 +132,8 @@ void World::seed_fire(const Config& cfg) {
             }
     ca_.enable_combustion((uint32_t)cfg.voxel.floor_seed,
                           { cfg.fire.burn_out_chance, cfg.fire.smoke_chance,
-                            cfg.fire.smoke_dissipate_chance, cfg.fire.ignite_scale });
+                            cfg.fire.smoke_dissipate_chance, cfg.fire.ignite_scale,
+                            cfg.fire.boil_chance, cfg.fire.condense_chance });
     ca_.wake_box(cx - r, y0, cz - r, cx + r, y1, cz + r);
 }
 

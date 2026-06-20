@@ -83,6 +83,8 @@ struct FireConfig {
     float smoke_chance = 0.30f;             // P(Fire emits Smoke)/step, clamp [0,1]
     float smoke_dissipate_chance = 0.04f;   // P(Smoke->Air)/step, clamp [0,1]
     float ignite_scale = 1.0f;             // flammability multiplier, clamp [0,4]
+    float boil_chance = 0.5f;               // P(Water->Steam | Fire neighbor)/step, clamp [0,1]
+    float condense_chance = 0.10f;          // P(Steam->Water | no Fire neighbor)/step, clamp [0,1]
 };
 
 struct SkyConfig {

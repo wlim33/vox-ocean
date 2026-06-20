@@ -283,3 +283,11 @@ TEST(Config, FireOverrideViaSet) {
     EXPECT_EQ(r.config.fire.spawn_radius, 3);
 }
 
+TEST(Config, ParsesFireBoilCondense) {
+    auto r = vox::load_config_from_string(
+        "[fire]\nenabled = true\nboil_chance = 0.7\ncondense_chance = 0.2\n");
+    EXPECT_TRUE(r.config.fire.enabled);
+    EXPECT_FLOAT_EQ(r.config.fire.boil_chance, 0.7f);
+    EXPECT_FLOAT_EQ(r.config.fire.condense_chance, 0.2f);
+}
+

@@ -394,6 +394,61 @@ TEST(Combustion, SmokeDissipates) {
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Air);
 }
 
+TEST(Combustion, WaterNextToFireBoilsToSteam) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Water;
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Fire;
+    CombustionParams p; p.boil_chance = 1.0f;
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Steam);   // water boiled
+}
+
+TEST(Combustion, SteamWithoutFireCondensesToWater) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Steam;
+    CombustionParams p; p.condense_chance = 1.0f;
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Water);   // condensed
+}
+
+TEST(Combustion, SteamNextToFireDoesNotCondense) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Steam;
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Fire;
+    CombustionParams p; p.condense_chance = 1.0f; p.burn_out_chance = 0.0f;
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Steam);   // still heated -> stays
+}
+
+TEST(Combustion, SteamRisesCondensesAndSleeps) {
+    using namespace vox;
+    MaterialCaDims d{6, 16};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    for (int iz = 0; iz < d.extent; ++iz)
+        for (int ix = 0; ix < d.extent; ++ix)
+            for (int iy = 0; iy <= 6; ++iy)
+                g[ca_cell_index(d, ix, iy, iz)] = (uint8_t)VoxMat::Water;   // water up to iy=6
+    g[ca_cell_index(d, 3, 7, 3)] = (uint8_t)VoxMat::Fire;                   // fire just above the surface
+    MaterialCa ca;
+    ca.enable_combustion(/*seed*/55, CombustionParams{});                  // default nonzero rates
+    ca.wake_box(2, 0, 2, 4, 10, 4);
+    std::vector<uint32_t> changed;
+    for (int s = 0; s < 2000 && ca.awake(); ++s) { changed.clear(); ca.step(g, d, changed); }
+    EXPECT_FALSE(ca.awake());                          // converged & sleeps
+    EXPECT_EQ(count_of(g, VoxMat::Fire),  0);           // fire gone
+    EXPECT_EQ(count_of(g, VoxMat::Steam), 0);           // all steam condensed
+    EXPECT_EQ(count_of(g, VoxMat::Smoke), 0);           // smoke dissipated
+}
+
 TEST(Combustion, FireConsumesFuelLeavesAshSmokeDissipatesAndSleeps) {
     using namespace vox;
     MaterialCaDims d{6, 16};

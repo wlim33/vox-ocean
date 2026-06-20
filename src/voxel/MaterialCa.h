@@ -34,6 +34,8 @@ struct CombustionParams {
     float smoke_chance = 0.30f;           // P(Fire emits Smoke into adjacent air) per step
     float smoke_dissipate_chance = 0.04f; // P(Smoke -> Air) per step
     float ignite_scale = 1.0f;            // multiplier on flammability for ignition prob
+    float boil_chance = 0.5f;             // P(Water -> Steam | Fire neighbor) per step
+    float condense_chance = 0.10f;        // P(Steam -> Water | no Fire neighbor) per step
 };
 
 // Non-conservative cellular reaction pass over the inclusive box. Reads a pre-step

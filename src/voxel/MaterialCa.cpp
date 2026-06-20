@@ -83,11 +83,12 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     if (combustion_ && changed.empty()) {
         const uint8_t kFire  = (uint8_t)VoxMat::Fire;
         const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
+        const uint8_t kSteam = (uint8_t)VoxMat::Steam;
         for (int iz = az0_; iz <= az1_ && !reactive_present; ++iz)
             for (int iy = ay0_; iy <= ay1_ && !reactive_present; ++iy)
                 for (int ix = ax0_; ix <= ax1_ && !reactive_present; ++ix) {
                     uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
-                    if (m == kFire || m == kSmoke) reactive_present = true;
+                    if (m == kFire || m == kSmoke || m == kSteam) reactive_present = true;
                 }
     }
     if (changed.empty() && !reactive_present) {
@@ -113,11 +114,12 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     if (combustion_) {
         const uint8_t kFire  = (uint8_t)VoxMat::Fire;
         const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
+        const uint8_t kSteam = (uint8_t)VoxMat::Steam;
         for (int iz = z0; iz <= z1; ++iz)
             for (int iy = y0; iy <= y1; ++iy)
                 for (int ix = x0; ix <= x1; ++ix) {
                     uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
-                    if (m == kFire || m == kSmoke) {
+                    if (m == kFire || m == kSmoke || m == kSteam) {
                         nx0 = std::min(nx0, ix - 1); nx1 = std::max(nx1, ix + 1);
                         ny0 = std::min(ny0, iy - 1); ny1 = std::max(ny1, iy + 1);
                         nz0 = std::min(nz0, iz - 1); nz1 = std::max(nz1, iz + 1);
@@ -189,6 +191,18 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
             if (m == (uint8_t)VoxMat::Smoke) {
                 if (rnd01(x,y,z,step,seed,4) < p.smoke_dissipate_chance) {
                     cells[idx] = (uint8_t)VoxMat::Air; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Water) {
+                if (nbFire && rnd01(x,y,z,step,seed,5) < p.boil_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Steam; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Steam) {
+                if (!nbFire && rnd01(x,y,z,step,seed,6) < p.condense_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Water; changed.push_back((uint32_t)idx);
                 }
                 continue;
             }

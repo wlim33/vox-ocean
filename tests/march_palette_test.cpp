@@ -34,3 +34,10 @@ TEST(MarchPalette, CombustionPaletteColumns) {
     EXPECT_FLOAT_EQ(u.palette[MAT_SMOKE].y, kMaterials[(size_t)VoxMat::Smoke].g);
     EXPECT_FLOAT_EQ(u.palette[MAT_ASH].z,  kMaterials[(size_t)VoxMat::Ash].b);
 }
+
+TEST(MarchPalette, SteamPaletteColumn) {
+    MarchUniforms u{};
+    upload_palette(u);
+    EXPECT_FLOAT_EQ(u.palette[MAT_STEAM].x, kMaterials[(size_t)VoxMat::Steam].r);
+    EXPECT_FLOAT_EQ(u.palette[MAT_STEAM].z, kMaterials[(size_t)VoxMat::Steam].b);
+}
