@@ -188,6 +188,8 @@ void load_fire(const toml::table& t, FireConfig& s, LoadResult& r) {
     if (auto v = t["smoke_chance"].value<double>())           s.smoke_chance           = clamp((float)*v, 0.0f, 1.0f);
     if (auto v = t["smoke_dissipate_chance"].value<double>()) s.smoke_dissipate_chance = clamp((float)*v, 0.0f, 1.0f);
     if (auto v = t["ignite_scale"].value<double>())           s.ignite_scale           = clamp((float)*v, 0.0f, 4.0f);
+    if (auto v = t["boil_chance"].value<double>())     s.boil_chance     = clamp((float)*v, 0.0f, 1.0f);
+    if (auto v = t["condense_chance"].value<double>()) s.condense_chance = clamp((float)*v, 0.0f, 1.0f);
 }
 
 } // namespace
@@ -372,6 +374,8 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
             else if (key == "fire.smoke_chance")           in.config.fire.smoke_chance           = clamp(std::stof(val), 0.0f, 1.0f);
             else if (key == "fire.smoke_dissipate_chance") in.config.fire.smoke_dissipate_chance = clamp(std::stof(val), 0.0f, 1.0f);
             else if (key == "fire.ignite_scale")           in.config.fire.ignite_scale           = clamp(std::stof(val), 0.0f, 4.0f);
+            else if (key == "fire.boil_chance")     in.config.fire.boil_chance     = clamp(std::stof(val), 0.0f, 1.0f);
+            else if (key == "fire.condense_chance") in.config.fire.condense_chance = clamp(std::stof(val), 0.0f, 1.0f);
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
             in.warnings.push_back("invalid value for " + key + ": " + val);
@@ -428,6 +432,8 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.fire.smoke_chance,           sizeof(c.fire.smoke_chance),           h);
     h = fnv1a64(&c.fire.smoke_dissipate_chance, sizeof(c.fire.smoke_dissipate_chance), h);
     h = fnv1a64(&c.fire.ignite_scale,           sizeof(c.fire.ignite_scale),           h);
+    h = fnv1a64(&c.fire.boil_chance,            sizeof(c.fire.boil_chance),            h);
+    h = fnv1a64(&c.fire.condense_chance,        sizeof(c.fire.condense_chance),        h);
     // Sky
     h = fnv1a64(&c.sky.cubemap_resolution, sizeof(c.sky.cubemap_resolution), h);
     h = fnv1a64(&c.sky.sun_elevation_rad,  sizeof(c.sky.sun_elevation_rad),  h);
