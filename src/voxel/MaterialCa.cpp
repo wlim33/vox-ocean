@@ -192,6 +192,18 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                 }
                 continue;
             }
+            if (m == (uint8_t)VoxMat::Water) {
+                if (nbFire && rnd01(x,y,z,step,seed,5) < p.boil_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Steam; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Steam) {
+                if (!nbFire && rnd01(x,y,z,step,seed,6) < p.condense_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Water; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
         }
 }
 
