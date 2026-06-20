@@ -40,31 +40,6 @@ struct SkyUniforms {
 #define MAT_SANDGRAIN 7
 #define NUM_MATERIALS 8
 
-struct WorldFillUniforms {
-    int   grid_extent;
-    int   height_cells;
-    float voxel_size_m;
-    float height_step_m;
-    float base_depth_m;
-    float ripple_foam;
-    float _wpad0, _wpad1;   // pad to 32 bytes (16-byte multiple)
-};
-
-#define MAX_SPLASHES 64
-
-struct RippleUniforms {
-    int   grid_extent;
-    float k;             // (c*dt/dx)^2, CFL-clamped CPU-side (ripple_k)
-    float damping;
-    int   splash_count;
-};
-
-struct RippleSplash {   // injected into the ripple field this frame
-    float x, z;          // texel coords (column indices, fractional OK)
-    float radius;        // texels
-    float amp;           // meters; negative = depression (raindrop)
-};
-
 struct ApplyEditsUniforms {
     int grid_extent;
     int height_cells;

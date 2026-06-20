@@ -45,9 +45,6 @@ void BenchmarkHarness::start(const Config& cfg, uint64_t cfg_hash) {
          << " floor_seed=" << cfg.voxel.floor_seed
          << " max_steps=" << cfg.march.max_steps
          << " render_scale=" << cfg.march.render_scale
-         << " ripple_wave_speed=" << cfg.ripple.wave_speed_mps
-         << " ripple_damping=" << cfg.ripple.damping
-         << " ripple_rain_rate=" << cfg.ripple.rain_rate
          << " boat_enabled=" << cfg.entity.boat_enabled
          << " boat_speed=" << cfg.entity.boat_speed_mps
          << " kelp_enabled=" << cfg.kelp.enabled

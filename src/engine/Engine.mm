@@ -10,7 +10,6 @@
 #include "world/RenderFrame.h"
 #include "render/SkyRenderer.h"
 #include "voxel/DenseVoxelField.h"
-#include "voxel/RippleSim.h"
 #include "render/IVoxelRenderer.h"
 #include "core/CameraView.h"
 #include "core/AxisCamera.h"
@@ -54,7 +53,6 @@ public:
 #ifndef NDEBUG
     std::vector<uint8_t> applied_dbg;   // debug-only: replica rebuilt from the edit stream
 #endif
-    RippleSim ripple;
     std::unique_ptr<IVoxelRenderer> renderer;
     ImGuiBackend imgui;
     BenchmarkHarness bench;
@@ -95,7 +93,6 @@ Engine* engine_create(const char* config_path, const char* overrides) {
 
     e->sky.init(e->ctx, e->cache);
     e->field.init(e->ctx, e->cache);
-    e->ripple.init(e->ctx, e->cache);
     e->renderer = make_renderer(e->app->config().render.backend);
     e->renderer->init(e->ctx, e->cache);
     e->bench.start(e->app->config(), config_hash(e->app->config()));
@@ -137,7 +134,6 @@ static void build_frame(Engine* e, float sim_time, float dt) {
     const Config& cfg = e->app->config();
     e->world.configure(cfg);
     e->field.rebuild_if_dirty(e->ctx, cfg);
-    e->ripple.rebuild_if_dirty(e->ctx, cfg);
     e->field.ensure_capacity(e->ctx, cfg);
 
     e->ecosystem.rebuild_if_dirty(cfg, e->world);
@@ -145,15 +141,6 @@ static void build_frame(Engine* e, float sim_time, float dt) {
         [](float, float) { return kSeaLevelY; },
         e->world);
 
-    e->frame.water.dt   = dt;
-    e->frame.water.wake.clear();
-    glm::vec2 stern;
-    if (e->ecosystem.shed_boat_wake(cfg, stern)) {
-        float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
-        e->frame.water.wake.push_back({ (stern.x + half) / cfg.voxel.voxel_size_m,
-                                        (stern.y + half) / cfg.voxel.voxel_size_m,
-                                        1.5f, -cfg.entity.wake_amp });
-    }
     e->ecosystem.build_stamp(cfg, e->world.grid(), e->stamp);
     e->world.step(cfg, dt, e->stamp, e->frame.edits);
 #ifndef NDEBUG
@@ -169,14 +156,10 @@ static void build_frame(Engine* e, float sim_time, float dt) {
 static void consume_frame(Engine* e, id<MTLCommandBuffer> cb) {
     const Config& cfg = e->app->config();
     e->sky.bake_cubemap_if_dirty(e->ctx, (__bridge void*)cb, cfg);
-    e->ripple.upload_zero_if_dirty((__bridge void*)cb);
 
     bool discrete_resync = e->field.discrete_needs_resync(e->frame.edits);
 
     id<MTLComputeCommandEncoder> ce = [cb computeCommandEncoder];
-    e->ripple.encode((__bridge void*)ce, cfg, e->frame.water.dt,
-                     e->frame.water.wake.data(), (int)e->frame.water.wake.size());
-    e->field.encode_fill((__bridge void*)ce, cfg, e->ripple.front_texture(), e->frame_index);
     if (!discrete_resync)
         e->field.encode_apply_edits((__bridge void*)ce, cfg, e->frame.edits, e->frame_index);
     [ce endEncoding];
@@ -321,7 +304,7 @@ int engine_snapshot(const char* config_path, const char* overrides,
     id<MTLDevice> dev = (__bridge id<MTLDevice>)e->ctx.device;
     id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>)e->ctx.queue;
 
-    // 1. Fixed-dt warmup: settle ripple / entities to a reproducible state.
+    // 1. Fixed-dt warmup: settle entities to a reproducible state.
     const float dt = 1.0f / 60.0f;
     for (int i = 0; i < std::max(1, warmup_frames); ++i) {
         @autoreleasepool {

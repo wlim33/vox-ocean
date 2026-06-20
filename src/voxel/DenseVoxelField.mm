@@ -16,11 +16,7 @@
 namespace vox {
 
 void DenseVoxelField::init(const MetalContext& ctx, PipelineCache& cache) {
-    pso_fill_        = cache.compute_pso(ctx, "world_fill");
     pso_apply_edits_ = cache.compute_pso(ctx, "apply_edits");
-
-    for (int i = 0; i < RING; ++i)
-        fill_uniforms_[i] = make_buffer(ctx, sizeof(WorldFillUniforms), true);
 }
 
 VoxelGridDesc DenseVoxelField::desc(const Config& c) const {
@@ -36,15 +32,11 @@ void DenseVoxelField::rebuild_if_dirty(const MetalContext& ctx, const Config& cf
     float hs   = cfg.voxel.height_step_m;
     if (extent == built_extent_ && hc == built_height_cells_ && seed == built_seed_
         && bd == built_base_depth_ && hs == built_height_step_
-        && surface_tex_.handle)
+        && discrete_grid_.handle)
         return;
 
-    destroy_texture(surface_tex_);
     destroy_texture(discrete_grid_);
     destroy_buffer(discrete_staging_);
-
-    surface_tex_  = make_texture_2d(ctx, (uint32_t)extent, (uint32_t)extent,
-                                    TexFormat::RG32F);
 
     discrete_grid_ = make_texture_3d(ctx, (uint32_t)extent, (uint32_t)hc, (uint32_t)extent,
                                      TexFormat::R8Uint, /*storage_write=*/true);
@@ -72,32 +64,6 @@ void DenseVoxelField::ensure_capacity(const MetalContext& ctx, const Config& cfg
         }
         built_edit_cap_ = ecap;
     }
-}
-
-void DenseVoxelField::encode_fill(void* compute_encoder, const Config& cfg,
-                                  void* ripple_front_tex, int frame_index) {
-    if (!surface_tex_.handle) return;
-    id<MTLComputeCommandEncoder> ce = (__bridge id<MTLComputeCommandEncoder>)compute_encoder;
-    int slot = frame_index % RING;
-    int extent = cfg.voxel.grid_extent;
-
-    WorldFillUniforms u{};
-    u.grid_extent   = extent;
-    u.height_cells  = cfg.voxel.height_cells;
-    u.voxel_size_m  = cfg.voxel.voxel_size_m;
-    u.height_step_m = cfg.voxel.height_step_m;
-    u.base_depth_m  = cfg.voxel.base_depth_m;
-    u.ripple_foam   = cfg.ripple.foam;
-    std::memcpy(fill_uniforms_[slot].cpu_ptr, &u, sizeof(u));
-
-    [ce setComputePipelineState:(__bridge id<MTLComputePipelineState>)pso_fill_];
-    [ce setBuffer:(__bridge id<MTLBuffer>)fill_uniforms_[slot].handle offset:0 atIndex:0];
-    [ce setTexture:(__bridge id<MTLTexture>)surface_tex_.handle atIndex:0];
-    [ce setTexture:(__bridge id<MTLTexture>)ripple_front_tex atIndex:1];
-
-    MTLSize tg = MTLSizeMake(16, 16, 1);
-    NSUInteger groups = (NSUInteger)((extent + 15) / 16);
-    [ce dispatchThreadgroups:MTLSizeMake(groups, groups, 1) threadsPerThreadgroup:tg];
 }
 
 bool DenseVoxelField::discrete_needs_resync(const EditList& edits) const {
