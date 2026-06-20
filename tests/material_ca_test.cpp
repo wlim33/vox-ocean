@@ -393,3 +393,21 @@ TEST(Combustion, SmokeDissipates) {
     combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Air);
 }
+
+TEST(Combustion, FireConsumesFuelLeavesAshSmokeDissipatesAndSleeps) {
+    using namespace vox;
+    MaterialCaDims d{6, 16};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    int cx = 3, cz = 3;
+    for (int iy = 1; iy <= 8; ++iy) g[ca_cell_index(d, cx, iy, cz)] = (uint8_t)VoxMat::Kelp; // fuel column
+    g[ca_cell_index(d, cx, 0, cz)] = (uint8_t)VoxMat::Fire;                                  // ignite base
+    MaterialCa ca;
+    ca.enable_combustion(/*seed*/123, CombustionParams{});   // default rates (all nonzero -> terminates)
+    ca.wake_box(cx-1, 0, cz-1, cx+1, 9, cz+1);
+    std::vector<uint32_t> changed;
+    for (int s = 0; s < 2000 && ca.awake(); ++s) { changed.clear(); ca.step(g, d, changed); }
+    EXPECT_FALSE(ca.awake());                       // converged & sleeps
+    EXPECT_EQ(count_of(g, VoxMat::Fire),  0);        // fire fully burned out
+    EXPECT_EQ(count_of(g, VoxMat::Smoke), 0);        // smoke fully dissipated
+    EXPECT_GT(count_of(g, VoxMat::Ash),   0);        // left some ash residue
+}

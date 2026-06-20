@@ -61,6 +61,9 @@ void MaterialCa::wake_box(int x0, int y0, int z0, int x1, int y1, int z1) {
 void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                       std::vector<uint32_t>& changed) {
     if (!awake()) return;
+    if (combustion_)
+        combustion_sweep(cells, d, (uint32_t)phase_, seed_, cparams_,
+                         ax0_, ay0_, az0_, ax1_, ay1_, az1_, changed);
     // Phase schedule: alternate oy every step (continuous fall); cycle ox,oz so
     // piles can spread. 4-phase deterministic sequence keyed off the step counter.
     static const int OX[4] = {0, 1, 0, 1}, OY[4] = {0, 1, 0, 1}, OZ[4] = {0, 0, 1, 1};
@@ -73,11 +76,26 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     // the next phase once the origin shifts. So sleep only after a FULL phase cycle
     // produced no motion; until then keep the active box so the next phase can act.
     // (Callers pass a fresh `changed` per step, so empty == no motion this phase.)
-    if (changed.empty()) {
+    // When combustion is enabled, reactive materials (Fire, Smoke) in the active box
+    // will eventually change but may not on any given step due to stochastic rates.
+    // Scan the box so a lucky run of no-RNG-fires doesn't prematurely sleep the CA.
+    bool reactive_present = false;
+    if (combustion_ && changed.empty()) {
+        const uint8_t kFire  = (uint8_t)VoxMat::Fire;
+        const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
+        for (int iz = az0_; iz <= az1_ && !reactive_present; ++iz)
+            for (int iy = ay0_; iy <= ay1_ && !reactive_present; ++iy)
+                for (int ix = ax0_; ix <= ax1_ && !reactive_present; ++ix) {
+                    uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
+                    if (m == kFire || m == kSmoke) reactive_present = true;
+                }
+    }
+    if (changed.empty() && !reactive_present) {
         if (++quiet_ >= 4) clear_box();
         return;
     }
     quiet_ = 0;
+    if (changed.empty()) return;   // reactive_present but no movement: keep current box
     // Re-derive the active box from what moved (±1 so the falling front and
     // newly-exposed neighbours stay awake).
     int nx0 = d.extent, ny0 = d.height_cells, nz0 = d.extent, nx1 = -1, ny1 = -1, nz1 = -1;
@@ -88,6 +106,23 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
         nx0 = std::min(nx0, ix - 1); nx1 = std::max(nx1, ix + 1);
         ny0 = std::min(ny0, iy - 1); ny1 = std::max(ny1, iy + 1);
         nz0 = std::min(nz0, iz - 1); nz1 = std::max(nz1, iz + 1);
+    }
+    // When combustion is active, scan the OLD box for Fire/Smoke that may not have
+    // generated changes this step (stochastic rates) and fold them into the new box
+    // so they remain covered on future steps.
+    if (combustion_) {
+        const uint8_t kFire  = (uint8_t)VoxMat::Fire;
+        const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
+        for (int iz = z0; iz <= z1; ++iz)
+            for (int iy = y0; iy <= y1; ++iy)
+                for (int ix = x0; ix <= x1; ++ix) {
+                    uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
+                    if (m == kFire || m == kSmoke) {
+                        nx0 = std::min(nx0, ix - 1); nx1 = std::max(nx1, ix + 1);
+                        ny0 = std::min(ny0, iy - 1); ny1 = std::max(ny1, iy + 1);
+                        nz0 = std::min(nz0, iz - 1); nz1 = std::max(nz1, iz + 1);
+                    }
+                }
     }
     ax0_ = std::max(0, nx0); ay0_ = std::max(0, ny0); az0_ = std::max(0, nz0);
     ax1_ = std::min(d.extent - 1, nx1); ay1_ = std::min(d.height_cells - 1, ny1);

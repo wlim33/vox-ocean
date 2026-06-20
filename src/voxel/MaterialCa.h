@@ -50,15 +50,21 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
 // cells that changed (±1) and empties when nothing moves.
 class MaterialCa {
 public:
-    void reset() { phase_ = 0; quiet_ = 0; clear_box(); }
+    void reset() { phase_ = 0; quiet_ = 0; clear_box(); combustion_ = false; }
     void wake_box(int x0, int y0, int z0, int x1, int y1, int z1);
     void step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
               std::vector<uint32_t>& changed);
     bool awake() const { return ax1_ >= ax0_ && ay1_ >= ay0_ && az1_ >= az0_; }
+    void enable_combustion(uint32_t seed, CombustionParams p) {
+        combustion_ = true; seed_ = seed; cparams_ = p;
+    }
 private:
     void clear_box() { ax0_ = ay0_ = az0_ = 1; ax1_ = ay1_ = az1_ = 0; }  // empty (min>max)
     int phase_ = 0;
     int quiet_ = 0;     // consecutive no-motion phases; sleep only after a full cycle
     int ax0_ = 1, ay0_ = 1, az0_ = 1, ax1_ = 0, ay1_ = 0, az1_ = 0;
+    bool combustion_ = false;
+    uint32_t seed_ = 0;
+    CombustionParams cparams_{};
 };
 }
