@@ -286,6 +286,7 @@ TEST(MaterialCa, BubbleRisesThroughWaterAndSleepsUnderSurface) {
     EXPECT_EQ(count_of(g, VoxMat::Bubble), 1);         // mass conserved
     EXPECT_EQ(count_of(g, VoxMat::Water), water_before);
     // The bubble rose to the top water layer (iy=6), just beneath the air surface.
+    // Scan bottom-up for the bubble's y (count_of==1 above guarantees a single cell).
     int by = -1;
     for (int iy = 0; iy < d.height_cells; ++iy)
         for (int iz = 0; iz < d.extent; ++iz)

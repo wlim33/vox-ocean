@@ -29,7 +29,7 @@ inline constexpr std::array<MaterialProps, kNumMaterials> kMaterials = {{
     /* Kelp      */ { Phase::Solid,    0.13f, 0.32f, 0.15f,  500.0f, 0.0f, false, 0.4f, -1.0f },
     /* Fish      */ { Phase::Solid,    1.00f, 0.08f, 0.55f, 1000.0f, 0.0f, false, 0.0f, -1.0f },
     /* SandGrain */ { Phase::Granular, 0.88f, 0.80f, 0.55f, 1600.0f, 0.2f, true,  0.0f, -1.0f }, // repose
-    /* Bubble    */ { Phase::Gas,      0.80f, 0.90f, 1.00f,   50.0f, 1.0f, true,  0.0f, -1.0f }, // rises in water
+    /* Bubble    */ { Phase::Gas,      0.80f, 0.90f, 1.00f,   50.0f, 1.0f, true,  0.0f, -1.0f }, // rises in water; RGB unused by renderer (clear-gap)
 }};
 
 static_assert(kMaterials.size() == (size_t)kNumMaterials, "registry size must match VoxMat count");

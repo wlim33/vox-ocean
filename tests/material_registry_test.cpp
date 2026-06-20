@@ -13,7 +13,6 @@ TEST(MaterialRegistry, EnumSizeIsNine) {
 }
 
 TEST(MaterialRegistry, BubbleBetweenAirAndWater) {
-    using namespace vox;
     const MaterialProps& b = material_props(VoxMat::Bubble);
     EXPECT_EQ(b.phase, Phase::Gas);
     EXPECT_TRUE(b.movable);
