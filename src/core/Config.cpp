@@ -329,12 +329,12 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
             }
             else if (key == "bubble.enabled") in.config.bubble.enabled = (val == "true" || val == "1");
             else if (key == "bubble.spawn_radius") {
-                int n = std::atoi(val.c_str());
+                int n = std::stoi(val);
                 if (n < 1 || n > 64) in.warnings.push_back("bubble.spawn_radius out of [1,64], clamped");
                 in.config.bubble.spawn_radius = clamp(n, 1, 64);
             }
             else if (key == "bubble.spawn_depth") {
-                int n = std::atoi(val.c_str());
+                int n = std::stoi(val);
                 if (n < 0 || n > 1024) in.warnings.push_back("bubble.spawn_depth out of [0,1024], clamped");
                 in.config.bubble.spawn_depth = clamp(n, 0, 1024);
             }
