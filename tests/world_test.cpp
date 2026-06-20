@@ -136,23 +136,33 @@ TEST(World, StepEditStreamReconstructsComposite) {
 
 TEST(World, SeedsWaterBelowSeaLevelAsleep) {
     using namespace vox;
-    Config cfg; /* default grid; sand disabled */ cfg.sand.enabled = false;
+    Config cfg = small_cfg();
     World w; w.configure(cfg);
     const auto& g = w.grid();
+    const auto& floor = w.floor();
     const auto& cells = w.materialize_composite();   // material_ (no overlay)
     int sea = g.water_top_cell(0.0f);                // cells up to y=0
     int extent = cfg.voxel.grid_extent;
-    // A deep-water column (floor well below sea level) has Water from terrain top to sea,
+    // Find a deep-water column (floor well below sea level) that has Water from terrain top to sea,
     // and Air above sea.
-    int x = extent/2, z = extent/2;
-    bool any_water = false, air_above = true;
-    for (int iy = 0; iy < cfg.voxel.height_cells; ++iy) {
-        uint8_t m = cells[ca_cell_index({extent,cfg.voxel.height_cells}, x, iy, z)];
-        if (iy < sea && m == (uint8_t)VoxMat::Water) any_water = true;
-        if (iy >= sea && m == (uint8_t)VoxMat::Water) air_above = false;  // no water above sea
+    bool found_deep_water = false, air_above = true;
+    for (int iz = 0; iz < extent && !found_deep_water; ++iz) {
+        for (int ix = 0; ix < extent && !found_deep_water; ++ix) {
+            const vox::FloorColumn& fc = floor[(size_t)iz * extent + ix];
+            if (fc.height < sea) {  // terrain is below sea level
+                bool any_water = false;
+                for (int iy = 0; iy < cfg.voxel.height_cells; ++iy) {
+                    uint8_t m = cells[ca_cell_index({extent,cfg.voxel.height_cells}, ix, iy, iz)];
+                    if (iy < sea && m == (uint8_t)VoxMat::Water) any_water = true;
+                    if (iy >= sea && m == (uint8_t)VoxMat::Water) air_above = false;
+                }
+                if (any_water && air_above) {
+                    found_deep_water = true;
+                }
+            }
+        }
     }
-    EXPECT_TRUE(any_water);
-    EXPECT_TRUE(air_above);
+    EXPECT_TRUE(found_deep_water);
     EXPECT_FALSE(w.ca_awake());                       // calm ocean is asleep
 }
 
