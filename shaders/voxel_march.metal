@@ -133,6 +133,9 @@ fragment float4 march_fs(
 
     float3 sun = U.sun_dir;   // unit length by contract (see shader_types.h)
 
+    // Emissive fire: full-bright, ignores sun shading and the water path so it glows.
+    if (mat == MAT_FIRE) return float4(aces_tonemap(U.palette[MAT_FIRE] * 3.0), 1.0);
+
     if (mat != MAT_WATER) {
         // Dry terrain (island above the waterline).
         float3 color = terrain_color(mat, face_normal(S.axis, S.d), sun, U);
@@ -175,6 +178,8 @@ fragment float4 march_fs(
     // reflection, so schools read clearly through the water.
     if (end_mat == MAT_FISH)
         return float4(aces_tonemap(terrain_color(MAT_FISH, face_normal(end_axis, W.d), sun, U)), 1.0);
+    if (end_mat == MAT_FIRE)
+        return float4(aces_tonemap(U.palette[MAT_FIRE] * 3.0), 1.0);   // fire glows through water
 
     // Background behind the water along the refracted path.
     float3 bg;
