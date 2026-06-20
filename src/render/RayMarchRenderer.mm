@@ -116,7 +116,6 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     [enc setRenderPipelineState:(__bridge id<MTLRenderPipelineState>)pso_march_];
     [enc setFragmentBuffer:(__bridge id<MTLBuffer>)march_uniforms_[slot].handle offset:0 atIndex:0];
     [enc setFragmentTexture:(__bridge id<MTLTexture>)field.discrete_grid_handle() atIndex:0];
-    [enc setFragmentTexture:(__bridge id<MTLTexture>)field.surface_handle() atIndex:1];
     [enc setFragmentTexture:(__bridge id<MTLTexture>)sky.cubemap_handle() atIndex:2];
     [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
     [enc endEncoding];
