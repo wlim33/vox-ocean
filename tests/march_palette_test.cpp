@@ -19,3 +19,10 @@ TEST(MarchPalette, PaletteIndexMatchesTable) {
     EXPECT_FLOAT_EQ(u.palette[MAT_SANDGRAIN].y, kMaterials[(size_t)VoxMat::SandGrain].g);
     EXPECT_FLOAT_EQ(u.palette[MAT_FISH].z,      kMaterials[(size_t)VoxMat::Fish].b);
 }
+
+TEST(MarchPalette, BubblePaletteColumn) {
+    MarchUniforms u{};
+    upload_palette(u);
+    EXPECT_FLOAT_EQ(u.palette[MAT_BUBBLE].x, kMaterials[(size_t)VoxMat::Bubble].r);
+    EXPECT_FLOAT_EQ(u.palette[MAT_BUBBLE].z, kMaterials[(size_t)VoxMat::Bubble].b);
+}
