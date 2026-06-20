@@ -13,7 +13,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "max_in_flight_frames",
-    "sky","shading","bench","voxel","march","render","entity","kelp","fish","sand"
+    "sky","shading","bench","voxel","march","render","entity","kelp","fish","sand","bubble"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -158,6 +158,20 @@ void load_sand(const toml::table& t, SandConfig& s, LoadResult& r) {
     }
 }
 
+void load_bubble(const toml::table& t, BubbleConfig& s, LoadResult& r) {
+    if (auto v = t["enabled"].value<bool>()) s.enabled = *v;
+    if (auto v = t["spawn_radius"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 1 || val > 64) r.warnings.push_back("bubble.spawn_radius out of [1,64], clamped");
+        s.spawn_radius = clamp(val, 1, 64);
+    }
+    if (auto v = t["spawn_depth"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 0 || val > 1024) r.warnings.push_back("bubble.spawn_depth out of [0,1024], clamped");
+        s.spawn_depth = clamp(val, 0, 1024);
+    }
+}
+
 } // namespace
 
 LoadResult load_config_from_string(const std::string& text) {
@@ -181,6 +195,7 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* kp = tbl["kelp"].as_table()) load_kelp(*kp, c.kelp, r);
     if (auto* fp = tbl["fish"].as_table()) load_fish(*fp, c.fish, r);
     if (auto* sp = tbl["sand"].as_table()) load_sand(*sp, c.sand, r);
+    if (auto* bp = tbl["bubble"].as_table()) load_bubble(*bp, c.bubble, r);
     // sky, shading, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -312,6 +327,17 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
                 if (n < 1 || n > 64) in.warnings.push_back("sand.spawn_thickness out of [1,64], clamped");
                 in.config.sand.spawn_thickness = clamp(n, 1, 64);
             }
+            else if (key == "bubble.enabled") in.config.bubble.enabled = (val == "true" || val == "1");
+            else if (key == "bubble.spawn_radius") {
+                int n = std::atoi(val.c_str());
+                if (n < 1 || n > 64) in.warnings.push_back("bubble.spawn_radius out of [1,64], clamped");
+                in.config.bubble.spawn_radius = clamp(n, 1, 64);
+            }
+            else if (key == "bubble.spawn_depth") {
+                int n = std::atoi(val.c_str());
+                if (n < 0 || n > 1024) in.warnings.push_back("bubble.spawn_depth out of [0,1024], clamped");
+                in.config.bubble.spawn_depth = clamp(n, 0, 1024);
+            }
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
             in.warnings.push_back("invalid value for " + key + ": " + val);
@@ -356,6 +382,10 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.sand.enabled,         sizeof(c.sand.enabled),         h);
     h = fnv1a64(&c.sand.spawn_radius,    sizeof(c.sand.spawn_radius),    h);
     h = fnv1a64(&c.sand.spawn_thickness, sizeof(c.sand.spawn_thickness), h);
+    // Bubble
+    h = fnv1a64(&c.bubble.enabled,      sizeof(c.bubble.enabled),      h);
+    h = fnv1a64(&c.bubble.spawn_radius, sizeof(c.bubble.spawn_radius), h);
+    h = fnv1a64(&c.bubble.spawn_depth,  sizeof(c.bubble.spawn_depth),  h);
     // Sky
     h = fnv1a64(&c.sky.cubemap_resolution, sizeof(c.sky.cubemap_resolution), h);
     h = fnv1a64(&c.sky.sun_elevation_rad,  sizeof(c.sky.sun_elevation_rad),  h);
