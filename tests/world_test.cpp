@@ -178,6 +178,18 @@ TEST(World, BubbleSeedReplacesSubmergedWater) {
     EXPECT_GT(with, 0);                                   // a submerged bubble blob was seeded
 }
 
+TEST(World, FireSeedIgnitesRegion) {
+    vox::Config base = small_cfg();                       // fire disabled
+    vox::World w0; w0.configure(base);
+    int without = (int)std::count(w0.material().begin(), w0.material().end(), (uint8_t)vox::VoxMat::Fire);
+    vox::Config c = small_cfg();
+    c.fire.enabled = true; c.fire.spawn_radius = 3; c.fire.spawn_height = 6;
+    vox::World w; w.configure(c);
+    int with = (int)std::count(w.material().begin(), w.material().end(), (uint8_t)vox::VoxMat::Fire);
+    EXPECT_EQ(without, 0);
+    EXPECT_GT(with, 0);                                   // an ignition region was seeded
+}
+
 TEST(World, StepSettledSandEmitsNoEditsAfterSleep) {
     vox::Config c = small_cfg();
     c.sand.enabled = true; c.sand.spawn_radius = 2; c.sand.spawn_thickness = 2;

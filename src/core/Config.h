@@ -75,6 +75,16 @@ struct BubbleConfig {
     int  spawn_depth  = 8;      // blob centre, cells above the grid floor, clamp [0,1024]
 };
 
+struct FireConfig {
+    bool  enabled = false;                  // off by default — existing scenes stay identical
+    int   spawn_radius = 4;                 // half-extent (cells) of the ignition region, clamp [1,64]
+    int   spawn_height = 8;                 // cells above floor for ignition, clamp [0,1024]
+    float burn_out_chance = 0.08f;          // P(Fire->Ash)/step, clamp [0,1]
+    float smoke_chance = 0.30f;             // P(Fire emits Smoke)/step, clamp [0,1]
+    float smoke_dissipate_chance = 0.04f;   // P(Smoke->Air)/step, clamp [0,1]
+    float ignite_scale = 1.0f;             // flammability multiplier, clamp [0,4]
+};
+
 struct SkyConfig {
     int cubemap_resolution = 128;
     float sun_elevation_rad = 0.7f;
@@ -99,6 +109,7 @@ struct Config {
     FishConfig fish;
     SandConfig sand;
     BubbleConfig bubble;
+    FireConfig fire;
 
     SkyConfig sky;
     ShadingConfig shading;
