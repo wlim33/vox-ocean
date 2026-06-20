@@ -429,6 +429,26 @@ TEST(Combustion, SteamNextToFireDoesNotCondense) {
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Steam);   // still heated -> stays
 }
 
+TEST(Combustion, SteamRisesCondensesAndSleeps) {
+    using namespace vox;
+    MaterialCaDims d{6, 16};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    for (int iz = 0; iz < d.extent; ++iz)
+        for (int ix = 0; ix < d.extent; ++ix)
+            for (int iy = 0; iy <= 6; ++iy)
+                g[ca_cell_index(d, ix, iy, iz)] = (uint8_t)VoxMat::Water;   // water up to iy=6
+    g[ca_cell_index(d, 3, 7, 3)] = (uint8_t)VoxMat::Fire;                   // fire just above the surface
+    MaterialCa ca;
+    ca.enable_combustion(/*seed*/55, CombustionParams{});                  // default nonzero rates
+    ca.wake_box(2, 0, 2, 4, 10, 4);
+    std::vector<uint32_t> changed;
+    for (int s = 0; s < 2000 && ca.awake(); ++s) { changed.clear(); ca.step(g, d, changed); }
+    EXPECT_FALSE(ca.awake());                          // converged & sleeps
+    EXPECT_EQ(count_of(g, VoxMat::Fire),  0);           // fire gone
+    EXPECT_EQ(count_of(g, VoxMat::Steam), 0);           // all steam condensed
+    EXPECT_EQ(count_of(g, VoxMat::Smoke), 0);           // smoke dissipated
+}
+
 TEST(Combustion, FireConsumesFuelLeavesAshSmokeDissipatesAndSleeps) {
     using namespace vox;
     MaterialCaDims d{6, 16};
