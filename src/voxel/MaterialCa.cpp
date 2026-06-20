@@ -94,6 +94,72 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     az1_ = std::min(d.extent - 1, nz1);
 }
 
+namespace {
+// Deterministic 32-bit mix (wang/murmur-style).
+inline uint32_t mix32(uint32_t x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x;
+}
+// Uniform [0,1) from cell coords, step, world seed, and a per-event salt (so
+// independent events at the same cell/step do not correlate).
+inline float rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t salt) {
+    uint32_t h = (uint32_t)(x * 73856093) ^ (uint32_t)(y * 19349663) ^ (uint32_t)(z * 83492791)
+               ^ (step * 2654435761u) ^ seed ^ (salt * 2246822519u);
+    return (mix32(h) >> 8) * (1.0f / 16777216.0f);   // 24-bit mantissa -> [0,1)
+}
+inline bool is_fuel(uint8_t m) { return material_props((VoxMat)m).flammability > 0.0f; }
+}
+
+void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
+                      uint32_t step, uint32_t seed, const CombustionParams& p,
+                      int x0, int y0, int z0, int x1, int y1, int z1,
+                      std::vector<uint32_t>& changed) {
+    const std::vector<uint8_t> before = cells;   // pre-step snapshot (O(grid); halo-only is a future optimization)
+    auto at = [&](int x, int y, int z) -> uint8_t {
+        if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
+            return (uint8_t)VoxMat::Rock;          // OOB is inert
+        return before[ca_cell_index(d, x, y, z)];
+    };
+    const int NX[6] = {1,-1,0,0,0,0}, NY[6] = {0,0,1,-1,0,0}, NZ[6] = {0,0,0,0,1,-1};
+    for (int z = z0; z <= z1; ++z)
+      for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            uint8_t m = at(x, y, z);
+            int idx = ca_cell_index(d, x, y, z);
+            bool nbFire = false, nbWater = false, hasAir = false;
+            int ax = 0, ay = 0, az = 0;
+            for (int k = 0; k < 6; ++k) {
+                uint8_t nm = at(x + NX[k], y + NY[k], z + NZ[k]);
+                if (nm == (uint8_t)VoxMat::Fire)  nbFire = true;
+                if (nm == (uint8_t)VoxMat::Water) nbWater = true;
+                if (!hasAir && nm == (uint8_t)VoxMat::Air) { hasAir = true; ax = x+NX[k]; ay = y+NY[k]; az = z+NZ[k]; }
+            }
+            if (m == (uint8_t)VoxMat::Fire) {
+                if (nbWater) { cells[idx] = (uint8_t)VoxMat::Smoke; changed.push_back((uint32_t)idx); continue; }
+                if (rnd01(x,y,z,step,seed,2) < p.burn_out_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Ash; changed.push_back((uint32_t)idx); continue;
+                }
+                if (hasAir && rnd01(x,y,z,step,seed,3) < p.smoke_chance) {
+                    int aidx = ca_cell_index(d, ax, ay, az);
+                    cells[aidx] = (uint8_t)VoxMat::Smoke; changed.push_back((uint32_t)aidx);   // idempotent
+                }
+                continue;   // fire stays
+            }
+            if (is_fuel(m) && nbFire) {
+                float fl = material_props((VoxMat)m).flammability;
+                if (rnd01(x,y,z,step,seed,1) < fl * p.ignite_scale) {
+                    cells[idx] = (uint8_t)VoxMat::Fire; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Smoke) {
+                if (rnd01(x,y,z,step,seed,4) < p.smoke_dissipate_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Air; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+        }
+}
+
 void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                     int ox, int oy, int oz,
                     int x0, int y0, int z0, int x1, int y1, int z1,

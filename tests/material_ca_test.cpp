@@ -334,3 +334,62 @@ TEST(MaterialCa, FlatOceanWithDisplacedSurfaceWaterSleeps) {
     SCOPED_TRACE("steps to sleep: " + std::to_string(steps_to_sleep));
     EXPECT_EQ(count_of(g, VoxMat::Water), water_count);
 }
+
+// --- SP3-I combustion_sweep micro-tests (deterministic via forced rates) ---
+TEST(Combustion, FuelNextToFireIgnites) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Kelp;   // flammable (0.4)
+    CombustionParams p; p.ignite_scale = 100.0f;          // force rand < flammability*scale
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, /*step*/0, /*seed*/7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,2,1,1)], (uint8_t)VoxMat::Fire);   // kelp ignited
+}
+
+TEST(Combustion, FireBurnsOutToAsh) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    CombustionParams p; p.burn_out_chance = 1.0f; p.smoke_chance = 0.0f;
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Ash);
+}
+
+TEST(Combustion, FireNextToWaterBecomesSmoke) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    g[ca_cell_index(d,1,0,1)] = (uint8_t)VoxMat::Water;
+    CombustionParams p; p.burn_out_chance = 1.0f;        // would burn out, but water wins
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Smoke);
+}
+
+TEST(Combustion, FireEmitsSmokeIntoAir) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    CombustionParams p; p.burn_out_chance = 0.0f; p.smoke_chance = 1.0f;   // emit, don't burn out
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Fire);            // fire stays
+    EXPECT_EQ(count_of(g, VoxMat::Smoke), 1);                              // one air -> smoke
+}
+
+TEST(Combustion, SmokeDissipates) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Smoke;
+    CombustionParams p; p.smoke_dissipate_chance = 1.0f;
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Air);
+}
