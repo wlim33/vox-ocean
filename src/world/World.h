@@ -7,8 +7,8 @@
 #include <optional>
 #include <vector>
 #include <cstdint>
+#include "core/Config.h"
 namespace vox {
-struct Config;
 
 // CPU-authoritative material world. Owns ONE dense grid (material_: terrain +
 // water + dynamic sand, no entities), evolved in place by a Margolus CA. Entities are a
@@ -36,6 +36,7 @@ private:
     void seed_water();
     void seed_sand(const Config& cfg);
     void seed_bubble(const Config& cfg);
+    void seed_fire(const Config& cfg);
 
     std::optional<VoxelWorld> grid_;
     std::vector<FloorColumn>  floor_;
@@ -55,5 +56,6 @@ private:
     float built_base_depth_ = -1.0f, built_height_step_ = -1.0f, built_voxel_size_ = -1.0f;
     bool  built_sand_enabled_ = false; int built_sand_radius_ = -1, built_sand_thick_ = -1;
     bool  built_bubble_enabled_ = false; int built_bubble_radius_ = -1, built_bubble_depth_ = -1;
+    FireConfig built_fire_{};
 };
 }

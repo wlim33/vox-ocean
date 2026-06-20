@@ -334,3 +334,80 @@ TEST(MaterialCa, FlatOceanWithDisplacedSurfaceWaterSleeps) {
     SCOPED_TRACE("steps to sleep: " + std::to_string(steps_to_sleep));
     EXPECT_EQ(count_of(g, VoxMat::Water), water_count);
 }
+
+// --- SP3-I combustion_sweep micro-tests (deterministic via forced rates) ---
+TEST(Combustion, FuelNextToFireIgnites) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Kelp;   // flammable (0.4)
+    CombustionParams p; p.ignite_scale = 100.0f;          // force rand < flammability*scale
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, /*step*/0, /*seed*/7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,2,1,1)], (uint8_t)VoxMat::Fire);   // kelp ignited
+}
+
+TEST(Combustion, FireBurnsOutToAsh) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    CombustionParams p; p.burn_out_chance = 1.0f; p.smoke_chance = 0.0f;
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Ash);
+}
+
+TEST(Combustion, FireNextToWaterBecomesSmoke) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    g[ca_cell_index(d,1,0,1)] = (uint8_t)VoxMat::Water;
+    CombustionParams p; p.burn_out_chance = 1.0f;        // would burn out, but water wins
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Smoke);
+}
+
+TEST(Combustion, FireEmitsSmokeIntoAir) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
+    CombustionParams p; p.burn_out_chance = 0.0f; p.smoke_chance = 1.0f;   // emit, don't burn out
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Fire);            // fire stays
+    EXPECT_EQ(count_of(g, VoxMat::Smoke), 1);                              // one air -> smoke
+}
+
+TEST(Combustion, SmokeDissipates) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Smoke;
+    CombustionParams p; p.smoke_dissipate_chance = 1.0f;
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Air);
+}
+
+TEST(Combustion, FireConsumesFuelLeavesAshSmokeDissipatesAndSleeps) {
+    using namespace vox;
+    MaterialCaDims d{6, 16};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    int cx = 3, cz = 3;
+    for (int iy = 1; iy <= 8; ++iy) g[ca_cell_index(d, cx, iy, cz)] = (uint8_t)VoxMat::Kelp; // fuel column
+    g[ca_cell_index(d, cx, 0, cz)] = (uint8_t)VoxMat::Fire;                                  // ignite base
+    MaterialCa ca;
+    ca.enable_combustion(/*seed*/123, CombustionParams{});   // default rates (all nonzero -> terminates)
+    ca.wake_box(cx-1, 0, cz-1, cx+1, 9, cz+1);
+    std::vector<uint32_t> changed;
+    for (int s = 0; s < 2000 && ca.awake(); ++s) { changed.clear(); ca.step(g, d, changed); }
+    EXPECT_FALSE(ca.awake());                       // converged & sleeps
+    EXPECT_EQ(count_of(g, VoxMat::Fire),  0);        // fire fully burned out
+    EXPECT_EQ(count_of(g, VoxMat::Smoke), 0);        // smoke fully dissipated
+    EXPECT_GT(count_of(g, VoxMat::Ash),   0);        // left some ash residue
+}

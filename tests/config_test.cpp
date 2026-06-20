@@ -258,3 +258,28 @@ TEST(Config, BubbleOverrideViaSet) {
     EXPECT_EQ(r.config.bubble.spawn_radius, 3);
 }
 
+TEST(Config, ParsesFireSection) {
+    auto r = vox::load_config_from_string(
+        "[fire]\nenabled = true\nspawn_radius = 5\nspawn_height = 10\n"
+        "burn_out_chance = 0.2\nsmoke_chance = 0.5\nsmoke_dissipate_chance = 0.1\nignite_scale = 2.0\n");
+    EXPECT_TRUE(r.config.fire.enabled);
+    EXPECT_EQ(r.config.fire.spawn_radius, 5);
+    EXPECT_EQ(r.config.fire.spawn_height, 10);
+    EXPECT_FLOAT_EQ(r.config.fire.burn_out_chance, 0.2f);
+    EXPECT_FLOAT_EQ(r.config.fire.smoke_chance, 0.5f);
+    EXPECT_FLOAT_EQ(r.config.fire.smoke_dissipate_chance, 0.1f);
+    EXPECT_FLOAT_EQ(r.config.fire.ignite_scale, 2.0f);
+}
+
+TEST(Config, FireDefaultsDisabled) {
+    auto r = vox::load_config_from_string("");
+    EXPECT_FALSE(r.config.fire.enabled);
+}
+
+TEST(Config, FireOverrideViaSet) {
+    auto r = vox::apply_overrides(vox::load_config_from_string(""),
+                                  {"fire.enabled=true", "fire.spawn_radius=3"});
+    EXPECT_TRUE(r.config.fire.enabled);
+    EXPECT_EQ(r.config.fire.spawn_radius, 3);
+}
+

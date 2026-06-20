@@ -6,7 +6,7 @@
 namespace vox {
 
 // CA motion reads density/fluidity/movable; Phase is a label only (SP3/SP5 queries).
-enum class Phase : uint8_t { Empty = 0, Granular = 1, Solid = 2, Liquid = 3, Gas = 4 };
+enum class Phase : uint8_t { Empty = 0, Granular = 1, Solid = 2, Liquid = 3, Gas = 4, Fire = 5 };
 
 struct MaterialProps {
     Phase phase;          // classification label — NOT read by CA motion
@@ -30,6 +30,9 @@ inline constexpr std::array<MaterialProps, kNumMaterials> kMaterials = {{
     /* Fish      */ { Phase::Solid,    1.00f, 0.08f, 0.55f, 1000.0f, 0.0f, false, 0.0f, -1.0f },
     /* SandGrain */ { Phase::Granular, 0.88f, 0.80f, 0.55f, 1600.0f, 0.2f, true,  0.0f, -1.0f }, // repose
     /* Bubble    */ { Phase::Gas,      0.80f, 0.90f, 1.00f,   50.0f, 1.0f, true,  0.0f, -1.0f }, // rises in water; RGB unused by renderer (clear-gap)
+    /* Fire      */ { Phase::Fire,     1.00f, 0.50f, 0.12f,  300.0f, 0.0f, false, 0.0f, -1.0f }, // emissive; pinned
+    /* Smoke     */ { Phase::Gas,      0.28f, 0.28f, 0.30f,    0.6f, 1.0f, true,  0.0f, -1.0f }, // lighter than air -> rises
+    /* Ash       */ { Phase::Granular, 0.16f, 0.15f, 0.14f, 1700.0f, 0.2f, true,  0.0f, -1.0f }, // falls + repose
 }};
 
 static_assert(kMaterials.size() == (size_t)kNumMaterials, "registry size must match VoxMat count");
