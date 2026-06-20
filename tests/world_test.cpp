@@ -166,6 +166,18 @@ TEST(World, SeedsWaterBelowSeaLevelAsleep) {
     EXPECT_FALSE(w.ca_awake());                       // calm ocean is asleep
 }
 
+TEST(World, BubbleSeedReplacesSubmergedWater) {
+    vox::Config base = small_cfg();                       // bubble disabled
+    vox::World w0; w0.configure(base);
+    int without = (int)std::count(w0.material().begin(), w0.material().end(), (uint8_t)vox::VoxMat::Bubble);
+    vox::Config c = small_cfg();
+    c.bubble.enabled = true; c.bubble.spawn_radius = 3; c.bubble.spawn_depth = 6;  // submerged (sea cell ≈ 8)
+    vox::World w; w.configure(c);
+    int with = (int)std::count(w.material().begin(), w.material().end(), (uint8_t)vox::VoxMat::Bubble);
+    EXPECT_EQ(without, 0);
+    EXPECT_GT(with, 0);                                   // a submerged bubble blob was seeded
+}
+
 TEST(World, StepSettledSandEmitsNoEditsAfterSleep) {
     vox::Config c = small_cfg();
     c.sand.enabled = true; c.sand.spawn_radius = 2; c.sand.spawn_thickness = 2;

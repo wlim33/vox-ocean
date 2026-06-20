@@ -6,7 +6,19 @@ using namespace vox;
 
 TEST(MaterialRegistry, TableSizeMatchesEnum) {
     EXPECT_EQ(kMaterials.size(), (size_t)kNumMaterials);
-    EXPECT_EQ((int)kNumMaterials, 8);
+}
+
+TEST(MaterialRegistry, EnumSizeIsNine) {
+    EXPECT_EQ((int)vox::kNumMaterials, 9);
+}
+
+TEST(MaterialRegistry, BubbleBetweenAirAndWater) {
+    const MaterialProps& b = material_props(VoxMat::Bubble);
+    EXPECT_EQ(b.phase, Phase::Gas);
+    EXPECT_TRUE(b.movable);
+    EXPECT_GT(b.density, material_props(VoxMat::Air).density);    // heavier than air → won't escape into air
+    EXPECT_LT(b.density, material_props(VoxMat::Water).density);  // lighter than water → rises
+    EXPECT_GE(b.fluidity, 0.5f);                                 // levels into a flat pool
 }
 
 TEST(MaterialRegistry, PhasesAreCorrect) {

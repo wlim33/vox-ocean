@@ -199,3 +199,29 @@ TEST(DdaTransmit, BudgetExhaustionMidWaterIsPartial) {
     EXPECT_EQ(r.steps, 4);
     EXPECT_NEAR(r.water_dist, 3.0f, 0.05f);
 }
+
+TEST(DdaTransmit, BubbleIsAClearGapInWater) {
+    // Compare two identical vertical water columns; one has a Bubble in the middle.
+    // The bubble must be passed through (ray still reaches the sand floor) and must
+    // NOT absorb, so its water_dist is strictly less than the all-water column.
+    vox::VoxelWorld w(vox::VoxelWorldParams{4, 8, 0.5f, 0.25f, 2.0f});
+    auto make = [&](bool bubble) {
+        std::vector<uint8_t> g((size_t)4 * 4 * 8, (uint8_t)vox::VoxMat::Air);
+        for (int iz = 0; iz < 4; ++iz)
+            for (int ix = 0; ix < 4; ++ix) {
+                g[w.cell_index(ix, 0, iz)] = (uint8_t)vox::VoxMat::Sand;   // floor
+                g[w.cell_index(ix, 1, iz)] = (uint8_t)vox::VoxMat::Water;
+                g[w.cell_index(ix, 2, iz)] = (uint8_t)(bubble ? vox::VoxMat::Bubble : vox::VoxMat::Water);
+                g[w.cell_index(ix, 3, iz)] = (uint8_t)vox::VoxMat::Water;
+            }
+        return g;
+    };
+    auto all   = make(false);
+    auto withb = make(true);
+    auto r_all = vox::dda_march_transmit({0.5f, 10.0f, 0.5f}, {0, -1, 0}, w, all.data(),   64, 1.33f);
+    auto r_bub = vox::dda_march_transmit({0.5f, 10.0f, 0.5f}, {0, -1, 0}, w, withb.data(), 64, 1.33f);
+    EXPECT_TRUE(r_all.hit);
+    EXPECT_TRUE(r_bub.hit);                                  // ray passes through the bubble to the sand
+    EXPECT_LT(r_bub.water_dist, r_all.water_dist);          // bubble segment is not absorbed
+    EXPECT_NEAR(r_bub.water_dist, r_all.water_dist * 2.0f / 3.0f, 0.05f); // 2 of 3 cells absorb
+}

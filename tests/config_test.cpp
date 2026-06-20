@@ -238,3 +238,23 @@ TEST(Config, SandOverrideViaSet) {
     EXPECT_EQ(r.config.sand.spawn_radius, 3);
 }
 
+TEST(Config, ParsesBubbleSection) {
+    auto r = vox::load_config_from_string(
+        "[bubble]\nenabled = true\nspawn_radius = 5\nspawn_depth = 6\n");
+    EXPECT_TRUE(r.config.bubble.enabled);
+    EXPECT_EQ(r.config.bubble.spawn_radius, 5);
+    EXPECT_EQ(r.config.bubble.spawn_depth, 6);
+}
+
+TEST(Config, BubbleDefaultsDisabled) {
+    auto r = vox::load_config_from_string("");
+    EXPECT_FALSE(r.config.bubble.enabled);
+}
+
+TEST(Config, BubbleOverrideViaSet) {
+    auto r = vox::apply_overrides(vox::load_config_from_string(""),
+                                  {"bubble.enabled=true", "bubble.spawn_radius=3"});
+    EXPECT_TRUE(r.config.bubble.enabled);
+    EXPECT_EQ(r.config.bubble.spawn_radius, 3);
+}
+

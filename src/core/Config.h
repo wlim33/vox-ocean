@@ -69,6 +69,12 @@ struct SandConfig {
     int  spawn_thickness = 8;      // slab height in cells, dropped from the grid top, clamp [1,64]
 };
 
+struct BubbleConfig {
+    bool enabled      = false;  // off by default — existing scenes stay identical
+    int  spawn_radius = 4;      // half-extent (cells) of the seeded blob, clamp [1,64]
+    int  spawn_depth  = 8;      // blob centre, cells above the grid floor, clamp [0,1024]
+};
+
 struct SkyConfig {
     int cubemap_resolution = 128;
     float sun_elevation_rad = 0.7f;
@@ -92,6 +98,7 @@ struct Config {
     KelpConfig kelp;
     FishConfig fish;
     SandConfig sand;
+    BubbleConfig bubble;
 
     SkyConfig sky;
     ShadingConfig shading;

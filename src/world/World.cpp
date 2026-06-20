@@ -13,7 +13,10 @@ void World::configure(const Config& cfg) {
     bool sand_same = cfg.sand.enabled == built_sand_enabled_
         && cfg.sand.spawn_radius == built_sand_radius_
         && cfg.sand.spawn_thickness == built_sand_thick_;
-    if (grid_same && sand_same) return;
+    bool bubble_same = cfg.bubble.enabled == built_bubble_enabled_
+        && cfg.bubble.spawn_radius == built_bubble_radius_
+        && cfg.bubble.spawn_depth == built_bubble_depth_;
+    if (grid_same && sand_same && bubble_same) return;
 
     if (!grid_same) {
         grid_.emplace(VoxelWorldParams{ v.grid_extent, v.height_cells, v.voxel_size_m,
@@ -46,6 +49,7 @@ void World::configure(const Config& cfg) {
     ca_.reset();
     seed_water();           // fill Water below sea level (equilibrium, no wake)
     seed_sand(cfg);
+    seed_bubble(cfg);       // submerged gas blob (rises on wake)
     resync_ = true;
     prev_overlay_cells_.clear();
 
@@ -54,6 +58,8 @@ void World::configure(const Config& cfg) {
     built_height_step_ = v.height_step_m; built_voxel_size_ = v.voxel_size_m;
     built_sand_enabled_ = cfg.sand.enabled; built_sand_radius_ = cfg.sand.spawn_radius;
     built_sand_thick_ = cfg.sand.spawn_thickness;
+    built_bubble_enabled_ = cfg.bubble.enabled; built_bubble_radius_ = cfg.bubble.spawn_radius;
+    built_bubble_depth_ = cfg.bubble.spawn_depth;
 }
 
 void World::seed_water() {
@@ -78,6 +84,23 @@ void World::seed_sand(const Config& cfg) {
             for (int iy = bot; iy <= top; ++iy)
                 material_[ca_cell_index(dims_, ix, iy, iz)] = (uint8_t)VoxMat::SandGrain;
     ca_.wake_box(cx - r, bot, cz - r, cx + r, top, cz + r);
+}
+
+void World::seed_bubble(const Config& cfg) {
+    if (!cfg.bubble.enabled) return;
+    int extent = dims_.extent, hc = dims_.height_cells;
+    int cx = extent / 2, cz = extent / 2;
+    int r  = std::min(cfg.bubble.spawn_radius, extent / 2);
+    int cy = std::min(std::max(0, cfg.bubble.spawn_depth), hc - 1);
+    int y0 = std::max(0, cy - r), y1 = std::min(hc - 1, cy + r);
+    for (int iz = std::max(0, cz - r); iz <= std::min(extent - 1, cz + r); ++iz)
+        for (int ix = std::max(0, cx - r); ix <= std::min(extent - 1, cx + r); ++ix)
+            for (int iy = y0; iy <= y1; ++iy) {
+                size_t i = ca_cell_index(dims_, ix, iy, iz);
+                if (material_[i] == (uint8_t)VoxMat::Water)         // only seed into water → stays submerged
+                    material_[i] = (uint8_t)VoxMat::Bubble;
+            }
+    ca_.wake_box(cx - r, y0, cz - r, cx + r, y1, cz + r);
 }
 
 const std::vector<uint8_t>& World::materialize_composite() const {

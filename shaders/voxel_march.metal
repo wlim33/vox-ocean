@@ -126,10 +126,10 @@ fragment float4 march_fs(
     while (steps < U.max_steps) {
         steps++;
         mat = read_material(vg, world, S.idx);
-        if (mat != MAT_AIR) break;
+        if (mat != MAT_AIR && mat != MAT_BUBBLE) break;   // Bubble is optically Air
         if (!dda_step(S, G)) return float4(0.0);
     }
-    if (mat == MAT_AIR) return float4(0.0);
+    if (mat == MAT_AIR || mat == MAT_BUBBLE) return float4(0.0);
 
     float3 sun = U.sun_dir;   // unit length by contract (see shader_types.h)
 
@@ -164,7 +164,7 @@ fragment float4 march_fs(
     while (walking && steps < U.max_steps) {
         steps++;
         uint m = read_material(vg, world, W.idx);
-        if (m != MAT_AIR && m != MAT_WATER) { end_mat = m; end_axis = W.axis; break; }
+        if (m != MAT_AIR && m != MAT_WATER && m != MAT_BUBBLE) { end_mat = m; end_axis = W.axis; break; }
         float t_enter = W.t_cur;
         bool alive = dda_step(W, G);
         if (m == MAT_WATER) water_dist += W.t_cur - t_enter;

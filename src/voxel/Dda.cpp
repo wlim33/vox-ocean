@@ -105,10 +105,10 @@ TransmitResult dda_march_transmit(glm::vec3 origin, glm::vec3 dir,
     while (r.steps < max_steps) {
         r.steps++;
         mat = mats[w.cell_index(S.idx.x, S.idx.y, S.idx.z)];
-        if (mat != (uint8_t)VoxMat::Air) break;
+        if (mat != (uint8_t)VoxMat::Air && mat != (uint8_t)VoxMat::Bubble) break;  // Bubble is optically Air
         if (!dda_step(S, G)) return r;     // clean miss
     }
-    if (mat == (uint8_t)VoxMat::Air) return r;   // budget exhausted in air
+    if (mat == (uint8_t)VoxMat::Air || mat == (uint8_t)VoxMat::Bubble) return r;   // budget exhausted in air/bubble
 
     if (mat != (uint8_t)VoxMat::Water) {         // dry hit (island above water)
         r.hit = true;
@@ -133,7 +133,7 @@ TransmitResult dda_march_transmit(glm::vec3 origin, glm::vec3 dir,
     while (r.steps < max_steps) {
         r.steps++;
         uint8_t m = mats[w.cell_index(W.idx.x, W.idx.y, W.idx.z)];
-        if (m != (uint8_t)VoxMat::Air && m != (uint8_t)VoxMat::Water) {
+        if (m != (uint8_t)VoxMat::Air && m != (uint8_t)VoxMat::Water && m != (uint8_t)VoxMat::Bubble) {
             r.hit = true;
             r.ix = W.idx.x; r.iy = W.idx.y; r.iz = W.idx.z;
             r.opaque_axis = W.axis;
