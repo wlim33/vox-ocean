@@ -137,7 +137,7 @@ inline uint32_t mix32(uint32_t x) {
 // Uniform [0,1) from cell coords, step, world seed, and a per-event salt (so
 // independent events at the same cell/step do not correlate).
 inline float rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t salt) {
-    uint32_t h = (uint32_t)(x * 73856093) ^ (uint32_t)(y * 19349663) ^ (uint32_t)(z * 83492791)
+    uint32_t h = ((uint32_t)x * 73856093u) ^ ((uint32_t)y * 19349663u) ^ ((uint32_t)z * 83492791u)
                ^ (step * 2654435761u) ^ seed ^ (salt * 2246822519u);
     return (mix32(h) >> 8) * (1.0f / 16777216.0f);   // 24-bit mantissa -> [0,1)
 }

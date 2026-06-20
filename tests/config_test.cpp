@@ -266,6 +266,8 @@ TEST(Config, ParsesFireSection) {
     EXPECT_EQ(r.config.fire.spawn_radius, 5);
     EXPECT_EQ(r.config.fire.spawn_height, 10);
     EXPECT_FLOAT_EQ(r.config.fire.burn_out_chance, 0.2f);
+    EXPECT_FLOAT_EQ(r.config.fire.smoke_chance, 0.5f);
+    EXPECT_FLOAT_EQ(r.config.fire.smoke_dissipate_chance, 0.1f);
     EXPECT_FLOAT_EQ(r.config.fire.ignite_scale, 2.0f);
 }
 
