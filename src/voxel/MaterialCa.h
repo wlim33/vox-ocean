@@ -12,17 +12,16 @@ inline int ca_cell_index(const MaterialCaDims& d, int ix, int iy, int iz) {
     return ix + d.extent * (iy + d.height_cells * iz);
 }
 
-// Per-cell classification fed to resolve_block.
-enum : uint8_t { CA_EMPTY = 0, CA_SAND = 1, CA_BARRIER = 2 };
-
-// Resolve gravity within one 2x2x2 block, in place. Local index = lx + 2*ly + 4*lz
-// (ly grows upward). Moves CA_SAND down into CA_EMPTY; CA_BARRIER is immovable.
-// Deterministic; conserves the CA_SAND count.
-void resolve_block(uint8_t cls[8]);
+// Resolve gravity and fluid leveling within one 2x2x2 block, in place.
+// `mat[8]` holds material ids; local index = lx + 2*ly + 4*lz (ly=0 is lower).
+// Motion is driven by density/fluidity/movable from MaterialRegistry — no Phase
+// switch. The operation is a permutation: per-material counts are conserved.
+// Deterministic with fixed iteration order and single-target moves per cell.
+void resolve_block(uint8_t mat[8]);
 
 // One Margolus phase over the inclusive cell box [x0,x1]x[y0,y1]x[z0,z1] with
-// block-origin offset (ox,oy,oz) in {0,1}. Routes cells by material phase from
-// the registry (Granular→CA_SAND, Solid→CA_BARRIER, Empty→CA_EMPTY).
+// block-origin offset (ox,oy,oz) in {0,1}. Reads and writes material ids
+// directly; out-of-grid cells are treated as immovable Rock.
 // Appends changed cell indices to `changed`.
 void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                     int ox, int oy, int oz,
