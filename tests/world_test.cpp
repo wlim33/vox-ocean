@@ -178,6 +178,7 @@ TEST(World, StepSettledSandEmitsNoEditsAfterSleep) {
     vox::EditList e; w.step(c, 1.0f/60, empty, e);       // frame 0: resync
     ASSERT_TRUE(e.resync);
     // Run until the sand settles (bounded), then assert a quiet frame emits nothing.
+    // 2000 frames: sand sinks through the deep water column and displaced water must re-level before the CA sleeps.
     for (int i = 0; i < 2000; ++i) { vox::EditList ei; w.step(c, 1.0f/60, empty, ei); if (ei.count() == 0) break; }
     vox::EditList quiet; w.step(c, 1.0f/60, empty, quiet);
     EXPECT_EQ(quiet.count(), 0);

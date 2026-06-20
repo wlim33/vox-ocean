@@ -1,7 +1,7 @@
 #pragma once
 // Single source of truth for voxel-grid math, included by BOTH C++ and Metal
 // (mirrors the shared-header pattern in shader_types.h). Replaces
-// the grid math previously duplicated across VoxelWorld, Dda.cpp, world_fill.metal,
+// the grid math previously duplicated across VoxelWorld, Dda.cpp,
 // voxel_march.metal, and apply_edits.metal. Tests: tests/voxel_grid_test.cpp.
 
 #ifdef __METAL_VERSION__
@@ -50,7 +50,8 @@ inline float vg_quantize_height(VoxelGridDesc g, float h) {
 }
 // Water cells from the base for an ALREADY-quantized surface top (world-y).
 // This is the second half of vg_water_top_cell, usable when only the quantized
-// top is available (e.g. the marcher reading surface_tex_.x). For any h,
+// top is available (used internally by vg_water_top_cell and the CPU seed;
+// the marcher no longer reads surface_tex_). For any h,
 // vg_water_cells_from_top(g, vg_quantize_height(g, h)) == vg_water_top_cell(g, h).
 inline int vg_water_cells_from_top(VoxelGridDesc g, float top) {
     int n = (int)VG_FLOOR((top + g.base_depth_m) / g.height_step_m + 0.5f);

@@ -11,7 +11,7 @@ namespace vox {
 struct Config;
 
 // CPU-authoritative material world. Owns ONE dense grid (material_: terrain +
-// dynamic sand, no entities), evolved in place by a Margolus CA. Entities are a
+// water + dynamic sand, no entities), evolved in place by a Margolus CA. Entities are a
 // sparse GPU-render overlay composited only into the emitted EditList, never into
 // material_. Metal-free.
 class World {
@@ -38,7 +38,7 @@ private:
 
     std::optional<VoxelWorld> grid_;
     std::vector<FloorColumn>  floor_;
-    std::vector<uint8_t>      material_;      // THE dense grid (terrain + sand)
+    std::vector<uint8_t>      material_;      // THE dense grid (terrain + water + sand)
     MaterialCa                ca_;
     MaterialCaDims            dims_{0, 0};
 
