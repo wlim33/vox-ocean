@@ -5,7 +5,6 @@
 #include "entity/StampBudget.h"
 #include "voxel/VoxelWorld.h"
 #include <functional>
-#include <glm/glm.hpp>
 namespace vox {
 struct Config;
 class World;
@@ -20,13 +19,11 @@ public:
     // count/seed changes. Stateful entities (fish, boat) are NOT reset on
     // unrelated config changes.
     void rebuild_if_dirty(const Config& cfg, const World& world);
-    // Advance boat + fish; refresh kelp sway. water_height = ripple surface height.
+    // Advance boat + fish; refresh kelp sway. water_height = surface water y.
     void update(const Config& cfg, float dt, float t, const HeightFn& water_height,
                 const World& world);
     // Append kelp, then fish, then boat (boat last -> wins overlaps).
     void build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out) const;
-    // Boat stern wake impulse for this frame (false if none / boat off).
-    bool shed_boat_wake(const Config& cfg, glm::vec2& out_world);
 private:
     Boat boat_;
     KelpBed kelp_;

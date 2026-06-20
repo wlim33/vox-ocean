@@ -4,42 +4,52 @@
 #include <algorithm>
 namespace vox {
 
-void resolve_block(uint8_t cls[8]) {
-    // local index = lx + 2*ly + 4*lz ; ly=0 is the lower level.
-    // 1. Straight fall: upper SAND drops into the EMPTY directly below.
+namespace {
+inline float ca_density(uint8_t m) { return material_props((VoxMat)m).density; }
+inline bool  ca_movable(uint8_t m) { return material_props((VoxMat)m).movable; }
+// fluidity >= 0.5 -> levels laterally (liquid); < 0.5 -> repose (granular).
+inline bool  ca_levels (uint8_t m) { return material_props((VoxMat)m).fluidity >= 0.5f; }
+// `a` may displace `b` only if both are movable and a is strictly denser than b.
+inline bool  can_sink  (uint8_t a, uint8_t b) {
+    return ca_movable(a) && ca_movable(b) && ca_density(a) > ca_density(b);
+}
+}
+
+// Density-ordered settle within one 2x2x2 block; ids in `mat`, local = lx+2*ly+4*lz, ly=0 lower.
+// This is a permutation: only std::swap is used, so counts are always conserved.
+void resolve_block(uint8_t mat[8]) {
+    // 1. Vertical: heavier of each vertical pair sinks.
     for (int lz = 0; lz < 2; ++lz)
         for (int lx = 0; lx < 2; ++lx) {
             int lo = lx + 4 * lz, up = lo + 2;
-            if (cls[up] == CA_SAND && cls[lo] == CA_EMPTY) { cls[lo] = CA_SAND; cls[up] = CA_EMPTY; }
+            if (can_sink(mat[up], mat[lo])) std::swap(mat[up], mat[lo]);
         }
-    // 2. Diagonal spread (angle of repose): an upper SAND still resting on a
-    //    non-empty cell slides into an EMPTY lower cell elsewhere in the block.
-    //    Fixed order (x before z) keeps it deterministic and single-target.
+    // 2. Lateral: an un-sunk movable cell spreads toward a lighter lower cell.
+    //    Granular -> only diagonally DOWN (repose). Liquid (levels) -> also same level.
+    //    Fixed (x before z) order is deterministic; each cell may move at most once
+    //    (continue after any swap keeps it single-target).
     for (int lz = 0; lz < 2; ++lz)
         for (int lx = 0; lx < 2; ++lx) {
             int up = lx + 2 + 4 * lz;
-            if (cls[up] != CA_SAND) continue;
-            int dx = (1 - lx) + 4 * lz;     // ly=0, opposite x
-            int dz = lx + 4 * (1 - lz);     // ly=0, opposite z
-            if      (cls[dx] == CA_EMPTY) { cls[dx] = CA_SAND; cls[up] = CA_EMPTY; }
-            else if (cls[dz] == CA_EMPTY) { cls[dz] = CA_SAND; cls[up] = CA_EMPTY; }
+            if (!ca_movable(mat[up])) continue;
+            int dx = (1 - lx) + 4 * lz;        // ly=0, opposite x
+            int dz = lx + 4 * (1 - lz);        // ly=0, opposite z
+            if      (can_sink(mat[up], mat[dx])) { std::swap(mat[up], mat[dx]); continue; }
+            else if (can_sink(mat[up], mat[dz])) { std::swap(mat[up], mat[dz]); continue; }
+            if (ca_levels(mat[up])) {
+                int sx = (1 - lx) + 2 + 4 * lz; // ly=1, opposite x
+                int sz = lx + 2 + 4 * (1 - lz); // ly=1, opposite z
+                // Guard: only allow a same-level lateral move when the cell BELOW
+                // the target is also lighter than `up`.  dx is the cell at ly=0
+                // directly below sx (opposite-x); dz is below sz (opposite-z).
+                // Without this, a 1-cell water bump at the flat sea surface slides
+                // same-level into adjacent Air even though there is no genuine
+                // downhill, causing a Water+Air pair to ping-pong indefinitely and
+                // preventing the CA from sleeping on a calm ocean.
+                if      (can_sink(mat[up], mat[sx]) && can_sink(mat[up], mat[dx])) { std::swap(mat[up], mat[sx]); continue; }
+                else if (can_sink(mat[up], mat[sz]) && can_sink(mat[up], mat[dz])) { std::swap(mat[up], mat[sz]); continue; }
+            }
         }
-}
-
-namespace {
-// Classify a world cell into {EMPTY, SAND, BARRIER} by material phase.
-// Out-of-grid is BARRIER. Granular→CA_SAND; Empty→CA_EMPTY; Solid→CA_BARRIER.
-inline uint8_t classify(const std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                        int ix, int iy, int iz) {
-    if (ix < 0 || ix >= d.extent || iy < 0 || iy >= d.height_cells || iz < 0 || iz >= d.extent)
-        return CA_BARRIER;
-    switch (material_props((VoxMat)cells[ca_cell_index(d, ix, iy, iz)]).phase) {
-        case Phase::Empty:    return CA_EMPTY;
-        case Phase::Granular: return CA_SAND;
-        case Phase::Solid:    return CA_BARRIER;
-    }
-    return CA_BARRIER;
-}
 }
 
 void MaterialCa::wake_box(int x0, int y0, int z0, int x1, int y1, int z1) {
@@ -94,32 +104,29 @@ void margolus_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     for (int bz = bz0; bz <= z1; bz += 2)
         for (int by = by0; by <= y1; by += 2)
             for (int bx = bx0; bx <= x1; bx += 2) {
-                uint8_t cls[8], before[8], mat[8];  // captured for SP2 multi-grain mixing; SP1 writes a single granular_id
-                uint8_t granular_id = (uint8_t)VoxMat::Air;   // id of the dynamic grain in this block
+                uint8_t mat[8], before[8];
                 for (int lz = 0; lz < 2; ++lz)
                     for (int ly = 0; ly < 2; ++ly)
                         for (int lx = 0; lx < 2; ++lx) {
                             int wx = bx + lx, wy = by + ly, wz = bz + lz;
                             bool in = wx >= 0 && wx < d.extent && wy >= 0 && wy < d.height_cells &&
                                       wz >= 0 && wz < d.extent;
-                            uint8_t m = in ? cells[ca_cell_index(d, wx, wy, wz)] : (uint8_t)VoxMat::Air;
-                            uint8_t c = classify(cells, d, wx, wy, wz);
+                            // Out-of-grid reads as an immovable wall: use Rock (movable=false).
+                            uint8_t m = in ? cells[ca_cell_index(d, wx, wy, wz)] : (uint8_t)VoxMat::Rock;
                             int l = lx + 2 * ly + 4 * lz;
-                            cls[l] = before[l] = c;
-                            mat[l] = m;
-                            if (c == CA_SAND) granular_id = m;   // single dynamic id per block in SP1
+                            mat[l] = before[l] = m;
                         }
-                resolve_block(cls);
+                resolve_block(mat);
                 for (int lz = 0; lz < 2; ++lz)
                     for (int ly = 0; ly < 2; ++ly)
                         for (int lx = 0; lx < 2; ++lx) {
                             int l = lx + 2 * ly + 4 * lz;
-                            if (cls[l] == before[l]) continue;
+                            if (mat[l] == before[l]) continue;
                             int wx = bx + lx, wy = by + ly, wz = bz + lz;
                             if (wx < 0 || wx >= d.extent || wy < 0 || wy >= d.height_cells ||
-                                wz < 0 || wz >= d.extent) continue;            // never write OOB
+                                wz < 0 || wz >= d.extent) continue;     // never write OOB
                             int idx = ca_cell_index(d, wx, wy, wz);
-                            cells[idx] = (cls[l] == CA_SAND) ? granular_id : (uint8_t)VoxMat::Air;
+                            cells[idx] = mat[l];                        // multi-material identity
                             changed.push_back((uint32_t)idx);
                         }
             }

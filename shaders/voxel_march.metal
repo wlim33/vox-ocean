@@ -80,18 +80,12 @@ static float3 terrain_color(uint mat, float3 n, float3 sun,
     return base * (0.35 + 0.65 * max(dot(n, sun), 0.0));
 }
 
-// Material at a cell: the discrete grid value, or derived water (an air cell
-// below the column's quantized water top is MAT_WATER). Mirrors world_fill's
-// classification exactly via vg_water_cells_from_top(surface_tex_.x), so the
-// rendered result is identical to reading the old water-baked world grid.
+// Material at a cell: the discrete-grid value. Water is now a real CA material
+// in the grid (SP2-I), so no surface-height derivation is needed.
+// CPU mirror: src/voxel/Dda.cpp — keep in lockstep.
 static uint read_material(VoxelGridDesc vg,
-                          texture3d<uint, access::read> discrete,
-                          texture2d<float> surface, int3 idx) {
-    uint m = vox_read(vg, discrete, idx);
-    if (m != MAT_AIR) return m;
-    float top = surface.read(uint2(idx.x, idx.z)).x;
-    int water_cells = vg_water_cells_from_top(vg, top);
-    return (idx.y < water_cells) ? MAT_WATER : MAT_AIR;
+                          texture3d<uint, access::read> discrete, int3 idx) {
+    return vox_read(vg, discrete, idx);
 }
 
 // See-through water marcher: phase 1 march to first hit, phase 2 bend once
@@ -103,7 +97,6 @@ fragment float4 march_fs(
     MarchVOut in                          [[stage_in]],
     constant MarchUniforms& U             [[buffer(0)]],
     texture3d<uint, access::read> world   [[texture(0)]],
-    texture2d<float> surface              [[texture(1)]],
     texturecube<float> sky_cube           [[texture(2)]])
 {
     constexpr sampler cube_smp(filter::linear, address::clamp_to_edge);
@@ -132,7 +125,7 @@ fragment float4 march_fs(
     int steps = 0;
     while (steps < U.max_steps) {
         steps++;
-        mat = read_material(vg, world, surface, S.idx);
+        mat = read_material(vg, world, S.idx);
         if (mat != MAT_AIR) break;
         if (!dda_step(S, G)) return float4(0.0);
     }
@@ -150,7 +143,6 @@ fragment float4 march_fs(
     int    entry_axis = S.axis;
     float3 n_entry    = face_normal(entry_axis, S.d);
     float3 entry_p    = org + dir * S.t_cur;
-    int2   entry_col  = int2(S.idx.x, S.idx.z);
     float3 V  = normalize(org - entry_p);
     float  nv = max(dot(n_entry, V), 0.0);
     float  F  = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
@@ -171,7 +163,7 @@ fragment float4 march_fs(
     bool  exited_up = false;
     while (walking && steps < U.max_steps) {
         steps++;
-        uint m = read_material(vg, world, surface, W.idx);
+        uint m = read_material(vg, world, W.idx);
         if (m != MAT_AIR && m != MAT_WATER) { end_mat = m; end_axis = W.axis; break; }
         float t_enter = W.t_cur;
         bool alive = dda_step(W, G);
@@ -195,17 +187,7 @@ fragment float4 march_fs(
     float3 T    = exp(-U.depth_fog_density * water_dist * U.extinction_rgb);
     float3 refr = bg * T + U.deep_water_color * (1.0 - T);
 
-    float4 surf = surface.read(uint2(entry_col));
-    float  foam = saturate(U.foam_strength * (U.foam_threshold - surf.y));
     float3 color = mix(refr, reflection, F);
-    if (entry_axis == 1 && n_entry.y > 0.5) {
-        color = mix(color, float3(1.0), foam);
-    } else {
-        // One-step crest foam bleed on side faces, carried over from v1.
-        float depth_below = max(surf.x - entry_p.y, 0.0);
-        float crest = saturate(1.0 - depth_below / max(U.height_step_m, 1e-3));
-        color = mix(color, float3(0.9), foam * crest);
-    }
     return float4(aces_tonemap(color), 1.0);
 }
 

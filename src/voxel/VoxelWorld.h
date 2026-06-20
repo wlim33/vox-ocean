@@ -24,8 +24,7 @@ struct VoxelWorldParams {
     float base_depth_m;
 };
 
-// CPU mirror of the grid math in shaders/world_fill.metal and
-// shaders/voxel_march.metal — keep in lockstep.
+// CPU mirror of the grid math in shaders/voxel_march.metal — keep in lockstep.
 class VoxelWorld {
 public:
     explicit VoxelWorld(VoxelWorldParams p) : p_(p) {

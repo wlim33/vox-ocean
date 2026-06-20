@@ -3,8 +3,8 @@
 namespace vox {
 struct MetalContext; struct Config;
 
-// Storage behind an interface: owns the material representation and the 2D
-// surface, exposes them to renderers (read) and producers (populate). Dense
+// Storage behind an interface: owns the material representation,
+// exposes it to renderers (read) and producers (populate). Dense
 // impl now; a sparse impl can satisfy the same contract later.
 class VoxelField {
 public:
@@ -12,9 +12,6 @@ public:
     virtual VoxelGridDesc desc(const Config&) const = 0;
     virtual void rebuild_if_dirty(const MetalContext&, const Config&) = 0;
     virtual void ensure_capacity(const MetalContext&, const Config&) = 0;
-    virtual void encode_fill(void* compute_encoder, const Config&,
-                             void* ripple_front_tex, int frame) = 0;
     virtual void* discrete_grid_handle() const = 0;
-    virtual void* surface_handle()       const = 0;
 };
 }

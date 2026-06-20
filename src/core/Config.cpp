@@ -13,7 +13,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "max_in_flight_frames",
-    "sky","shading","bench","voxel","march","render","ripple","entity","kelp","fish","sand"
+    "sky","shading","bench","voxel","march","render","entity","kelp","fish","sand"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -82,25 +82,6 @@ void load_entity(const toml::table& t, EntityConfig& e, LoadResult& r) {
         if (val < 0.0f || val > 2.0f) r.warnings.push_back("entity.wake_amp out of [0,2], clamped");
         e.wake_amp = clamp(val, 0.0f, 2.0f);
     }
-}
-
-void load_ripple(const toml::table& t, RippleConfig& rp, LoadResult& r) {
-    if (auto v = t["wave_speed_mps"].value<double>()) {
-        float val = (float)*v;
-        if (val < 0.1f || val > 20.0f) r.warnings.push_back("ripple.wave_speed_mps out of [0.1,20.0], clamped");
-        rp.wave_speed_mps = clamp(val, 0.1f, 20.0f);
-    }
-    if (auto v = t["damping"].value<double>()) {
-        float val = (float)*v;
-        if (val < 0.80f || val > 1.0f) r.warnings.push_back("ripple.damping out of [0.80,1.0], clamped");
-        rp.damping = clamp(val, 0.80f, 1.0f);
-    }
-    if (auto v = t["rain_rate"].value<double>()) {
-        float val = (float)*v;
-        if (val < 0.0f || val > 200.0f) r.warnings.push_back("ripple.rain_rate out of [0,200], clamped");
-        rp.rain_rate = clamp(val, 0.0f, 200.0f);
-    }
-    if (auto v = t["foam"].value<double>()) rp.foam = clamp((float)*v, 0.0f, 4.0f);
 }
 
 void load_kelp(const toml::table& t, KelpConfig& k, LoadResult& r) {
@@ -196,7 +177,6 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* vx = tbl["voxel"].as_table()) load_voxel(*vx, c.voxel, r);
     if (auto* mc = tbl["march"].as_table()) load_march(*mc, c.march, r);
     if (auto* rd = tbl["render"].as_table()) load_render(*rd, c.render);
-    if (auto* rp = tbl["ripple"].as_table()) load_ripple(*rp, c.ripple, r);
     if (auto* en = tbl["entity"].as_table()) load_entity(*en, c.entity, r);
     if (auto* kp = tbl["kelp"].as_table()) load_kelp(*kp, c.kelp, r);
     if (auto* fp = tbl["fish"].as_table()) load_fish(*fp, c.fish, r);
@@ -256,22 +236,6 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
             }
             else if (key == "render.backend") in.config.render.backend = val;
             else if (key == "bench.bench_mode")           in.config.bench.bench_mode    = (val == "true" || val == "1");
-            else if (key == "ripple.wave_speed_mps") {
-                float f = std::stof(val);
-                if (f < 0.1f || f > 20.0f) in.warnings.push_back("ripple.wave_speed_mps out of [0.1,20.0], clamped");
-                in.config.ripple.wave_speed_mps = clamp(f, 0.1f, 20.0f);
-            }
-            else if (key == "ripple.damping") {
-                float f = std::stof(val);
-                if (f < 0.80f || f > 1.0f) in.warnings.push_back("ripple.damping out of [0.80,1.0], clamped");
-                in.config.ripple.damping = clamp(f, 0.80f, 1.0f);
-            }
-            else if (key == "ripple.rain_rate") {
-                float f = std::stof(val);
-                if (f < 0.0f || f > 200.0f) in.warnings.push_back("ripple.rain_rate out of [0,200], clamped");
-                in.config.ripple.rain_rate = clamp(f, 0.0f, 200.0f);
-            }
-            else if (key == "ripple.foam") in.config.ripple.foam = clamp(std::stof(val), 0.0f, 4.0f);
             else if (key == "entity.boat_enabled") in.config.entity.boat_enabled = (val == "true" || val == "1");
             else if (key == "entity.boat_speed_mps") {
                 float f = std::stof(val);
@@ -368,11 +332,6 @@ uint64_t config_hash(const Config& c) {
     // March
     h = fnv1a64(&c.march.max_steps,    sizeof(c.march.max_steps),    h);
     h = fnv1a64(&c.march.render_scale, sizeof(c.march.render_scale), h);
-    // Ripple
-    h = fnv1a64(&c.ripple.wave_speed_mps, sizeof(c.ripple.wave_speed_mps), h);
-    h = fnv1a64(&c.ripple.damping,        sizeof(c.ripple.damping),        h);
-    h = fnv1a64(&c.ripple.rain_rate,      sizeof(c.ripple.rain_rate),      h);
-    h = fnv1a64(&c.ripple.foam,           sizeof(c.ripple.foam),           h);
     // Entity
     h = fnv1a64(&c.entity.boat_enabled,   sizeof(c.entity.boat_enabled),   h);
     h = fnv1a64(&c.entity.boat_speed_mps, sizeof(c.entity.boat_speed_mps), h);

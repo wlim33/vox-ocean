@@ -44,11 +44,6 @@ target_sources(vox-ocean-tests PRIVATE
 )
 
 target_sources(vox-ocean-tests PRIVATE
-    ripple_test.cpp
-    ${CMAKE_SOURCE_DIR}/src/voxel/Ripple.cpp
-)
-
-target_sources(vox-ocean-tests PRIVATE
     boat_test.cpp
     ${CMAKE_SOURCE_DIR}/src/entity/Boat.cpp
 )

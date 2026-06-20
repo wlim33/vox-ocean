@@ -44,6 +44,7 @@ void World::configure(const Config& cfg) {
     }
 
     ca_.reset();
+    seed_water();           // fill Water below sea level (equilibrium, no wake)
     seed_sand(cfg);
     resync_ = true;
     prev_overlay_cells_.clear();
@@ -53,6 +54,18 @@ void World::configure(const Config& cfg) {
     built_height_step_ = v.height_step_m; built_voxel_size_ = v.voxel_size_m;
     built_sand_enabled_ = cfg.sand.enabled; built_sand_radius_ = cfg.sand.spawn_radius;
     built_sand_thick_ = cfg.sand.spawn_thickness;
+}
+
+void World::seed_water() {
+    int extent = dims_.extent, hc = dims_.height_cells;
+    int sea = std::min(grid_->water_top_cell(0.0f), hc);   // cells up to y=0
+    for (int iz = 0; iz < extent; ++iz)
+        for (int ix = 0; ix < extent; ++ix)
+            for (int iy = 0; iy < sea; ++iy) {
+                size_t i = ca_cell_index(dims_, ix, iy, iz);
+                if (material_[i] == (uint8_t)VoxMat::Air) material_[i] = (uint8_t)VoxMat::Water;
+            }
+    // No wake_box: the fill is at equilibrium, so the CA stays asleep until disturbed.
 }
 
 void World::seed_sand(const Config& cfg) {

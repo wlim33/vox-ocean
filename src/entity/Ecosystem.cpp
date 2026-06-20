@@ -64,9 +64,5 @@ void Ecosystem::build_stamp(const Config& cfg, const VoxelWorld& w, StampList& o
     }
 }
 
-bool Ecosystem::shed_boat_wake(const Config& cfg, glm::vec2& out_world) {
-    if (!cfg.entity.boat_enabled) return false;
-    return boat_.shed_wake(cfg.voxel.voxel_size_m, out_world);
 }
 
-}
