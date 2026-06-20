@@ -26,3 +26,11 @@ TEST(MarchPalette, BubblePaletteColumn) {
     EXPECT_FLOAT_EQ(u.palette[MAT_BUBBLE].x, kMaterials[(size_t)VoxMat::Bubble].r);
     EXPECT_FLOAT_EQ(u.palette[MAT_BUBBLE].z, kMaterials[(size_t)VoxMat::Bubble].b);
 }
+
+TEST(MarchPalette, CombustionPaletteColumns) {
+    MarchUniforms u{};
+    upload_palette(u);
+    EXPECT_FLOAT_EQ(u.palette[MAT_FIRE].x, kMaterials[(size_t)VoxMat::Fire].r);
+    EXPECT_FLOAT_EQ(u.palette[MAT_SMOKE].y, kMaterials[(size_t)VoxMat::Smoke].g);
+    EXPECT_FLOAT_EQ(u.palette[MAT_ASH].z,  kMaterials[(size_t)VoxMat::Ash].b);
+}

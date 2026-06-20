@@ -39,7 +39,10 @@ struct SkyUniforms {
 #define MAT_FISH  6
 #define MAT_SANDGRAIN 7
 #define MAT_BUBBLE 8
-#define NUM_MATERIALS 9
+#define MAT_FIRE 9
+#define MAT_SMOKE 10
+#define MAT_ASH 11
+#define NUM_MATERIALS 12
 
 struct ApplyEditsUniforms {
     int grid_extent;

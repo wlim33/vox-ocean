@@ -8,8 +8,24 @@ TEST(MaterialRegistry, TableSizeMatchesEnum) {
     EXPECT_EQ(kMaterials.size(), (size_t)kNumMaterials);
 }
 
-TEST(MaterialRegistry, EnumSizeIsNine) {
-    EXPECT_EQ((int)vox::kNumMaterials, 9);
+TEST(MaterialRegistry, EnumSizeIsTwelve) {
+    EXPECT_EQ((int)vox::kNumMaterials, 12);
+}
+
+TEST(MaterialRegistry, CombustionMaterialProps) {
+    using namespace vox;
+    const MaterialProps& fire = material_props(VoxMat::Fire);
+    EXPECT_EQ(fire.phase, Phase::Fire);
+    EXPECT_FALSE(fire.movable);                                   // fire sits on the fuel
+    const MaterialProps& smoke = material_props(VoxMat::Smoke);
+    EXPECT_EQ(smoke.phase, Phase::Gas);
+    EXPECT_TRUE(smoke.movable);
+    EXPECT_LT(smoke.density, material_props(VoxMat::Air).density); // lighter than air -> rises
+    const MaterialProps& ash = material_props(VoxMat::Ash);
+    EXPECT_EQ(ash.phase, Phase::Granular);
+    EXPECT_TRUE(ash.movable);
+    EXPECT_GT(ash.density, material_props(VoxMat::Water).density); // heavier than water -> sinks/falls
+    EXPECT_LT(ash.fluidity, 0.5f);                                // repose, not leveling
 }
 
 TEST(MaterialRegistry, BubbleBetweenAirAndWater) {
