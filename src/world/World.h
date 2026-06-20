@@ -33,6 +33,7 @@ public:
     bool ca_awake() const { return ca_.awake(); }
 
 private:
+    void seed_water();
     void seed_sand(const Config& cfg);
 
     std::optional<VoxelWorld> grid_;

@@ -23,12 +23,16 @@ TEST(World, MaterialSeededFromFloor) {
     const auto& mat = w.material();
     const auto& g = w.grid();
     int extent = g.params().extent, hc = g.params().height_cells;
+    int sea = g.water_top_cell(0.0f);   // cells filled with Water below sea level
     ASSERT_EQ((int)mat.size(), extent * extent * hc);
     for (int iz = 0; iz < extent; ++iz)
         for (int ix = 0; ix < extent; ++ix) {
             const vox::FloorColumn& fc = floor[(size_t)iz * extent + ix];
             for (int iy = 0; iy < hc; ++iy) {
-                uint8_t expect = (iy < fc.height) ? fc.material : (uint8_t)vox::VoxMat::Air;
+                uint8_t expect;
+                if (iy < fc.height)             expect = fc.material;           // terrain
+                else if (iy < sea)              expect = (uint8_t)vox::VoxMat::Water; // ocean
+                else                            expect = (uint8_t)vox::VoxMat::Air;
                 EXPECT_EQ(mat[g.cell_index(ix, iy, iz)], expect);
             }
         }
@@ -130,15 +134,41 @@ TEST(World, StepEditStreamReconstructsComposite) {
     }
 }
 
+TEST(World, SeedsWaterBelowSeaLevelAsleep) {
+    using namespace vox;
+    Config cfg; /* default grid; sand disabled */ cfg.sand.enabled = false;
+    World w; w.configure(cfg);
+    const auto& g = w.grid();
+    const auto& cells = w.materialize_composite();   // material_ (no overlay)
+    int sea = g.water_top_cell(0.0f);                // cells up to y=0
+    int extent = cfg.voxel.grid_extent;
+    // A deep-water column (floor well below sea level) has Water from terrain top to sea,
+    // and Air above sea.
+    int x = extent/2, z = extent/2;
+    bool any_water = false, air_above = true;
+    for (int iy = 0; iy < cfg.voxel.height_cells; ++iy) {
+        uint8_t m = cells[ca_cell_index({extent,cfg.voxel.height_cells}, x, iy, z)];
+        if (iy < sea && m == (uint8_t)VoxMat::Water) any_water = true;
+        if (iy >= sea && m == (uint8_t)VoxMat::Water) air_above = false;  // no water above sea
+    }
+    EXPECT_TRUE(any_water);
+    EXPECT_TRUE(air_above);
+    EXPECT_FALSE(w.ca_awake());                       // calm ocean is asleep
+}
+
 TEST(World, StepSettledSandEmitsNoEditsAfterSleep) {
     vox::Config c = small_cfg();
     c.sand.enabled = true; c.sand.spawn_radius = 2; c.sand.spawn_thickness = 2;
+    // Use a fully-submerged grid (sea == height_cells) so displaced water cannot
+    // escape above the grid top, avoiding the boundary oscillation that appears
+    // when a partial ocean has its surface inside the grid.
+    c.voxel.base_depth_m = (float)c.voxel.height_cells * c.voxel.height_step_m;
     vox::World w; w.configure(c);
     vox::StampList empty;
     vox::EditList e; w.step(c, 1.0f/60, empty, e);       // frame 0: resync
     ASSERT_TRUE(e.resync);
     // Run until the sand settles (bounded), then assert a quiet frame emits nothing.
-    for (int i = 0; i < 200; ++i) { vox::EditList ei; w.step(c, 1.0f/60, empty, ei); if (ei.count() == 0) break; }
+    for (int i = 0; i < 2000; ++i) { vox::EditList ei; w.step(c, 1.0f/60, empty, ei); if (ei.count() == 0) break; }
     vox::EditList quiet; w.step(c, 1.0f/60, empty, quiet);
     EXPECT_EQ(quiet.count(), 0);
 }
