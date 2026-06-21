@@ -37,6 +37,7 @@ private:
     void seed_sand(const Config& cfg);
     void seed_bubble(const Config& cfg);
     void seed_fire(const Config& cfg);
+    void seed_lava(const Config& cfg);
 
     std::optional<VoxelWorld> grid_;
     std::vector<FloorColumn>  floor_;
@@ -57,5 +58,6 @@ private:
     bool  built_sand_enabled_ = false; int built_sand_radius_ = -1, built_sand_thick_ = -1;
     bool  built_bubble_enabled_ = false; int built_bubble_radius_ = -1, built_bubble_depth_ = -1;
     FireConfig built_fire_{};
+    LavaConfig built_lava_{};
 };
 }

@@ -26,7 +26,11 @@ void World::configure(const Config& cfg) {
         && cfg.fire.ignite_scale == built_fire_.ignite_scale
         && cfg.fire.boil_chance == built_fire_.boil_chance
         && cfg.fire.condense_chance == built_fire_.condense_chance;
-    if (grid_same && sand_same && bubble_same && fire_same) return;
+    bool lava_same = cfg.lava.enabled == built_lava_.enabled
+        && cfg.lava.spawn_radius == built_lava_.spawn_radius
+        && cfg.lava.spawn_height == built_lava_.spawn_height
+        && cfg.lava.cool_chance == built_lava_.cool_chance;
+    if (grid_same && sand_same && bubble_same && fire_same && lava_same) return;
 
     if (!grid_same) {
         grid_.emplace(VoxelWorldParams{ v.grid_extent, v.height_cells, v.voxel_size_m,
@@ -60,7 +64,14 @@ void World::configure(const Config& cfg) {
     seed_water();           // fill Water below sea level (equilibrium, no wake)
     seed_sand(cfg);
     seed_bubble(cfg);       // submerged gas blob (rises on wake)
-    seed_fire(cfg);         // ignite a region + enable combustion (no-op when disabled)
+    seed_fire(cfg);         // ignite a region (no-op when disabled)
+    seed_lava(cfg);         // lava blob above the waterline (sinks on wake)
+    if (cfg.fire.enabled || cfg.lava.enabled)
+        ca_.enable_combustion((uint32_t)cfg.voxel.floor_seed,
+                              { cfg.fire.burn_out_chance, cfg.fire.smoke_chance,
+                                cfg.fire.smoke_dissipate_chance, cfg.fire.ignite_scale,
+                                cfg.fire.boil_chance, cfg.fire.condense_chance,
+                                cfg.lava.cool_chance });
     resync_ = true;
     prev_overlay_cells_.clear();
 
@@ -72,6 +83,7 @@ void World::configure(const Config& cfg) {
     built_bubble_enabled_ = cfg.bubble.enabled; built_bubble_radius_ = cfg.bubble.spawn_radius;
     built_bubble_depth_ = cfg.bubble.spawn_depth;
     built_fire_ = cfg.fire;
+    built_lava_ = cfg.lava;
 }
 
 void World::seed_water() {
@@ -130,10 +142,23 @@ void World::seed_fire(const Config& cfg) {
                 if (m == (uint8_t)VoxMat::Air || material_props((VoxMat)m).flammability > 0.0f)
                     material_[i] = (uint8_t)VoxMat::Fire;   // ignite air + fuel only
             }
-    ca_.enable_combustion((uint32_t)cfg.voxel.floor_seed,
-                          { cfg.fire.burn_out_chance, cfg.fire.smoke_chance,
-                            cfg.fire.smoke_dissipate_chance, cfg.fire.ignite_scale,
-                            cfg.fire.boil_chance, cfg.fire.condense_chance });
+    ca_.wake_box(cx - r, y0, cz - r, cx + r, y1, cz + r);
+}
+
+void World::seed_lava(const Config& cfg) {
+    if (!cfg.lava.enabled) return;
+    int extent = dims_.extent, hc = dims_.height_cells;
+    int cx = extent / 2, cz = extent / 2;
+    int r  = std::min(cfg.lava.spawn_radius, extent / 2);
+    int cy = std::min(std::max(0, cfg.lava.spawn_height), hc - 1);
+    int y0 = std::max(0, cy - r), y1 = std::min(hc - 1, cy + r);
+    for (int iz = std::max(0, cz - r); iz <= std::min(extent - 1, cz + r); ++iz)
+        for (int ix = std::max(0, cx - r); ix <= std::min(extent - 1, cx + r); ++ix)
+            for (int iy = y0; iy <= y1; ++iy) {
+                size_t i = ca_cell_index(dims_, ix, iy, iz);
+                if (material_[i] == (uint8_t)VoxMat::Air)        // seed into air only → sinks into the ocean
+                    material_[i] = (uint8_t)VoxMat::Lava;
+            }
     ca_.wake_box(cx - r, y0, cz - r, cx + r, y1, cz + r);
 }
 

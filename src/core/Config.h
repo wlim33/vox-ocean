@@ -87,6 +87,13 @@ struct FireConfig {
     float condense_chance = 0.10f;          // P(Steam->Water | no Fire neighbor)/step, clamp [0,1]
 };
 
+struct LavaConfig {
+    bool  enabled = false;                  // off by default — existing scenes stay identical
+    int   spawn_radius = 4;                 // half-extent (cells) of the lava blob, clamp [1,64]
+    int   spawn_height = 16;                // cells above floor for the blob (above sea level), clamp [0,1024]
+    float cool_chance = 0.15f;              // P(Lava->Rock | Water neighbor)/step, clamp [0,1]
+};
+
 struct SkyConfig {
     int cubemap_resolution = 128;
     float sun_elevation_rad = 0.7f;
@@ -112,6 +119,7 @@ struct Config {
     SandConfig sand;
     BubbleConfig bubble;
     FireConfig fire;
+    LavaConfig lava;
 
     SkyConfig sky;
     ShadingConfig shading;
