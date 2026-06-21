@@ -466,3 +466,54 @@ TEST(Combustion, FireConsumesFuelLeavesAshSmokeDissipatesAndSleeps) {
     EXPECT_EQ(count_of(g, VoxMat::Smoke), 0);        // smoke fully dissipated
     EXPECT_GT(count_of(g, VoxMat::Ash),   0);        // left some ash residue
 }
+
+// --- SP3-III Lava micro-tests ---
+
+TEST(Combustion, LavaIgnitesAdjacentFuel) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Kelp;   // flammability 0.4
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Lava;
+    CombustionParams p; p.ignite_scale = 4.0f;           // 0.4*4 >= 1 -> deterministic ignite
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Fire);
+}
+
+TEST(Combustion, LavaBoilsAdjacentWater) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Water;
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Lava;
+    CombustionParams p; p.boil_chance = 1.0f; p.cool_chance = 0.0f;  // isolate the water side
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Steam);
+}
+
+TEST(Combustion, LavaCoolsToRockNextToWater) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Lava;
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Water;
+    CombustionParams p; p.cool_chance = 1.0f; p.boil_chance = 0.0f;  // isolate the lava side
+    std::vector<uint32_t> ch;
+    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Rock);
+}
+
+TEST(Combustion, LavaInAirNeverCools) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Lava;
+    CombustionParams p; p.cool_chance = 1.0f;            // even at certainty, no water -> no cool
+    for (uint32_t s = 0; s < 50; ++s) {
+        std::vector<uint32_t> ch;
+        combustion_sweep(g, d, s, 7, p, 0,0,0, 2,2,2, ch);
+    }
+    EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Lava);
+}

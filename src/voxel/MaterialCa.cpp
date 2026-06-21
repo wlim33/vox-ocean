@@ -144,6 +144,7 @@ inline float rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t s
     return (mix32(h) >> 8) * (1.0f / 16777216.0f);   // 24-bit mantissa -> [0,1)
 }
 inline bool is_fuel(uint8_t m) { return material_props((VoxMat)m).flammability > 0.0f; }
+inline bool is_hot(uint8_t m) { return m == (uint8_t)VoxMat::Fire || m == (uint8_t)VoxMat::Lava; }
 }
 
 void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
@@ -162,11 +163,11 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
         for (int x = x0; x <= x1; ++x) {
             uint8_t m = at(x, y, z);
             int idx = ca_cell_index(d, x, y, z);
-            bool nbFire = false, nbWater = false, hasAir = false;
+            bool nbHot = false, nbWater = false, hasAir = false;
             int ax = 0, ay = 0, az = 0;
             for (int k = 0; k < 6; ++k) {
                 uint8_t nm = at(x + NX[k], y + NY[k], z + NZ[k]);
-                if (nm == (uint8_t)VoxMat::Fire)  nbFire = true;
+                if (is_hot(nm))                   nbHot = true;
                 if (nm == (uint8_t)VoxMat::Water) nbWater = true;
                 if (!hasAir && nm == (uint8_t)VoxMat::Air) { hasAir = true; ax = x+NX[k]; ay = y+NY[k]; az = z+NZ[k]; }
             }
@@ -181,7 +182,7 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                 }
                 continue;   // fire stays
             }
-            if (is_fuel(m) && nbFire) {
+            if (is_fuel(m) && nbHot) {
                 float fl = material_props((VoxMat)m).flammability;
                 if (rnd01(x,y,z,step,seed,1) < fl * p.ignite_scale) {
                     cells[idx] = (uint8_t)VoxMat::Fire; changed.push_back((uint32_t)idx);
@@ -195,14 +196,20 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                 continue;
             }
             if (m == (uint8_t)VoxMat::Water) {
-                if (nbFire && rnd01(x,y,z,step,seed,5) < p.boil_chance) {
+                if (nbHot && rnd01(x,y,z,step,seed,5) < p.boil_chance) {
                     cells[idx] = (uint8_t)VoxMat::Steam; changed.push_back((uint32_t)idx);
                 }
                 continue;
             }
             if (m == (uint8_t)VoxMat::Steam) {
-                if (!nbFire && rnd01(x,y,z,step,seed,6) < p.condense_chance) {
+                if (!nbHot && rnd01(x,y,z,step,seed,6) < p.condense_chance) {
                     cells[idx] = (uint8_t)VoxMat::Water; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Lava) {
+                if (nbWater && rnd01(x,y,z,step,seed,7) < p.cool_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Rock; changed.push_back((uint32_t)idx);
                 }
                 continue;
             }
