@@ -41,3 +41,10 @@ TEST(MarchPalette, SteamPaletteColumn) {
     EXPECT_FLOAT_EQ(u.palette[MAT_STEAM].x, kMaterials[(size_t)VoxMat::Steam].r);
     EXPECT_FLOAT_EQ(u.palette[MAT_STEAM].z, kMaterials[(size_t)VoxMat::Steam].b);
 }
+
+TEST(MarchPalette, LavaPaletteColumn) {
+    MarchUniforms u{};
+    upload_palette(u);
+    EXPECT_FLOAT_EQ(u.palette[MAT_LAVA].x, kMaterials[(size_t)VoxMat::Lava].r);
+    EXPECT_FLOAT_EQ(u.palette[MAT_LAVA].z, kMaterials[(size_t)VoxMat::Lava].b);
+}

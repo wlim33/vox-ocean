@@ -17,6 +17,7 @@ static_assert((int)vox::VoxMat::Fire  == MAT_FIRE);
 static_assert((int)vox::VoxMat::Smoke == MAT_SMOKE);
 static_assert((int)vox::VoxMat::Ash   == MAT_ASH);
 static_assert((int)vox::VoxMat::Steam == MAT_STEAM);
+static_assert((int)vox::VoxMat::Lava == MAT_LAVA);
 static_assert((int)vox::kNumMaterials == NUM_MATERIALS);
 
 // extent 4, 48 cells, 0.5m voxels, 0.25m steps, 10m base

@@ -291,3 +291,17 @@ TEST(Config, ParsesFireBoilCondense) {
     EXPECT_FLOAT_EQ(r.config.fire.condense_chance, 0.2f);
 }
 
+TEST(Config, ParsesLavaSection) {
+    auto r = vox::load_config_from_string(
+        "[lava]\nenabled = true\nspawn_radius = 5\nspawn_height = 20\ncool_chance = 0.3\n");
+    EXPECT_TRUE(r.config.lava.enabled);
+    EXPECT_EQ(r.config.lava.spawn_radius, 5);
+    EXPECT_EQ(r.config.lava.spawn_height, 20);
+    EXPECT_FLOAT_EQ(r.config.lava.cool_chance, 0.3f);
+}
+
+TEST(Config, LavaDefaultsDisabled) {
+    auto r = vox::load_config_from_string("");
+    EXPECT_FALSE(r.config.lava.enabled);
+}
+

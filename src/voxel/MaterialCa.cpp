@@ -13,6 +13,17 @@ inline bool  ca_levels (uint8_t m) { return material_props((VoxMat)m).fluidity >
 inline bool  can_sink  (uint8_t a, uint8_t b) {
     return ca_movable(a) && ca_movable(b) && ca_density(a) > ca_density(b);
 }
+// True if any of the 6 face-neighbours of (x,y,z) is Water (OOB reads as not-water).
+inline bool is_water_adjacent(const std::vector<uint8_t>& cells, const MaterialCaDims& d,
+                              int x, int y, int z) {
+    static const int NX[6]={1,-1,0,0,0,0}, NY[6]={0,0,1,-1,0,0}, NZ[6]={0,0,0,0,1,-1};
+    for (int k = 0; k < 6; ++k) {
+        int nx=x+NX[k], ny=y+NY[k], nz=z+NZ[k];
+        if (nx<0||nx>=d.extent||ny<0||ny>=d.height_cells||nz<0||nz>=d.extent) continue;
+        if (cells[ca_cell_index(d, nx, ny, nz)] == (uint8_t)VoxMat::Water) return true;
+    }
+    return false;
+}
 }
 
 // Density-ordered settle within one 2x2x2 block; ids in `mat`, local = lx+2*ly+4*lz, ly=0 lower.
@@ -84,11 +95,13 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
         const uint8_t kFire  = (uint8_t)VoxMat::Fire;
         const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
         const uint8_t kSteam = (uint8_t)VoxMat::Steam;
+        const uint8_t kLava  = (uint8_t)VoxMat::Lava;
         for (int iz = az0_; iz <= az1_ && !reactive_present; ++iz)
             for (int iy = ay0_; iy <= ay1_ && !reactive_present; ++iy)
                 for (int ix = ax0_; ix <= ax1_ && !reactive_present; ++ix) {
                     uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
                     if (m == kFire || m == kSmoke || m == kSteam) reactive_present = true;
+                    else if (m == kLava && is_water_adjacent(cells, d, ix, iy, iz)) reactive_present = true;
                 }
     }
     if (changed.empty() && !reactive_present) {
@@ -115,11 +128,14 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
         const uint8_t kFire  = (uint8_t)VoxMat::Fire;
         const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
         const uint8_t kSteam = (uint8_t)VoxMat::Steam;
+        const uint8_t kLava  = (uint8_t)VoxMat::Lava;
         for (int iz = z0; iz <= z1; ++iz)
             for (int iy = y0; iy <= y1; ++iy)
                 for (int ix = x0; ix <= x1; ++ix) {
                     uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
-                    if (m == kFire || m == kSmoke || m == kSteam) {
+                    bool reactive = (m == kFire || m == kSmoke || m == kSteam)
+                                 || (m == kLava && is_water_adjacent(cells, d, ix, iy, iz));
+                    if (reactive) {
                         nx0 = std::min(nx0, ix - 1); nx1 = std::max(nx1, ix + 1);
                         ny0 = std::min(ny0, iy - 1); ny1 = std::max(ny1, iy + 1);
                         nz0 = std::min(nz0, iz - 1); nz1 = std::max(nz1, iz + 1);
@@ -144,6 +160,7 @@ inline float rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t s
     return (mix32(h) >> 8) * (1.0f / 16777216.0f);   // 24-bit mantissa -> [0,1)
 }
 inline bool is_fuel(uint8_t m) { return material_props((VoxMat)m).flammability > 0.0f; }
+inline bool is_hot(uint8_t m) { return m == (uint8_t)VoxMat::Fire || m == (uint8_t)VoxMat::Lava; }
 }
 
 void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
@@ -162,11 +179,11 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
         for (int x = x0; x <= x1; ++x) {
             uint8_t m = at(x, y, z);
             int idx = ca_cell_index(d, x, y, z);
-            bool nbFire = false, nbWater = false, hasAir = false;
+            bool nbHot = false, nbWater = false, hasAir = false;
             int ax = 0, ay = 0, az = 0;
             for (int k = 0; k < 6; ++k) {
                 uint8_t nm = at(x + NX[k], y + NY[k], z + NZ[k]);
-                if (nm == (uint8_t)VoxMat::Fire)  nbFire = true;
+                if (is_hot(nm))                   nbHot = true;
                 if (nm == (uint8_t)VoxMat::Water) nbWater = true;
                 if (!hasAir && nm == (uint8_t)VoxMat::Air) { hasAir = true; ax = x+NX[k]; ay = y+NY[k]; az = z+NZ[k]; }
             }
@@ -181,7 +198,7 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                 }
                 continue;   // fire stays
             }
-            if (is_fuel(m) && nbFire) {
+            if (is_fuel(m) && nbHot) {
                 float fl = material_props((VoxMat)m).flammability;
                 if (rnd01(x,y,z,step,seed,1) < fl * p.ignite_scale) {
                     cells[idx] = (uint8_t)VoxMat::Fire; changed.push_back((uint32_t)idx);
@@ -195,14 +212,20 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                 continue;
             }
             if (m == (uint8_t)VoxMat::Water) {
-                if (nbFire && rnd01(x,y,z,step,seed,5) < p.boil_chance) {
+                if (nbHot && rnd01(x,y,z,step,seed,5) < p.boil_chance) {
                     cells[idx] = (uint8_t)VoxMat::Steam; changed.push_back((uint32_t)idx);
                 }
                 continue;
             }
             if (m == (uint8_t)VoxMat::Steam) {
-                if (!nbFire && rnd01(x,y,z,step,seed,6) < p.condense_chance) {
+                if (!nbHot && rnd01(x,y,z,step,seed,6) < p.condense_chance) {
                     cells[idx] = (uint8_t)VoxMat::Water; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Lava) {
+                if (nbWater && rnd01(x,y,z,step,seed,7) < p.cool_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Rock; changed.push_back((uint32_t)idx);
                 }
                 continue;
             }

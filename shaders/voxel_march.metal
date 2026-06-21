@@ -135,6 +135,7 @@ fragment float4 march_fs(
 
     // Emissive fire: full-bright, ignores sun shading and the water path so it glows.
     if (mat == MAT_FIRE) return float4(aces_tonemap(U.palette[MAT_FIRE] * 3.0), 1.0);
+    if (mat == MAT_LAVA) return float4(aces_tonemap(U.palette[MAT_LAVA] * 3.0), 1.0);
 
     if (mat != MAT_WATER) {
         // Dry terrain (island above the waterline).
@@ -180,6 +181,8 @@ fragment float4 march_fs(
         return float4(aces_tonemap(terrain_color(MAT_FISH, face_normal(end_axis, W.d), sun, U)), 1.0);
     if (end_mat == MAT_FIRE)
         return float4(aces_tonemap(U.palette[MAT_FIRE] * 3.0), 1.0);   // fire glows through water
+    if (end_mat == MAT_LAVA)
+        return float4(aces_tonemap(U.palette[MAT_LAVA] * 3.0), 1.0);   // lava glows through water
 
     // Background behind the water along the refracted path.
     float3 bg;

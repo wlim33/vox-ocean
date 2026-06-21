@@ -13,7 +13,7 @@ T clamp(T v, T lo, T hi) { return std::max(lo, std::min(hi, v)); }
 
 const std::vector<std::string> KNOWN_TOP_KEYS = {
     "max_in_flight_frames",
-    "sky","shading","bench","voxel","march","render","entity","kelp","fish","sand","bubble","fire"
+    "sky","shading","bench","voxel","march","render","entity","kelp","fish","sand","bubble","fire","lava"
 };
 
 void check_unknown_keys(const toml::table& t, LoadResult& r) {
@@ -192,6 +192,21 @@ void load_fire(const toml::table& t, FireConfig& s, LoadResult& r) {
     if (auto v = t["condense_chance"].value<double>()) s.condense_chance = clamp((float)*v, 0.0f, 1.0f);
 }
 
+void load_lava(const toml::table& t, LavaConfig& s, LoadResult& r) {
+    if (auto v = t["enabled"].value<bool>()) s.enabled = *v;
+    if (auto v = t["spawn_radius"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 1 || val > 64) r.warnings.push_back("lava.spawn_radius out of [1,64], clamped");
+        s.spawn_radius = clamp(val, 1, 64);
+    }
+    if (auto v = t["spawn_height"].value<int64_t>()) {
+        int val = (int)*v;
+        if (val < 0 || val > 1024) r.warnings.push_back("lava.spawn_height out of [0,1024], clamped");
+        s.spawn_height = clamp(val, 0, 1024);
+    }
+    if (auto v = t["cool_chance"].value<double>()) s.cool_chance = clamp((float)*v, 0.0f, 1.0f);
+}
+
 } // namespace
 
 LoadResult load_config_from_string(const std::string& text) {
@@ -217,6 +232,7 @@ LoadResult load_config_from_string(const std::string& text) {
     if (auto* sp = tbl["sand"].as_table()) load_sand(*sp, c.sand, r);
     if (auto* bp = tbl["bubble"].as_table()) load_bubble(*bp, c.bubble, r);
     if (auto* fp = tbl["fire"].as_table()) load_fire(*fp, c.fire, r);
+    if (auto* lp = tbl["lava"].as_table()) load_lava(*lp, c.lava, r);
     // sky, shading, bench loaders follow the same pattern; extend as needed.
     return r;
 }
@@ -376,6 +392,18 @@ LoadResult apply_overrides(LoadResult in, const std::vector<std::string>& kv) {
             else if (key == "fire.ignite_scale")           in.config.fire.ignite_scale           = clamp(std::stof(val), 0.0f, 4.0f);
             else if (key == "fire.boil_chance")     in.config.fire.boil_chance     = clamp(std::stof(val), 0.0f, 1.0f);
             else if (key == "fire.condense_chance") in.config.fire.condense_chance = clamp(std::stof(val), 0.0f, 1.0f);
+            else if (key == "lava.enabled") in.config.lava.enabled = (val == "true" || val == "1");
+            else if (key == "lava.spawn_radius") {
+                int n = std::stoi(val);
+                if (n < 1 || n > 64) in.warnings.push_back("lava.spawn_radius out of [1,64], clamped");
+                in.config.lava.spawn_radius = clamp(n, 1, 64);
+            }
+            else if (key == "lava.spawn_height") {
+                int n = std::stoi(val);
+                if (n < 0 || n > 1024) in.warnings.push_back("lava.spawn_height out of [0,1024], clamped");
+                in.config.lava.spawn_height = clamp(n, 0, 1024);
+            }
+            else if (key == "lava.cool_chance") in.config.lava.cool_chance = clamp(std::stof(val), 0.0f, 1.0f);
             else in.warnings.push_back("unknown override key: " + key);
         } catch (const std::exception&) {
             in.warnings.push_back("invalid value for " + key + ": " + val);
@@ -434,6 +462,11 @@ uint64_t config_hash(const Config& c) {
     h = fnv1a64(&c.fire.ignite_scale,           sizeof(c.fire.ignite_scale),           h);
     h = fnv1a64(&c.fire.boil_chance,            sizeof(c.fire.boil_chance),            h);
     h = fnv1a64(&c.fire.condense_chance,        sizeof(c.fire.condense_chance),        h);
+    // Lava
+    h = fnv1a64(&c.lava.enabled,      sizeof(c.lava.enabled),      h);
+    h = fnv1a64(&c.lava.spawn_radius, sizeof(c.lava.spawn_radius), h);
+    h = fnv1a64(&c.lava.spawn_height, sizeof(c.lava.spawn_height), h);
+    h = fnv1a64(&c.lava.cool_chance,  sizeof(c.lava.cool_chance),  h);
     // Sky
     h = fnv1a64(&c.sky.cubemap_resolution, sizeof(c.sky.cubemap_resolution), h);
     h = fnv1a64(&c.sky.sun_elevation_rad,  sizeof(c.sky.sun_elevation_rad),  h);

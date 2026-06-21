@@ -8,8 +8,17 @@ TEST(MaterialRegistry, TableSizeMatchesEnum) {
     EXPECT_EQ(kMaterials.size(), (size_t)kNumMaterials);
 }
 
-TEST(MaterialRegistry, EnumSizeIsThirteen) {
-    EXPECT_EQ((int)vox::kNumMaterials, 13);
+TEST(MaterialRegistry, EnumSizeIsFourteen) {
+    EXPECT_EQ((int)vox::kNumMaterials, 14);
+}
+
+TEST(MaterialRegistry, LavaSinksAndIsViscous) {
+    using namespace vox;
+    const MaterialProps& l = material_props(VoxMat::Lava);
+    EXPECT_EQ(l.phase, Phase::Liquid);
+    EXPECT_TRUE(l.movable);
+    EXPECT_GT(l.density, material_props(VoxMat::Water).density);  // denser than water -> sinks
+    EXPECT_LT(l.fluidity, 0.5f);                                 // repose -> viscous mound
 }
 
 TEST(MaterialRegistry, SteamIsRisingGas) {

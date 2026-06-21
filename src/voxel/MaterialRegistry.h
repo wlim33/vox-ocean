@@ -34,6 +34,7 @@ inline constexpr std::array<MaterialProps, kNumMaterials> kMaterials = {{
     /* Smoke     */ { Phase::Gas,      0.28f, 0.28f, 0.30f,    0.6f, 1.0f, true,  0.0f, -1.0f }, // lighter than air -> rises
     /* Ash       */ { Phase::Granular, 0.16f, 0.15f, 0.14f, 1700.0f, 0.2f, true,  0.0f, -1.0f }, // falls + repose
     /* Steam     */ { Phase::Gas,      0.85f, 0.88f, 0.92f,    0.6f, 1.0f, true,  0.0f, -1.0f }, // condensed steam; rises
+    /* Lava      */ { Phase::Liquid,   1.00f, 0.30f, 0.05f, 3100.0f, 0.3f, true,  0.0f, -1.0f }, // emissive; dense->sinks; viscous repose
 }};
 
 static_assert(kMaterials.size() == (size_t)kNumMaterials, "registry size must match VoxMat count");
