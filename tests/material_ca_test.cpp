@@ -558,7 +558,10 @@ TEST(Combustion, LavaPourBoilsCondensesAndSleeps) {
         for (int ix = 2; ix <= 3; ++ix)
             g[ca_cell_index(d, ix, 9, iz)] = (uint8_t)VoxMat::Lava;
     MaterialCa ca;
-    ca.enable_combustion(/*seed*/55, CombustionParams{});                  // default rates
+    CombustionParams p;
+    p.cool_chance = 0.05f;   // slow crusting -> many steps with lava adjacent to water
+    p.boil_chance = 0.05f;   // slow boiling
+    ca.enable_combustion(/*seed*/55, p);
     ca.wake_box(1, 0, 1, 4, 12, 4);
     int rock0 = count_of(g, VoxMat::Rock);
     for (int s = 0; s < 4000 && ca.awake(); ++s) { std::vector<uint32_t> ch; ca.step(g, d, ch); }
