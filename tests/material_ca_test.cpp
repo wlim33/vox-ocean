@@ -517,3 +517,61 @@ TEST(Combustion, LavaInAirNeverCools) {
     }
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Lava);
 }
+
+TEST(Combustion, LavaTouchingWaterKeepsCaAwake) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Lava;
+    g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Water;
+    MaterialCa ca;
+    CombustionParams p; p.cool_chance = 0.0f; p.boil_chance = 0.0f;  // contact persists, nothing changes
+    ca.enable_combustion(7, p);
+    ca.wake_box(0,0,0, 2,2,2);
+    for (int s = 0; s < 12; ++s) { std::vector<uint32_t> ch; ca.step(g, d, ch); }
+    EXPECT_TRUE(ca.awake());   // guard kept lava-with-water alive despite no motion/reaction
+}
+
+TEST(Combustion, LavaInAirSleeps) {
+    using namespace vox;
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,0,1)] = (uint8_t)VoxMat::Lava;   // resting on the floor, no water near
+    MaterialCa ca;
+    CombustionParams p; p.cool_chance = 0.0f;
+    ca.enable_combustion(7, p);
+    ca.wake_box(0,0,0, 2,2,2);
+    for (int s = 0; s < 30 && ca.awake(); ++s) { std::vector<uint32_t> ch; ca.step(g, d, ch); }
+    EXPECT_FALSE(ca.awake());   // neighbor-aware: no water -> not reactive -> sleeps
+    EXPECT_EQ(g[ca_cell_index(d,1,0,1)], (uint8_t)VoxMat::Lava);
+}
+
+TEST(Combustion, LavaPourBoilsCondensesAndSleeps) {
+    using namespace vox;
+    MaterialCaDims d{6, 16};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    for (int iz = 0; iz < d.extent; ++iz)
+        for (int ix = 0; ix < d.extent; ++ix)
+            for (int iy = 0; iy <= 8; ++iy)
+                g[ca_cell_index(d, ix, iy, iz)] = (uint8_t)VoxMat::Water;   // pool up to iy=8
+    for (int iz = 2; iz <= 3; ++iz)                                          // small lava blob at the surface
+        for (int ix = 2; ix <= 3; ++ix)
+            g[ca_cell_index(d, ix, 9, iz)] = (uint8_t)VoxMat::Lava;
+    MaterialCa ca;
+    ca.enable_combustion(/*seed*/55, CombustionParams{});                  // default rates
+    ca.wake_box(1, 0, 1, 4, 12, 4);
+    int rock0 = count_of(g, VoxMat::Rock);
+    for (int s = 0; s < 4000 && ca.awake(); ++s) { std::vector<uint32_t> ch; ca.step(g, d, ch); }
+    EXPECT_FALSE(ca.awake());                          // converged & sleeps
+    EXPECT_EQ(count_of(g, VoxMat::Steam), 0);          // all steam condensed
+    EXPECT_GT(count_of(g, VoxMat::Rock), rock0);       // lava crusted to rock somewhere
+    // No stranded lava-water contact at sleep (the guard's guarantee):
+    int stranded = 0;
+    const int NX[6]={1,-1,0,0,0,0}, NY[6]={0,0,1,-1,0,0}, NZ[6]={0,0,0,0,1,-1};
+    for (int z=0; z<d.extent; ++z) for (int y=0; y<d.height_cells; ++y) for (int x=0; x<d.extent; ++x)
+        if (g[ca_cell_index(d,x,y,z)] == (uint8_t)VoxMat::Lava)
+            for (int k=0;k<6;++k){ int nx=x+NX[k],ny=y+NY[k],nz=z+NZ[k];
+                if (nx>=0&&nx<d.extent&&ny>=0&&ny<d.height_cells&&nz>=0&&nz<d.extent
+                    && g[ca_cell_index(d,nx,ny,nz)]==(uint8_t)VoxMat::Water) ++stranded; }
+    EXPECT_EQ(stranded, 0);
+}
