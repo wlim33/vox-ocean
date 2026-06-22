@@ -28,6 +28,8 @@ public:
     bool has_pending_pick() const { return pending_pick_.has_value(); }
 
     void enqueue_build(VoxMat m);                 // queues a build into selection's neighbor
+    void enqueue_paint(VoxMat m);                 // overwrites the selected cell with m
+    void enqueue_dig();                           // sets the selected cell to Air
     std::vector<UserEdit> drain_pending_edits();  // returns and clears the queue
 
     const OrbitCamera& camera() const { return camera_; }
