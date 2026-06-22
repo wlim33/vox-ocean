@@ -3,6 +3,24 @@
 
 namespace vox {
 
+FaceNeighbor face_neighbor(const VoxelWorld& grid, int ix, int iy, int iz,
+                           int face_axis, const glm::vec3& dir) {
+    FaceNeighbor n;
+    if (face_axis < 0) return n;
+    int cell[3] = {ix, iy, iz};
+    int step = dir[face_axis] > 0.0f ? 1 : -1;   // DDA step direction along the axis
+    cell[face_axis] -= step;                      // the cell the ray came from
+    const VoxelWorldParams& p = grid.params();
+    int dims[3] = {p.extent, p.height_cells, p.extent};
+    if (cell[0] < 0 || cell[0] >= dims[0] ||
+        cell[1] < 0 || cell[1] >= dims[1] ||
+        cell[2] < 0 || cell[2] >= dims[2]) return n;
+    n.has_neighbor = true;
+    n.nx = cell[0]; n.ny = cell[1]; n.nz = cell[2];
+    n.idx = (uint32_t)grid.cell_index(cell[0], cell[1], cell[2]);
+    return n;
+}
+
 std::optional<PickHit> pick(int viewport_w, int viewport_h,
                             float pixel_x, float pixel_y,
                             const glm::mat4& inv_view_proj,
@@ -32,6 +50,10 @@ std::optional<PickHit> pick(int viewport_w, int viewport_h,
     out.material = materials[out.linear_idx];
     out.face_axis = h.face_axis;
     out.t = h.t;
+    FaceNeighbor n = face_neighbor(grid, h.ix, h.iy, h.iz, h.face_axis, dir);
+    out.has_neighbor = n.has_neighbor;
+    out.nx = n.nx; out.ny = n.ny; out.nz = n.nz;
+    out.neighbor_idx = n.idx;
     return out;
 }
 
