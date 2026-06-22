@@ -142,6 +142,8 @@ static void build_frame(Engine* e, float sim_time, float dt) {
         e->world);
 
     e->ecosystem.build_stamp(cfg, e->world.grid(), e->stamp);
+    for (const auto& ue : e->app->drain_pending_edits())
+        e->world.apply_user_edit(ue.cell, ue.mat);
     e->world.step(cfg, dt, e->stamp, e->frame.edits);
 #ifndef NDEBUG
     if (e->frame.edits.resync) e->applied_dbg = e->world.materialize_composite();

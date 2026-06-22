@@ -21,6 +21,24 @@ void draw_debug_panel(App& app) {
         ImGui::Text("selected: none");
     }
 
+    if (ImGui::CollapsingHeader("World Edit", ImGuiTreeNodeFlags_DefaultOpen)) {
+        bool can_build = app.selection() && app.selection()->has_neighbor;
+        if (can_build) {
+            const auto& s = *app.selection();
+            ImGui::Text("build target: (%d, %d, %d)", s.nx, s.ny, s.nz);
+        } else {
+            ImGui::TextUnformatted("select a voxel face to build");
+        }
+        ImGui::BeginDisabled(!can_build);
+        if (ImGui::Button("Build Rock"))  app.enqueue_build(VoxMat::Rock);
+        ImGui::SameLine();
+        if (ImGui::Button("Build Sand"))  app.enqueue_build(VoxMat::SandGrain);
+        if (ImGui::Button("Build Water")) app.enqueue_build(VoxMat::Water);
+        ImGui::SameLine();
+        if (ImGui::Button("Build Lava"))  app.enqueue_build(VoxMat::Lava);
+        ImGui::EndDisabled();
+    }
+
     if (ImGui::CollapsingHeader("Sky")) {
         ImGui::SliderFloat("sun elev", &c.sky.sun_elevation_rad, 0.0f, 1.57f);
         ImGui::SliderFloat("sun azim", &c.sky.sun_azimuth_rad,  0.0f, 6.283f);
