@@ -92,7 +92,7 @@ void RayMarchRenderer::encode(void* command_buffer, const VoxelField& field,
     u.max_steps = cfg.march.max_steps;
     u.water_ior = cfg.shading.water_ior;
     u.ortho_backup = cam.ortho_backup;
-    u._mpad4 = 0.0f;
+    u.selected_cell = cam.selected_cell;
     u.foam_strength = cfg.shading.foam_strength;
     u.height_step_m = cfg.voxel.height_step_m;
     u._mpad5 = 0.0f;

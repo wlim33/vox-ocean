@@ -210,7 +210,12 @@ void engine_render(Engine* e) {
     build_frame(e, sim_time, dt);
     consume_frame(e, cb);
 
+    if (e->world.configured())
+        e->app->resolve_pick((int)dsz.width, (int)dsz.height,
+                             e->world.grid(), e->world.material().data());
+
     CameraView cam = e->app->camera().camera_view();
+    cam.selected_cell = e->app->selection() ? (int)e->app->selection()->linear_idx : -1;
     e->renderer->encode((__bridge void*)cb, e->field, cam, e->app->config(),
                         e->sky, e->frame_index);
 
