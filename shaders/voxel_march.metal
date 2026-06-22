@@ -133,6 +133,23 @@ fragment float4 march_fs(
 
     float3 sun = U.sun_dir;   // unit length by contract (see shader_types.h)
 
+    // Picking highlight: the CPU pick targets this same first-non-air cell.
+    if (U.selected_cell >= 0 &&
+        vg_cell_index(vg, S.idx.x, S.idx.y, S.idx.z) == U.selected_cell) {
+        float3 base = (mat == MAT_WATER) ? U.deep_water_color : U.palette[mat];
+        float3 lit  = base * (0.45 + 0.55 * max(dot(face_normal(S.axis, S.d), sun), 0.0));
+        // Edge outline on the entered face.
+        float3 hp    = org + dir * S.t_cur;        // entry point on the face
+        float3 local = (hp - G.bmin) / G.cell;     // cell-space coordinates
+        float2 f = (S.axis == 0) ? fract(local.yz)
+                 : (S.axis == 1) ? fract(local.xz)
+                                 : fract(local.xy);
+        float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+        float3 hi  = (edge < 0.06) ? float3(1.0, 0.85, 0.1)
+                                   : mix(lit, float3(1.0, 0.85, 0.1), 0.35);
+        return float4(aces_tonemap(hi), 1.0);
+    }
+
     // Emissive fire: full-bright, ignores sun shading and the water path so it glows.
     if (mat == MAT_FIRE) return float4(aces_tonemap(U.palette[MAT_FIRE] * 3.0), 1.0);
     if (mat == MAT_LAVA) return float4(aces_tonemap(U.palette[MAT_LAVA] * 3.0), 1.0);
