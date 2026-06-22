@@ -379,7 +379,7 @@ int engine_snapshot(const char* config_path, const char* overrides,
                 case ViewAxis::Z: tag = shot.from_positive ? "front" : "back";   break;
                 case ViewAxis::X: tag = shot.from_positive ? "right" : "left";   break;
             }
-            sep_ok &= write_png(stem + "." + tag + ".png", img);
+            sep_ok = write_png(stem + "." + tag + ".png", img).has_value() && sep_ok;
         }
         cells.push_back(std::move(img));
         labels.push_back(snapshot_label(shot));
@@ -388,7 +388,7 @@ int engine_snapshot(const char* config_path, const char* overrides,
     depthTex = nil;
 
     RgbImage sheet = make_contact_sheet(cells, labels);
-    bool ok = write_png(out_path, sheet) && sep_ok;
+    bool ok = write_png(out_path, sheet).has_value() && sep_ok;
     fprintf(stderr, "[vox] snapshot %s -> %s (%dx%d, %zu views)\n",
             ok ? "wrote" : "FAILED", out_path, sheet.w, sheet.h, shots.size());
 
