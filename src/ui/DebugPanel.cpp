@@ -1,6 +1,8 @@
 #include "ui/DebugPanel.h"
 #include "core/App.h"
+#include "voxel/MaterialRegistry.h"
 #include "imgui.h"
+#include <string>
 
 namespace vox {
 void draw_debug_panel(App& app) {
@@ -9,6 +11,15 @@ void draw_debug_panel(App& app) {
     ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     ImGui::Begin("vox-ocean");
     ImGui::Text("frame dt: %.2f ms", app.clock().delta_seconds() * 1000.0);
+
+    if (app.selection()) {
+        const auto& s = *app.selection();
+        ImGui::Text("selected: %s (%d, %d, %d)",
+                    std::string(vox::material_name((vox::VoxMat)s.material)).c_str(),
+                    s.ix, s.iy, s.iz);
+    } else {
+        ImGui::Text("selected: none");
+    }
 
     if (ImGui::CollapsingHeader("Sky")) {
         ImGui::SliderFloat("sun elev", &c.sky.sun_elevation_rad, 0.0f, 1.57f);
