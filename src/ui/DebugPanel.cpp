@@ -37,6 +37,18 @@ void draw_debug_panel(App& app) {
         ImGui::SameLine();
         if (ImGui::Button("Build Lava"))  app.enqueue_build(VoxMat::Lava);
         ImGui::EndDisabled();
+
+        ImGui::Separator();
+        bool has_sel = (bool)app.selection();
+        ImGui::BeginDisabled(!has_sel);
+        if (ImGui::Button("Dig")) app.enqueue_dig();
+        ImGui::SameLine();
+        if (ImGui::Button("Paint Rock"))  app.enqueue_paint(VoxMat::Rock);
+        if (ImGui::Button("Paint Sand"))  app.enqueue_paint(VoxMat::SandGrain);
+        ImGui::SameLine();
+        if (ImGui::Button("Paint Water")) app.enqueue_paint(VoxMat::Water);
+        if (ImGui::Button("Paint Lava"))  app.enqueue_paint(VoxMat::Lava);
+        ImGui::EndDisabled();
     }
 
     if (ImGui::CollapsingHeader("Sky")) {

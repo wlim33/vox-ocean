@@ -46,6 +46,13 @@ void App::enqueue_build(VoxMat m) {
     pending_edits_.push_back({selection_->neighbor_idx, (uint8_t)m});
 }
 
+void App::enqueue_paint(VoxMat m) {
+    if (!selection_) return;
+    pending_edits_.push_back({selection_->linear_idx, (uint8_t)m});
+}
+
+void App::enqueue_dig() { enqueue_paint(VoxMat::Air); }
+
 std::vector<UserEdit> App::drain_pending_edits() {
     return std::exchange(pending_edits_, {});
 }
