@@ -20,10 +20,23 @@ void App::handle_input(InputBridge& b) {
             case InputKind::Resize:
                 if (e.height > 0) camera_.set_aspect((float)e.width / (float)e.height);
                 break;
+            case InputKind::Pick:
+                pending_pick_ = glm::vec2{e.x, e.y};
+                break;
             default: break;
         }
     }
 }
 
 void App::update() { clock_.tick(); }
+
+void App::resolve_pick(int viewport_w, int viewport_h,
+                       const VoxelWorld& grid, const uint8_t* materials) {
+    if (!pending_pick_) return;
+    glm::vec2 px = *pending_pick_;
+    pending_pick_.reset();
+    glm::mat4 inv_vp = glm::inverse(camera_.view_proj());
+    selection_ = pick(viewport_w, viewport_h, px.x, px.y, inv_vp,
+                      camera_.position(), grid, materials, config_.march.max_steps);
+}
 }
