@@ -20,6 +20,7 @@ public:
     void resolve_pick(int viewport_w, int viewport_h,
                       const VoxelWorld& grid, const uint8_t* materials);
     const std::optional<PickHit>& selection() const { return selection_; }
+    bool has_pending_pick() const { return pending_pick_.has_value(); }
 
     const OrbitCamera& camera() const { return camera_; }
     OrbitCamera&       camera()       { return camera_; }

@@ -210,9 +210,9 @@ void engine_render(Engine* e) {
     build_frame(e, sim_time, dt);
     consume_frame(e, cb);
 
-    if (e->world.configured())
+    if (e->world.configured() && e->app->has_pending_pick())
         e->app->resolve_pick((int)dsz.width, (int)dsz.height,
-                             e->world.grid(), e->world.material().data());
+                             e->world.grid(), e->world.materialize_composite().data());
 
     CameraView cam = e->app->camera().camera_view();
     cam.selected_cell = e->app->selection() ? (int)e->app->selection()->linear_idx : -1;
