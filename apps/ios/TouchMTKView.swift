@@ -29,4 +29,13 @@ final class TouchMTKView: MTKView {
         var e = event(.Scroll); e.scroll = Float(g.scale - 1.0) * 2.0
         renderer?.push(e); g.scale = 1.0
     }
+    @objc func longPress(_ g: UILongPressGestureRecognizer) {
+        guard g.state == .began else { return }
+        let p = g.location(in: self)
+        let scale = Float(window?.screen.nativeScale ?? UIScreen.main.scale)
+        var e = event(.Pick)
+        e.x = Float(p.x) * scale     // UIView origin is already top-left
+        e.y = Float(p.y) * scale
+        renderer?.push(e)
+    }
 }

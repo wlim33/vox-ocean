@@ -14,6 +14,7 @@ struct MetalSurface: UIViewRepresentable {
         v.delegate = context.coordinator
         v.isMultipleTouchEnabled = true
         v.addGestureRecognizer(UIPinchGestureRecognizer(target: v, action: #selector(TouchMTKView.pinch(_:))))
+        v.addGestureRecognizer(UILongPressGestureRecognizer(target: v, action: #selector(TouchMTKView.longPress(_:))))
         context.coordinator.attach(view: v)
         return v
     }
