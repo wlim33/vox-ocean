@@ -161,6 +161,77 @@ inline float rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t s
 }
 inline bool is_fuel(uint8_t m) { return material_props((VoxMat)m).flammability > 0.0f; }
 inline bool is_hot(uint8_t m) { return m == (uint8_t)VoxMat::Fire || m == (uint8_t)VoxMat::Lava; }
+
+// --- Data-driven reaction table (SP3-IV) -------------------------------------
+// Each reaction is one row: an input matcher, a neighbour gate, a probability
+// source (member-pointer into CombustionParams; nullptr = deterministic, no RNG
+// draw), an optional flammability scale, a write target, and the resulting
+// material. The per-row `salt` reproduces SP3-I..III's exact RNG draws, so this
+// refactor is behaviour-preserving. Inputs are disjoint except Fire's 3-row
+// cluster, whose table order encodes priority: first success wins, and a failed
+// probability roll falls through to the next row.
+enum class InKind : uint8_t { Material, AnyFuel };   // AnyFuel matches is_fuel(cell)
+enum class NbCond : uint8_t { Any, HotPresent, HotAbsent, WaterPresent, AirPresent };
+enum class Target : uint8_t { Self, NeighborAir };
+
+struct Reaction {
+    InKind   in_kind;
+    VoxMat   in_mat;      // used when in_kind==Material (don't-care for AnyFuel)
+    NbCond   cond;
+    float CombustionParams::* rate;  // nullptr = deterministic (always; no RNG draw)
+    bool     scale_flam;             // chance *= cell flammability (ignite only)
+    Target   target;
+    VoxMat   output;
+    uint32_t salt;                   // unused when rate==nullptr
+};
+
+constexpr Reaction kReactions[] = {
+    // Fire cluster — table order = priority (water-extinguish > burn-out > smoke-emit).
+    { InKind::Material, VoxMat::Fire,  NbCond::WaterPresent, nullptr,
+      false, Target::Self,        VoxMat::Smoke, 0 },
+    { InKind::Material, VoxMat::Fire,  NbCond::Any,          &CombustionParams::burn_out_chance,
+      false, Target::Self,        VoxMat::Ash,   2 },
+    { InKind::Material, VoxMat::Fire,  NbCond::AirPresent,   &CombustionParams::smoke_chance,
+      false, Target::NeighborAir, VoxMat::Smoke, 3 },
+    // Single-outcome reactions (disjoint inputs — mutually order-free).
+    { InKind::AnyFuel,  VoxMat::Air,   NbCond::HotPresent,   &CombustionParams::ignite_scale,
+      true,  Target::Self,        VoxMat::Fire,  1 },
+    { InKind::Material, VoxMat::Smoke, NbCond::Any,          &CombustionParams::smoke_dissipate_chance,
+      false, Target::Self,        VoxMat::Air,   4 },
+    { InKind::Material, VoxMat::Water, NbCond::HotPresent,   &CombustionParams::boil_chance,
+      false, Target::Self,        VoxMat::Steam, 5 },
+    { InKind::Material, VoxMat::Steam, NbCond::HotAbsent,    &CombustionParams::condense_chance,
+      false, Target::Self,        VoxMat::Water, 6 },
+    { InKind::Material, VoxMat::Lava,  NbCond::WaterPresent, &CombustionParams::cool_chance,
+      false, Target::Self,        VoxMat::Rock,  7 },
+};
+
+inline bool cond_holds(NbCond c, bool nbHot, bool nbWater, bool hasAir) {
+    switch (c) {
+        case NbCond::Any:          return true;
+        case NbCond::HotPresent:   return nbHot;
+        case NbCond::HotAbsent:    return !nbHot;
+        case NbCond::WaterPresent: return nbWater;
+        case NbCond::AirPresent:   return hasAir;
+    }
+    return false;
+}
+
+// Structural invariants (the SP3-IV "structural test", checked at compile time):
+// every output is a valid material id, and every Fire row precedes the first
+// non-Fire row so the priority cluster can never be reordered by a later edit.
+constexpr bool reactions_well_formed() {
+    bool seen_non_fire = false;
+    for (const Reaction& r : kReactions) {
+        if (static_cast<size_t>(r.output) >= static_cast<size_t>(kNumMaterials)) return false;
+        bool is_fire_row = (r.in_kind == InKind::Material && r.in_mat == VoxMat::Fire);
+        if (!is_fire_row)       seen_non_fire = true;
+        else if (seen_non_fire) return false;   // a Fire row appeared after a non-Fire row
+    }
+    return true;
+}
+static_assert(reactions_well_formed(),
+              "kReactions: invalid output id or Fire rows out of priority order");
 }
 
 void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
@@ -187,47 +258,18 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                 if (nm == (uint8_t)VoxMat::Water) nbWater = true;
                 if (!hasAir && nm == (uint8_t)VoxMat::Air) { hasAir = true; ax = x+NX[k]; ay = y+NY[k]; az = z+NZ[k]; }
             }
-            if (m == (uint8_t)VoxMat::Fire) {
-                if (nbWater) { cells[idx] = (uint8_t)VoxMat::Smoke; changed.push_back((uint32_t)idx); continue; }
-                if (rnd01(x,y,z,step,seed,2) < p.burn_out_chance) {
-                    cells[idx] = (uint8_t)VoxMat::Ash; changed.push_back((uint32_t)idx); continue;
+            for (const Reaction& r : kReactions) {
+                if (r.in_kind == InKind::Material ? (m != (uint8_t)r.in_mat) : !is_fuel(m)) continue;
+                if (!cond_holds(r.cond, nbHot, nbWater, hasAir)) continue;
+                if (r.rate) {                                   // nullptr = deterministic
+                    float chance = p.*r.rate;
+                    if (r.scale_flam) chance *= material_props((VoxMat)m).flammability;
+                    if (rnd01(x, y, z, step, seed, r.salt) >= chance) continue;   // roll fails -> next row
                 }
-                if (hasAir && rnd01(x,y,z,step,seed,3) < p.smoke_chance) {
-                    int aidx = ca_cell_index(d, ax, ay, az);
-                    cells[aidx] = (uint8_t)VoxMat::Smoke; changed.push_back((uint32_t)aidx);   // idempotent
-                }
-                continue;   // fire stays
-            }
-            if (is_fuel(m) && nbHot) {
-                float fl = material_props((VoxMat)m).flammability;
-                if (rnd01(x,y,z,step,seed,1) < fl * p.ignite_scale) {
-                    cells[idx] = (uint8_t)VoxMat::Fire; changed.push_back((uint32_t)idx);
-                }
-                continue;
-            }
-            if (m == (uint8_t)VoxMat::Smoke) {
-                if (rnd01(x,y,z,step,seed,4) < p.smoke_dissipate_chance) {
-                    cells[idx] = (uint8_t)VoxMat::Air; changed.push_back((uint32_t)idx);
-                }
-                continue;
-            }
-            if (m == (uint8_t)VoxMat::Water) {
-                if (nbHot && rnd01(x,y,z,step,seed,5) < p.boil_chance) {
-                    cells[idx] = (uint8_t)VoxMat::Steam; changed.push_back((uint32_t)idx);
-                }
-                continue;
-            }
-            if (m == (uint8_t)VoxMat::Steam) {
-                if (!nbHot && rnd01(x,y,z,step,seed,6) < p.condense_chance) {
-                    cells[idx] = (uint8_t)VoxMat::Water; changed.push_back((uint32_t)idx);
-                }
-                continue;
-            }
-            if (m == (uint8_t)VoxMat::Lava) {
-                if (nbWater && rnd01(x,y,z,step,seed,7) < p.cool_chance) {
-                    cells[idx] = (uint8_t)VoxMat::Rock; changed.push_back((uint32_t)idx);
-                }
-                continue;
+                int t = (r.target == Target::NeighborAir) ? ca_cell_index(d, ax, ay, az) : idx;
+                cells[t] = (uint8_t)r.output;
+                changed.push_back((uint32_t)t);
+                break;                                          // first success wins
             }
         }
 }
