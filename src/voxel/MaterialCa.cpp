@@ -24,6 +24,18 @@ inline bool is_water_adjacent(const std::vector<uint8_t>& cells, const MaterialC
     }
     return false;
 }
+// True if a cell holds a material that must keep the CA awake under combustion:
+// Fire/Smoke/Steam unconditionally; Lava only while touching Water (settled
+// lava-in-air is allowed to sleep). Mirrors the reactive set in combustion_sweep
+// and is the single source of the predicate the two step() scans share.
+inline bool is_reactive_cell(const std::vector<uint8_t>& cells, const MaterialCaDims& d,
+                             int x, int y, int z) {
+    uint8_t m = cells[ca_cell_index(d, x, y, z)];
+    if (m == (uint8_t)VoxMat::Fire || m == (uint8_t)VoxMat::Smoke || m == (uint8_t)VoxMat::Steam)
+        return true;
+    if (m == (uint8_t)VoxMat::Lava) return is_water_adjacent(cells, d, x, y, z);
+    return false;
+}
 }
 
 // Density-ordered settle within one 2x2x2 block; ids in `mat`, local = lx+2*ly+4*lz, ly=0 lower.
@@ -92,17 +104,10 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     // Scan the box so a lucky run of no-RNG-fires doesn't prematurely sleep the CA.
     bool reactive_present = false;
     if (combustion_ && changed.empty()) {
-        const uint8_t kFire  = (uint8_t)VoxMat::Fire;
-        const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
-        const uint8_t kSteam = (uint8_t)VoxMat::Steam;
-        const uint8_t kLava  = (uint8_t)VoxMat::Lava;
         for (int iz = az0_; iz <= az1_ && !reactive_present; ++iz)
             for (int iy = ay0_; iy <= ay1_ && !reactive_present; ++iy)
-                for (int ix = ax0_; ix <= ax1_ && !reactive_present; ++ix) {
-                    uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
-                    if (m == kFire || m == kSmoke || m == kSteam) reactive_present = true;
-                    else if (m == kLava && is_water_adjacent(cells, d, ix, iy, iz)) reactive_present = true;
-                }
+                for (int ix = ax0_; ix <= ax1_ && !reactive_present; ++ix)
+                    if (is_reactive_cell(cells, d, ix, iy, iz)) reactive_present = true;
     }
     if (changed.empty() && !reactive_present) {
         if (++quiet_ >= 4) clear_box();
@@ -125,22 +130,14 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     // generated changes this step (stochastic rates) and fold them into the new box
     // so they remain covered on future steps.
     if (combustion_) {
-        const uint8_t kFire  = (uint8_t)VoxMat::Fire;
-        const uint8_t kSmoke = (uint8_t)VoxMat::Smoke;
-        const uint8_t kSteam = (uint8_t)VoxMat::Steam;
-        const uint8_t kLava  = (uint8_t)VoxMat::Lava;
         for (int iz = z0; iz <= z1; ++iz)
             for (int iy = y0; iy <= y1; ++iy)
-                for (int ix = x0; ix <= x1; ++ix) {
-                    uint8_t m = cells[ca_cell_index(d, ix, iy, iz)];
-                    bool reactive = (m == kFire || m == kSmoke || m == kSteam)
-                                 || (m == kLava && is_water_adjacent(cells, d, ix, iy, iz));
-                    if (reactive) {
+                for (int ix = x0; ix <= x1; ++ix)
+                    if (is_reactive_cell(cells, d, ix, iy, iz)) {
                         nx0 = std::min(nx0, ix - 1); nx1 = std::max(nx1, ix + 1);
                         ny0 = std::min(ny0, iy - 1); ny1 = std::max(ny1, iy + 1);
                         nz0 = std::min(nz0, iz - 1); nz1 = std::max(nz1, iz + 1);
                     }
-                }
     }
     ax0_ = std::max(0, nx0); ay0_ = std::max(0, ny0); az0_ = std::max(0, nz0);
     ax1_ = std::min(d.extent - 1, nx1); ay1_ = std::min(d.height_cells - 1, ny1);
