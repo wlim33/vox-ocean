@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <utility>   // std::to_underlying
 #include "voxel/VoxelWorld.h"   // VoxMat, kNumMaterials
 namespace vox {
@@ -42,6 +43,15 @@ static_assert(kMaterials.size() == (size_t)kNumMaterials, "registry size must ma
 
 constexpr const MaterialProps& material_props(VoxMat m) {
     return kMaterials[std::to_underlying(m)];
+}
+
+// Human-readable name per material, indexed by enum order. Lockstep with VoxMat.
+constexpr std::string_view material_name(VoxMat m) {
+    constexpr std::array<std::string_view, kNumMaterials> kNames = {
+        "Air", "Water", "Sand", "Rock", "Boat", "Kelp", "Fish",
+        "SandGrain", "Bubble", "Fire", "Smoke", "Ash", "Steam", "Lava"
+    };
+    return kNames[std::to_underlying(m)];
 }
 
 // Flat RGB palette (3 floats per material) for GPU upload. The renderer copies

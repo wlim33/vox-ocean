@@ -61,7 +61,7 @@ struct MarchUniforms {
     vec3  deep_water_color;  float depth_fog_density;
     vec3  extinction_rgb;    float foam_threshold;
     int   grid_extent;       int height_cells; float voxel_size_m; float base_depth_m;
-    int   max_steps;         float water_ior; float ortho_backup, _mpad4;
+    int   max_steps;         float water_ior; float ortho_backup; int selected_cell;
     // Each row above is exactly 16 bytes; palette[] relies on this for host/device layout parity.
     float foam_strength;     float height_step_m; float _mpad5, _mpad6;
     vec3  palette[NUM_MATERIALS];   // per-material albedo, uploaded from kMaterials

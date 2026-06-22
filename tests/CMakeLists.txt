@@ -109,5 +109,16 @@ target_sources(vox-ocean-tests PRIVATE march_palette_test.cpp)
 
 target_sources(vox-ocean-tests PRIVATE grid_view_test.cpp)
 
+target_sources(vox-ocean-tests PRIVATE
+    raycaster_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/voxel/Raycaster.cpp
+)
+
+target_sources(vox-ocean-tests PRIVATE
+    app_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/App.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/Clock.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)

@@ -9,5 +9,6 @@ struct CameraView {
     glm::mat4 view_proj{1.0f};
     glm::vec3 position{0.0f};
     float     ortho_backup = 0.0f;
+    int       selected_cell = -1;   // highlighted grid cell linear index; -1 = none
 };
 }
