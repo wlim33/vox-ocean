@@ -1,4 +1,5 @@
 #include "core/App.h"
+#include <utility>
 namespace vox {
 
 App::App(Config cfg) : config_(std::move(cfg)) {
@@ -38,5 +39,14 @@ void App::resolve_pick(int viewport_w, int viewport_h,
     glm::mat4 inv_vp = glm::inverse(camera_.view_proj());
     selection_ = pick(viewport_w, viewport_h, px.x, px.y, inv_vp,
                       camera_.position(), grid, materials, config_.march.max_steps);
+}
+
+void App::enqueue_build(VoxMat m) {
+    if (!selection_ || !selection_->has_neighbor) return;
+    pending_edits_.push_back({selection_->neighbor_idx, (uint8_t)m});
+}
+
+std::vector<UserEdit> App::drain_pending_edits() {
+    return std::exchange(pending_edits_, {});
 }
 }

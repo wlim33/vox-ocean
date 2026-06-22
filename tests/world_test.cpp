@@ -215,3 +215,34 @@ TEST(World, StepSettledSandEmitsNoEditsAfterSleep) {
     vox::EditList quiet; w.step(c, 1.0f/60, empty, quiet);
     EXPECT_EQ(quiet.count(), 0);
 }
+
+TEST(World, ApplyUserEditEmitsEditAndUpdatesMaterial) {
+    vox::Config c = small_cfg();
+    vox::World w; w.configure(c);
+    const auto& g = w.grid();
+    int hc = g.params().height_cells;
+    uint32_t cell = (uint32_t)g.cell_index(8, hc - 1, 8);   // a top (air) cell
+    ASSERT_NE(w.material()[cell], (uint8_t)vox::VoxMat::Rock);
+
+    vox::StampList empty;
+    vox::EditList e0; w.step(c, 1.0f / 60, empty, e0);       // frame 0: resync, clears resync_
+    ASSERT_TRUE(e0.resync);
+
+    w.apply_user_edit(cell, (uint8_t)vox::VoxMat::Rock);
+    vox::EditList e1; w.step(c, 1.0f / 60, empty, e1);
+    EXPECT_EQ(w.material()[cell], (uint8_t)vox::VoxMat::Rock);
+    bool found = false;
+    for (int k = 0; k < e1.count(); ++k)
+        if (e1.idx[k] == cell) { EXPECT_EQ(e1.mat[k], (uint8_t)vox::VoxMat::Rock); found = true; }
+    EXPECT_TRUE(found);                                      // the user edit reached the EditList
+}
+
+TEST(World, ApplyUserEditWakesCaForDynamicMaterial) {
+    vox::Config c = small_cfg();
+    vox::World w; w.configure(c);
+    const auto& g = w.grid();
+    int hc = g.params().height_cells;
+    uint32_t cell = (uint32_t)g.cell_index(8, hc - 1, 8);
+    w.apply_user_edit(cell, (uint8_t)vox::VoxMat::SandGrain);
+    EXPECT_TRUE(w.ca_awake());                               // placed sand will fall
+}

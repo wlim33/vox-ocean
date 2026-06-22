@@ -13,7 +13,19 @@ struct PickHit {
     uint8_t  material = 0;               // VoxMat at the hit cell
     int      face_axis = -1;             // face the ray entered: 0=x 1=y 2=z
     float    t = 0.0f;                   // ray parameter at the hit
+    // Build target: the empty cell adjacent to the entered face (the cell the ray
+    // was in just before the hit). has_neighbor=false at the grid edge.
+    bool     has_neighbor = false;
+    int      nx = -1, ny = -1, nz = -1;
+    uint32_t neighbor_idx = 0;
 };
+
+// Empty cell adjacent to the entered face. The ray (direction `dir`) enters cell
+// (ix,iy,iz) through `face_axis`; the previous cell along the ray is one step back
+// on that axis. has_neighbor=false if that cell is outside the grid or face_axis<0.
+struct FaceNeighbor { bool has_neighbor = false; int nx = -1, ny = -1, nz = -1; uint32_t idx = 0; };
+FaceNeighbor face_neighbor(const VoxelWorld& grid, int ix, int iy, int iz,
+                           int face_axis, const glm::vec3& dir);
 
 // Pixel -> world ray -> first non-air cell. pixel_x/pixel_y are drawable pixels,
 // origin top-left. Mirrors the PERSPECTIVE branch of the shader's ray-gen
