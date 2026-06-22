@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <string_view>
 #include "voxel/MaterialRegistry.h"
 #include "voxel/VoxelWorld.h"
 
@@ -93,4 +94,16 @@ TEST(MaterialRegistry, PhysicsScalars) {
         EXPECT_FALSE(material_props(m).movable);
     EXPECT_TRUE(material_props(VoxMat::Air).movable);
     EXPECT_TRUE(material_props(VoxMat::SandGrain).movable);
+}
+
+TEST(MaterialRegistry, NamesMatchEnumOrder) {
+    EXPECT_EQ(vox::material_name(vox::VoxMat::Air),   "Air");
+    EXPECT_EQ(vox::material_name(vox::VoxMat::Water), "Water");
+    EXPECT_EQ(vox::material_name(vox::VoxMat::Rock),  "Rock");
+    EXPECT_EQ(vox::material_name(vox::VoxMat::Lava),  "Lava");
+}
+
+TEST(MaterialRegistry, NamesCoverEveryMaterial) {
+    for (int i = 0; i < vox::kNumMaterials; ++i)
+        EXPECT_FALSE(vox::material_name((vox::VoxMat)i).empty());
 }
