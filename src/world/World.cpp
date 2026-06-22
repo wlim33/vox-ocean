@@ -171,6 +171,17 @@ const std::vector<uint8_t>& World::materialize_composite() const {
     return composite_;
 }
 
+void World::apply_user_edit(uint32_t cell, uint8_t mat) {
+    if (cell >= material_.size()) return;
+    material_[cell] = mat;
+    if (grid_.has_value()) {
+        int ix, iy, iz;
+        grid_->decode_cell_index((int)cell, ix, iy, iz);
+        ca_.wake_box(ix - 1, iy - 1, iz - 1, ix + 1, iy + 1, iz + 1);
+    }
+    user_edited_.push_back(cell);
+}
+
 void World::step(const Config& cfg, float /*dt*/, const StampList& entities, EditList& out) {
     out.clear();
     // Snapshot this frame's overlay (last-writer-wins per cell, append order).
@@ -181,6 +192,7 @@ void World::step(const Config& cfg, float /*dt*/, const StampList& entities, Edi
         out.resync = true;                          // consumer uploads materialize_composite()
         prev_overlay_cells_ = overlay_cells_;
         resync_ = false;
+        user_edited_.clear();
         return;
     }
 
@@ -193,6 +205,7 @@ void World::step(const Config& cfg, float /*dt*/, const StampList& entities, Edi
     dirty_.insert(dirty_.end(), ca_changed.begin(), ca_changed.end());
     dirty_.insert(dirty_.end(), prev_overlay_cells_.begin(), prev_overlay_cells_.end());
     dirty_.insert(dirty_.end(), overlay_cells_.begin(), overlay_cells_.end());
+    dirty_.insert(dirty_.end(), user_edited_.begin(), user_edited_.end());
     std::sort(dirty_.begin(), dirty_.end());
     dirty_.erase(std::unique(dirty_.begin(), dirty_.end()), dirty_.end());
 
@@ -212,6 +225,7 @@ void World::step(const Config& cfg, float /*dt*/, const StampList& entities, Edi
 
     // 4. Roll the overlay forward.
     prev_overlay_cells_ = overlay_cells_;
+    user_edited_.clear();
 }
 
 float World::floor_top_y(float x, float z) const {

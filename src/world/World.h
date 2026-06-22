@@ -21,6 +21,10 @@ public:
     // the EditList (one entry per dirty cell). Sets out.resync after configure().
     void step(const Config& cfg, float dt, const StampList& entities, EditList& out);
 
+    // Write one cell into the authoritative grid (user edit), wake the CA around it,
+    // and mark it dirty so the next step() emits it. Call BEFORE step() in a frame.
+    void apply_user_edit(uint32_t cell, uint8_t mat);
+
     // Dense composite (material_ + current overlay) — materialised on demand for
     // GPU resync and the debug invariant only. Reuses an internal buffer.
     const std::vector<uint8_t>& materialize_composite() const;
@@ -51,6 +55,7 @@ private:
     std::vector<uint32_t>     prev_overlay_cells_; // last frame
     mutable std::vector<uint8_t> composite_;       // materialize_composite scratch
     std::vector<uint32_t>     dirty_;              // step() scratch
+    std::vector<uint32_t>     user_edited_;       // cells written by apply_user_edit this frame
 
     bool  resync_ = true;
     int   built_extent_ = -1, built_height_cells_ = -1, built_seed_ = 0;
