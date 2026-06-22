@@ -7,8 +7,13 @@
 #include "voxel/VoxelWorld.h"
 #include <glm/glm.hpp>
 #include <optional>
+#include <vector>
+#include <cstdint>
 
 namespace vox {
+
+struct UserEdit { uint32_t cell; uint8_t mat; };
+
 class App {
 public:
     explicit App(Config cfg);
@@ -21,6 +26,9 @@ public:
                       const VoxelWorld& grid, const uint8_t* materials);
     const std::optional<PickHit>& selection() const { return selection_; }
     bool has_pending_pick() const { return pending_pick_.has_value(); }
+
+    void enqueue_build(VoxMat m);                 // queues a build into selection's neighbor
+    std::vector<UserEdit> drain_pending_edits();  // returns and clears the queue
 
     const OrbitCamera& camera() const { return camera_; }
     OrbitCamera&       camera()       { return camera_; }
@@ -36,5 +44,6 @@ private:
     Clock clock_;
     std::optional<glm::vec2> pending_pick_;   // screen px of an unresolved Pick
     std::optional<PickHit>   selection_;      // last resolved hit (cleared on miss)
+    std::vector<UserEdit>    pending_edits_;
 };
 }
