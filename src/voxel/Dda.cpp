@@ -1,4 +1,5 @@
 #include "voxel/Dda.h"
+#include "voxel/GridView.h"
 #include <algorithm>
 #include <cmath>
 namespace vox {
@@ -76,12 +77,13 @@ bool dda_step(DdaState& S, const GridDims& G) {
 DdaHit dda_march(glm::vec3 origin, glm::vec3 dir, const VoxelWorld& w,
                  const uint8_t* mats, int max_steps) {
     GridDims G = grid_dims(w);
+    auto grid = grid_view(mats, w.params().extent, w.params().height_cells);
     DdaHit r;
     DdaState S;
     if (!dda_init(S, origin, dir, G)) return r;
     for (int s = 0; s < max_steps; ++s) {
         r.steps = s + 1;
-        if (mats[w.cell_index(S.idx.x, S.idx.y, S.idx.z)] != (uint8_t)VoxMat::Air) {
+        if (grid[S.idx.x, S.idx.y, S.idx.z] != (uint8_t)VoxMat::Air) {
             r.hit = true;
             r.ix = S.idx.x; r.iy = S.idx.y; r.iz = S.idx.z;
             r.face_axis = S.axis; r.t = S.t_cur;
@@ -96,6 +98,7 @@ TransmitResult dda_march_transmit(glm::vec3 origin, glm::vec3 dir,
                                   const VoxelWorld& w, const uint8_t* mats,
                                   int max_steps, float ior) {
     GridDims G = grid_dims(w);
+    auto grid = grid_view(mats, w.params().extent, w.params().height_cells);
     TransmitResult r;
     DdaState S;
     if (!dda_init(S, origin, dir, G)) return r;
@@ -104,7 +107,7 @@ TransmitResult dda_march_transmit(glm::vec3 origin, glm::vec3 dir,
     uint8_t mat = (uint8_t)VoxMat::Air;
     while (r.steps < max_steps) {
         r.steps++;
-        mat = mats[w.cell_index(S.idx.x, S.idx.y, S.idx.z)];
+        mat = grid[S.idx.x, S.idx.y, S.idx.z];
         if (mat != (uint8_t)VoxMat::Air && mat != (uint8_t)VoxMat::Bubble) break;  // Bubble is optically Air
         if (!dda_step(S, G)) return r;     // clean miss
     }
@@ -132,7 +135,7 @@ TransmitResult dda_march_transmit(glm::vec3 origin, glm::vec3 dir,
     // Phase 3: transmit — accumulate metric distance inside Water cells.
     while (r.steps < max_steps) {
         r.steps++;
-        uint8_t m = mats[w.cell_index(W.idx.x, W.idx.y, W.idx.z)];
+        uint8_t m = grid[W.idx.x, W.idx.y, W.idx.z];
         if (m != (uint8_t)VoxMat::Air && m != (uint8_t)VoxMat::Water && m != (uint8_t)VoxMat::Bubble) {
             r.hit = true;
             r.ix = W.idx.x; r.iy = W.idx.y; r.iz = W.idx.z;
