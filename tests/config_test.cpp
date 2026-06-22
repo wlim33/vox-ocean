@@ -305,3 +305,12 @@ TEST(Config, LavaDefaultsDisabled) {
     EXPECT_FALSE(r.config.lava.enabled);
 }
 
+TEST(Config, MissingFileEmitsWarningAndDefaults) {
+    auto r = vox::load_config_from_file("/definitely/not/here/nope.toml");
+    bool warned = false;
+    for (const auto& w : r.warnings)
+        if (w.find("not found") != std::string::npos) warned = true;
+    EXPECT_TRUE(warned);
+    EXPECT_EQ(r.config.voxel.grid_extent, 192);  // defaults intact
+}
+
