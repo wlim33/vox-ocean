@@ -1,4 +1,5 @@
 #include "voxel/MaterialCa.h"
+#include "voxel/MaterialRegistry.h"   // material_props (oracle reads flammability)
 #include "voxel/VoxelWorld.h"
 #include <gtest/gtest.h>
 
@@ -577,4 +578,124 @@ TEST(Combustion, LavaPourBoilsCondensesAndSleeps) {
                 if (nx>=0&&nx<d.extent&&ny>=0&&ny<d.height_cells&&nz>=0&&nz<d.extent
                     && g[ca_cell_index(d,nx,ny,nz)]==(uint8_t)VoxMat::Water) ++stranded; }
     EXPECT_EQ(stranded, 0);
+}
+
+// --- SP3-IV equivalence oracle: the live data-driven combustion_sweep must be
+// byte-identical to the pre-refactor 8-arm logic. `reference_sweep` below is a
+// verbatim copy of that original logic; the test runs both over a seeded mixed
+// grid and asserts identical cells AND changed-lists every step. Default rates
+// (partial probabilities) exercise the Fire burn-out-fails-then-smoke-fails
+// double fall-through that the forced-rate micro-tests cannot reach.
+namespace {
+inline uint32_t ref_mix32(uint32_t x) {
+    x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x;
+}
+inline float ref_rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t salt) {
+    uint32_t h = ((uint32_t)x * 73856093u) ^ ((uint32_t)y * 19349663u) ^ ((uint32_t)z * 83492791u)
+               ^ (step * 2654435761u) ^ seed ^ (salt * 2246822519u);
+    return (ref_mix32(h) >> 8) * (1.0f / 16777216.0f);
+}
+inline bool ref_is_fuel(uint8_t m) { return vox::material_props((vox::VoxMat)m).flammability > 0.0f; }
+inline bool ref_is_hot(uint8_t m) {
+    return m == (uint8_t)vox::VoxMat::Fire || m == (uint8_t)vox::VoxMat::Lava;
+}
+// Verbatim pre-SP3-IV combustion_sweep (the equivalence oracle).
+void reference_sweep(std::vector<uint8_t>& cells, const vox::MaterialCaDims& d,
+                     uint32_t step, uint32_t seed, const vox::CombustionParams& p,
+                     int x0, int y0, int z0, int x1, int y1, int z1,
+                     std::vector<uint32_t>& changed) {
+    using namespace vox;
+    const std::vector<uint8_t> before = cells;
+    auto at = [&](int x, int y, int z) -> uint8_t {
+        if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
+            return (uint8_t)VoxMat::Rock;
+        return before[ca_cell_index(d, x, y, z)];
+    };
+    const int NX[6] = {1,-1,0,0,0,0}, NY[6] = {0,0,1,-1,0,0}, NZ[6] = {0,0,0,0,1,-1};
+    for (int z = z0; z <= z1; ++z)
+      for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            uint8_t m = at(x, y, z);
+            int idx = ca_cell_index(d, x, y, z);
+            bool nbHot = false, nbWater = false, hasAir = false;
+            int ax = 0, ay = 0, az = 0;
+            for (int k = 0; k < 6; ++k) {
+                uint8_t nm = at(x + NX[k], y + NY[k], z + NZ[k]);
+                if (ref_is_hot(nm))               nbHot = true;
+                if (nm == (uint8_t)VoxMat::Water) nbWater = true;
+                if (!hasAir && nm == (uint8_t)VoxMat::Air) { hasAir = true; ax = x+NX[k]; ay = y+NY[k]; az = z+NZ[k]; }
+            }
+            if (m == (uint8_t)VoxMat::Fire) {
+                if (nbWater) { cells[idx] = (uint8_t)VoxMat::Smoke; changed.push_back((uint32_t)idx); continue; }
+                if (ref_rnd01(x,y,z,step,seed,2) < p.burn_out_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Ash; changed.push_back((uint32_t)idx); continue;
+                }
+                if (hasAir && ref_rnd01(x,y,z,step,seed,3) < p.smoke_chance) {
+                    int aidx = ca_cell_index(d, ax, ay, az);
+                    cells[aidx] = (uint8_t)VoxMat::Smoke; changed.push_back((uint32_t)aidx);
+                }
+                continue;
+            }
+            if (ref_is_fuel(m) && nbHot) {
+                float fl = material_props((VoxMat)m).flammability;
+                if (ref_rnd01(x,y,z,step,seed,1) < fl * p.ignite_scale) {
+                    cells[idx] = (uint8_t)VoxMat::Fire; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Smoke) {
+                if (ref_rnd01(x,y,z,step,seed,4) < p.smoke_dissipate_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Air; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Water) {
+                if (nbHot && ref_rnd01(x,y,z,step,seed,5) < p.boil_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Steam; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Steam) {
+                if (!nbHot && ref_rnd01(x,y,z,step,seed,6) < p.condense_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Water; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+            if (m == (uint8_t)VoxMat::Lava) {
+                if (nbWater && ref_rnd01(x,y,z,step,seed,7) < p.cool_chance) {
+                    cells[idx] = (uint8_t)VoxMat::Rock; changed.push_back((uint32_t)idx);
+                }
+                continue;
+            }
+        }
+}
+}  // namespace
+
+TEST(Combustion, TableMatchesOriginalArmsOverRandomGrid) {
+    using namespace vox;
+    MaterialCaDims d{8, 8};
+    const size_t n = (size_t)d.extent * d.extent * d.height_cells;
+    // Reactive-heavy palette so every arm fires often over the run.
+    const VoxMat palette[] = {
+        VoxMat::Air, VoxMat::Water, VoxMat::Fire, VoxMat::Smoke, VoxMat::Steam,
+        VoxMat::Lava, VoxMat::Kelp, VoxMat::Boat, VoxMat::Rock, VoxMat::Sand,
+    };
+    const int kPal = (int)(sizeof(palette) / sizeof(palette[0]));
+    // Deterministic LCG fill (no Date/rand — reproducible).
+    std::vector<uint8_t> g(n);
+    uint32_t lcg = 0x1234567u;
+    for (size_t i = 0; i < n; ++i) {
+        lcg = lcg * 1664525u + 1013904223u;
+        g[i] = (uint8_t)palette[(lcg >> 16) % kPal];
+    }
+    std::vector<uint8_t> a = g, b = g;     // oracle copy / live copy
+    const uint32_t seed = 9001;
+    CombustionParams p;                    // default rates: all partial -> fall-through exercised
+    for (uint32_t step = 0; step < 64; ++step) {
+        std::vector<uint32_t> ca, cb;
+        reference_sweep   (a, d, step, seed, p, 0,0,0, d.extent-1, d.height_cells-1, d.extent-1, ca);
+        combustion_sweep  (b, d, step, seed, p, 0,0,0, d.extent-1, d.height_cells-1, d.extent-1, cb);
+        ASSERT_EQ(a, b)   << "cells diverged at step " << step;
+        ASSERT_EQ(ca, cb) << "changed-list diverged at step " << step;
+    }
 }
