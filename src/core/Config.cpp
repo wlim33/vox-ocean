@@ -239,6 +239,11 @@ LoadResult load_config_from_string(const std::string& text) {
 
 LoadResult load_config_from_file(const std::string& path) {
     std::ifstream in(path);
+    if (!in) {
+        LoadResult r;
+        r.warnings.push_back("config file not found: " + path);
+        return r;
+    }
     std::stringstream ss; ss << in.rdbuf();
     return load_config_from_string(ss.str());
 }

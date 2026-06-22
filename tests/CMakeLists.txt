@@ -107,5 +107,7 @@ target_sources(vox-ocean-tests PRIVATE material_registry_test.cpp)
 
 target_sources(vox-ocean-tests PRIVATE march_palette_test.cpp)
 
+target_sources(vox-ocean-tests PRIVATE grid_view_test.cpp)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)

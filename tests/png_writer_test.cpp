@@ -12,7 +12,7 @@ static std::vector<uint8_t> read_bytes(const std::string& p) {
 TEST(PngWriter, WritesPngSignature) {
     vox::RgbImage img{2, 2, std::vector<uint8_t>(2 * 2 * 3, 128)};
     std::string path = std::string(testing::TempDir()) + "/pw_sig.png";
-    ASSERT_TRUE(vox::write_png(path, img));
+    ASSERT_TRUE(vox::write_png(path, img).has_value());
     auto b = read_bytes(path);
     ASSERT_GE(b.size(), 8u);
     const uint8_t sig[8] = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
@@ -22,7 +22,7 @@ TEST(PngWriter, WritesPngSignature) {
 TEST(PngWriter, ScaleMultipliesIhdrDimensions) {
     vox::RgbImage img{2, 3, std::vector<uint8_t>(2 * 3 * 3, 64)};
     std::string path = std::string(testing::TempDir()) + "/pw_scale.png";
-    ASSERT_TRUE(vox::write_png(path, img, 4));
+    ASSERT_TRUE(vox::write_png(path, img, 4).has_value());
     auto b = read_bytes(path);
     auto be32 = [&](int o) -> uint32_t {
         return (uint32_t(b[o]) << 24) | (uint32_t(b[o+1]) << 16) |
@@ -34,5 +34,7 @@ TEST(PngWriter, ScaleMultipliesIhdrDimensions) {
 
 TEST(PngWriter, RejectsMalformed) {
     vox::RgbImage bad{2, 2, std::vector<uint8_t>(3, 0)};  // buffer too small
-    EXPECT_FALSE(vox::write_png(std::string(testing::TempDir()) + "/pw_bad.png", bad));
+    auto bad_result = vox::write_png(std::string(testing::TempDir()) + "/pw_bad.png", bad);
+    EXPECT_FALSE(bad_result.has_value());
+    EXPECT_EQ(bad_result.error(), vox::PngError::MalformedImage);
 }

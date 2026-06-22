@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <utility>   // std::to_underlying
 #include "voxel/VoxelWorld.h"   // VoxMat, kNumMaterials
 namespace vox {
 
@@ -40,7 +41,7 @@ inline constexpr std::array<MaterialProps, kNumMaterials> kMaterials = {{
 static_assert(kMaterials.size() == (size_t)kNumMaterials, "registry size must match VoxMat count");
 
 constexpr const MaterialProps& material_props(VoxMat m) {
-    return kMaterials[static_cast<size_t>(m)];
+    return kMaterials[std::to_underlying(m)];
 }
 
 // Flat RGB palette (3 floats per material) for GPU upload. The renderer copies
