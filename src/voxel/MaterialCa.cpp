@@ -2,6 +2,7 @@
 #include "voxel/VoxelWorld.h"   // VoxMat
 #include "voxel/MaterialRegistry.h"
 #include <algorithm>
+#include <cmath>
 namespace vox {
 
 namespace {
@@ -229,6 +230,52 @@ constexpr bool reactions_well_formed() {
 }
 static_assert(reactions_well_formed(),
               "kReactions: invalid output id or Fire rows out of priority order");
+}
+
+void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
+                   const MaterialCaDims& d, const ThermalParams& tp, uint8_t ambient,
+                   int x0, int y0, int z0, int x1, int y1, int z1,
+                   std::vector<uint32_t>& /*changed*/) {
+    const std::vector<uint8_t> before = temp;     // pre-step snapshot (order-independence)
+    const float kAirCond = material_props(VoxMat::Air).conductivity;
+    auto T = [&](int x, int y, int z) -> float {  // OOB temperature reads as ambient
+        if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
+            return (float)ambient;
+        return (float)before[ca_cell_index(d, x, y, z)];
+    };
+    auto C = [&](int x, int y, int z) -> float {  // OOB conductivity reads as Air
+        if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
+            return kAirCond;
+        return material_props((VoxMat)cells[ca_cell_index(d, x, y, z)]).conductivity;
+    };
+    const int NX[6] = {1,-1,0,0,0,0}, NY[6] = {0,0,1,-1,0,0}, NZ[6] = {0,0,0,0,1,-1};
+    for (int z = z0; z <= z1; ++z)
+      for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            int i = ca_cell_index(d, x, y, z);
+            // --- diffusion kernel: conductivity-weighted Laplacian ----------------
+            // Heat flows from hot to cold across each face, throttled by the SLOWER
+            // of the two media (min conductivity) so an insulator on either side
+            // blocks the flux. diffuse_k <= 1/6 keeps the explicit update stable.
+            float t = T(x, y, z), cs = C(x, y, z), flux = 0.0f;
+            for (int k = 0; k < 6; ++k) {
+                float w = std::min(cs, C(x + NX[k], y + NY[k], z + NZ[k]));
+                flux += w * (T(x + NX[k], y + NY[k], z + NZ[k]) - t);
+            }
+            float nt = t + tp.diffuse_k * flux;
+            // ----------------------------------------------------------------------
+            // Heat source: re-assert own temperature up to emit_temp every step.
+            int emit = material_props((VoxMat)cells[i]).emit_temp;
+            if (emit >= 0) {
+                if (nt < (float)emit) nt = (float)emit;
+            } else {
+                // Ambient bleed + snap so settled cells reach exactly ambient and sleep.
+                if (nt > ambient)      nt = std::max((float)ambient, nt - tp.ambient_bleed);
+                else if (nt < ambient) nt = std::min((float)ambient, nt + tp.ambient_bleed);
+                if (std::abs(nt - (float)ambient) <= (float)tp.snap_eps) nt = (float)ambient;
+            }
+            temp[i] = (uint8_t)std::clamp((int)std::lround(nt), 0, 255);
+        }
 }
 
 void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,

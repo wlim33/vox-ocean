@@ -48,6 +48,24 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                       int x0, int y0, int z0, int x1, int y1, int z1,
                       std::vector<uint32_t>& changed);
 
+// Per-step heat-field tunables. diffuse_k MUST stay <= 1/6 (6-neighbour explicit
+// diffusion stability bound) or temperatures can oscillate/diverge.
+struct ThermalParams {
+    float   diffuse_k     = 0.16f;   // <= 1/6
+    float   ambient_bleed = 0.5f;    // heat units/step pulled toward ambient
+    uint8_t snap_eps      = 1;       // |T-ambient| <= eps -> snap to ambient (lets blocks sleep)
+};
+
+// Conductivity-weighted heat diffusion over the inclusive box, then heat-source
+// re-assertion (emit_temp) and an ambient bleed. Reads a pre-step snapshot of
+// `temp` so the result is order-independent. OOB neighbours read as ambient with
+// Air conductivity. Writes `temp` in place; appends any material transitions to
+// `changed` (none until thermal rules land).
+void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
+                   const MaterialCaDims& d, const ThermalParams& tp, uint8_t ambient,
+                   int x0, int y0, int z0, int x1, int y1, int z1,
+                   std::vector<uint32_t>& changed);
+
 // Stateful stepper: phase schedule + dirty bounding box so settled regions cost
 // nothing. One step = one Margolus sweep over the active box; the box follows the
 // cells that changed (±1) and empties when nothing moves.

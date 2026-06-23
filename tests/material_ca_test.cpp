@@ -699,3 +699,37 @@ TEST(Combustion, TableMatchesOriginalArmsOverRandomGrid) {
         ASSERT_EQ(ca, cb) << "changed-list diverged at step " << step;
     }
 }
+
+// --- Heat diffusion (thermal_sweep) ------------------------------------------
+TEST(ThermalSweep, HeatSourceWarmsNeighbourAndConductivityOrders) {
+    MaterialCaDims d{5,5};
+    auto idx = [&](int x,int y,int z){ return ca_cell_index(d,x,y,z); };
+    ThermalParams tp;
+    std::vector<uint32_t> changed;
+    auto run = [&](VoxMat medium, int steps){
+        std::vector<uint8_t> cells((size_t)5*5*5, (uint8_t)medium);
+        std::vector<uint8_t> temp(cells.size(), kAmbientTemp);
+        cells[idx(2,2,2)] = (uint8_t)VoxMat::Lava;   // emit_temp=255 heat source
+        temp [idx(2,2,2)] = 255;
+        for (int s=0;s<steps;++s){ changed.clear();
+            thermal_sweep(cells,temp,d,tp,kAmbientTemp, 0,0,0,4,4,4, changed); }
+        return temp[idx(2,3,2)];
+    };
+    uint8_t rock  = run(VoxMat::Rock,  6);   // conductivity 0.50
+    uint8_t water = run(VoxMat::Water, 6);   // conductivity 0.30
+    EXPECT_GT(rock,  kAmbientTemp);
+    EXPECT_GT(water, kAmbientTemp);
+    EXPECT_GT(rock,  water);
+}
+
+TEST(ThermalSweep, RelaxesTowardAmbientWithoutSource) {
+    MaterialCaDims d{5,5};
+    auto idx = [&](int x,int y,int z){ return ca_cell_index(d,x,y,z); };
+    std::vector<uint8_t> cells((size_t)5*5*5, (uint8_t)VoxMat::Rock);
+    std::vector<uint8_t> temp(cells.size(), kAmbientTemp);
+    temp[idx(2,2,2)] = 200;
+    ThermalParams tp; std::vector<uint32_t> changed;
+    for (int s=0;s<200;++s){ changed.clear();
+        thermal_sweep(cells,temp,d,tp,kAmbientTemp, 0,0,0,4,4,4, changed); }
+    for (uint8_t t : temp) EXPECT_EQ(t, kAmbientTemp);
+}
