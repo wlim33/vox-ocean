@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <type_traits>   // std::remove_cvref_t
 #include <utility>   // std::to_underlying
 #include "voxel/VoxelWorld.h"   // VoxMat, kNumMaterials
 namespace vox {
@@ -62,8 +63,35 @@ constexpr const MaterialProps& material_props(VoxMat m) {
     return kMaterials[std::to_underlying(m)];
 }
 
+// --- SoA hot-field tables (cache-packing optimization) ------------------------
+// The CA inner loops touch ONE or TWO fields per material lookup, but
+// material_props() returns the whole 44-byte AoS struct (one ~7-line table).
+// These parallel arrays pack each hot field contiguously so a per-cell lookup
+// pulls a single line (e.g. kDensity = 19*4 = 76 B = 1 line) instead of striding
+// 44 B into the AoS. Built at compile time from kMaterials so there is ONE source
+// of truth — edit kMaterials, these follow. Indexed by the raw material id byte.
+template <auto Field>
+constexpr auto build_hot_field() {
+    using T = std::remove_cvref_t<decltype(kMaterials[0].*Field)>;
+    std::array<T, kNumMaterials> out{};
+    for (size_t i = 0; i < (size_t)kNumMaterials; ++i) out[i] = kMaterials[i].*Field;
+    return out;
+}
+inline constexpr auto kDensity      = build_hot_field<&MaterialProps::density>();
+inline constexpr auto kMovable      = build_hot_field<&MaterialProps::movable>();
+inline constexpr auto kFluidity     = build_hot_field<&MaterialProps::fluidity>();
+inline constexpr auto kConductivity = build_hot_field<&MaterialProps::conductivity>();
+inline constexpr auto kEmitTemp     = build_hot_field<&MaterialProps::emit_temp>();
+inline constexpr auto kFlammability = build_hot_field<&MaterialProps::flammability>();
+inline constexpr auto kTags         = build_hot_field<&MaterialProps::tags>();
+
+// Projection sanity: lanes agree with the AoS source (compile-time, no runtime test).
+static_assert(kDensity[(int)VoxMat::Water] == 1000.0f && kMovable[(int)VoxMat::Rock] == false);
+static_assert(kEmitTemp[(int)VoxMat::Lava] == 255 && kTags[(int)VoxMat::Wood] ==
+              ((uint32_t)MatTag::Flammable | (uint32_t)MatTag::Corrodible));
+
 constexpr bool material_has_tag(VoxMat m, MatTag t) {
-    return (material_props(m).tags & static_cast<uint32_t>(t)) != 0;
+    return (kTags[std::to_underlying(m)] & static_cast<uint32_t>(t)) != 0;
 }
 
 // Human-readable name per material, indexed by enum order. Lockstep with VoxMat.

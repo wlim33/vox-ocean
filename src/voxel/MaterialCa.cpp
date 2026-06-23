@@ -6,10 +6,10 @@
 namespace vox {
 
 namespace {
-inline float ca_density(uint8_t m) { return material_props((VoxMat)m).density; }
-inline bool  ca_movable(uint8_t m) { return material_props((VoxMat)m).movable; }
+inline float ca_density(uint8_t m) { return kDensity[m]; }
+inline bool  ca_movable(uint8_t m) { return kMovable[m]; }
 // fluidity >= 0.5 -> levels laterally (liquid); < 0.5 -> repose (granular).
-inline bool  ca_levels (uint8_t m) { return material_props((VoxMat)m).fluidity >= 0.5f; }
+inline bool  ca_levels (uint8_t m) { return kFluidity[m] >= 0.5f; }
 // `a` may displace `b` only if both are movable and a is strictly denser than b.
 inline bool  can_sink  (uint8_t a, uint8_t b) {
     return ca_movable(a) && ca_movable(b) && ca_density(a) > ca_density(b);
@@ -43,6 +43,37 @@ inline bool temp_active(const std::vector<uint8_t>& temp, const MaterialCaDims& 
                         int x, int y, int z, uint8_t ambient) {
     return temp[ca_cell_index(d, x, y, z)] != ambient;
 }
+
+// Pre-step snapshot of just the active box + a 1-cell halo. The contact/thermal
+// kernels reach at most ±1 from each box cell, so this compact sub-volume holds
+// every pre-step value they read — replacing the old full-grid copy (2.25 MiB)
+// with O(box) bytes. Truly out-of-grid reads are still the caller's job (sentinel);
+// any in-grid read the kernel makes is guaranteed to land inside the halo.
+struct HaloSnapshot {
+    int x0_, y0_, z0_;          // halo origin in grid coords (clamped to >= 0)
+    int sx_, sy_;               // halo x/y extents (z stride = sx_*sy_)
+    std::vector<uint8_t> buf_;
+    HaloSnapshot(const std::vector<uint8_t>& src, const MaterialCaDims& d,
+                 int bx0, int by0, int bz0, int bx1, int by1, int bz1) {
+        x0_ = std::max(0, bx0 - 1); y0_ = std::max(0, by0 - 1); z0_ = std::max(0, bz0 - 1);
+        int x1 = std::min(d.extent - 1, bx1 + 1);
+        int y1 = std::min(d.height_cells - 1, by1 + 1);
+        int z1 = std::min(d.extent - 1, bz1 + 1);
+        sx_ = x1 - x0_ + 1; sy_ = y1 - y0_ + 1;
+        int sz = z1 - z0_ + 1;
+        buf_.resize((size_t)sx_ * sy_ * sz);
+        // x is contiguous in both grid and halo, so copy one row per (y,z).
+        for (int z = z0_; z <= z1; ++z)
+            for (int y = y0_; y <= y1; ++y) {
+                const uint8_t* s = &src[ca_cell_index(d, x0_, y, z)];
+                std::copy(s, s + sx_, &buf_[local(x0_, y, z)]);
+            }
+    }
+    size_t local(int x, int y, int z) const {
+        return (size_t)(x - x0_) + (size_t)sx_ * ((y - y0_) + (size_t)sy_ * (z - z0_));
+    }
+    uint8_t at(int x, int y, int z) const { return buf_[local(x, y, z)]; }  // in-grid only
+};
 }
 
 // Density-ordered settle within one 2x2x2 block; ids in `mat`, local = lx+2*ly+4*lz, ly=0 lower.
@@ -291,17 +322,17 @@ void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
                    const MaterialCaDims& d, const ThermalParams& tp, uint8_t ambient,
                    int x0, int y0, int z0, int x1, int y1, int z1,
                    std::vector<uint32_t>& changed) {
-    const std::vector<uint8_t> before = temp;     // pre-step snapshot (order-independence)
-    const float kAirCond = material_props(VoxMat::Air).conductivity;
+    const HaloSnapshot before(temp, d, x0, y0, z0, x1, y1, z1);  // box+halo (order-independence)
+    const float kAirCond = kConductivity[(uint8_t)VoxMat::Air];
     auto T = [&](int x, int y, int z) -> float {  // OOB temperature reads as ambient
         if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
             return (float)ambient;
-        return (float)before[ca_cell_index(d, x, y, z)];
+        return (float)before.at(x, y, z);
     };
     auto C = [&](int x, int y, int z) -> float {  // OOB conductivity reads as Air
         if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
             return kAirCond;
-        return material_props((VoxMat)cells[ca_cell_index(d, x, y, z)]).conductivity;
+        return kConductivity[cells[ca_cell_index(d, x, y, z)]];
     };
     const int NX[6] = {1,-1,0,0,0,0}, NY[6] = {0,0,1,-1,0,0}, NZ[6] = {0,0,0,0,1,-1};
     for (int z = z0; z <= z1; ++z)
@@ -320,7 +351,7 @@ void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
             float nt = t + tp.diffuse_k * flux;
             // ----------------------------------------------------------------------
             // Heat source: re-assert own temperature up to emit_temp every step.
-            int emit = material_props((VoxMat)cells[i]).emit_temp;
+            int emit = kEmitTemp[cells[i]];
             if (emit >= 0) {
                 if (nt < (float)emit) nt = (float)emit;
             } else {
@@ -347,11 +378,11 @@ void contact_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                    uint32_t step, uint32_t seed, const CombustionParams& p,
                    int x0, int y0, int z0, int x1, int y1, int z1,
                    std::vector<uint32_t>& changed) {
-    const std::vector<uint8_t> before = cells;   // pre-step snapshot (O(grid); halo-only is a future optimization)
+    const HaloSnapshot before(cells, d, x0, y0, z0, x1, y1, z1);  // box+halo (was full-grid copy)
     auto at = [&](int x, int y, int z) -> uint8_t {
         if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
             return (uint8_t)VoxMat::Rock;          // OOB is inert
-        return before[ca_cell_index(d, x, y, z)];
+        return before.at(x, y, z);
     };
     const int NX[6] = {1,-1,0,0,0,0}, NY[6] = {0,0,1,-1,0,0}, NZ[6] = {0,0,0,0,1,-1};
     for (int z = z0; z <= z1; ++z)
@@ -378,7 +409,7 @@ void contact_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                 }
                 if (r.rate) {                                   // nullptr = deterministic
                     float chance = p.*r.rate;
-                    if (r.scale_flam) chance *= material_props((VoxMat)m).flammability;
+                    if (r.scale_flam) chance *= kFlammability[m];
                     if (rnd01(x, y, z, step, seed, r.salt) >= chance) continue;   // roll fails -> next row
                 }
                 if (!r.keep_a) { cells[idx] = (uint8_t)r.a_out; changed.push_back((uint32_t)idx); }
