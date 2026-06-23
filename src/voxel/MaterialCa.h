@@ -39,14 +39,17 @@ struct CombustionParams {
     float cool_chance = 0.15f;            // P(Lava -> Rock | Water neighbor) per step
 };
 
-// Non-conservative cellular reaction pass over the inclusive box. Reads a pre-step
-// snapshot of `cells` (so the result is independent of iteration order) and writes
-// fire/smoke/ash transitions. Randomness is hash(x,y,z,step,seed) -> reproducible.
-// Out-of-grid neighbors read as inert Rock. Appends changed indices to `changed`.
-void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                      uint32_t step, uint32_t seed, const CombustionParams& p,
-                      int x0, int y0, int z0, int x1, int y1, int z1,
-                      std::vector<uint32_t>& changed);
+// Data-driven contact-reaction pass over the inclusive box: a Noita-style table of
+// (A, B) -> (C, D) @rate rules where A is the cell and B a face-neighbour matched by
+// material id, tag, "any", "hot", or "no-hot". Reads a pre-step snapshot of `cells`
+// (order-independent) and writes the products. Randomness is hash(x,y,z,step,seed)
+// -> reproducible. Out-of-grid neighbours read as inert Rock. Appends changed indices
+// to `changed`. (Generalizes the former combustion_sweep; behaviour-preserving — see
+// the equivalence oracle in material_ca_test.cpp.)
+void contact_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
+                   uint32_t step, uint32_t seed, const CombustionParams& p,
+                   int x0, int y0, int z0, int x1, int y1, int z1,
+                   std::vector<uint32_t>& changed);
 
 // Per-step heat-field tunables. diffuse_k MUST stay <= 1/6 (6-neighbour explicit
 // diffusion stability bound) or temperatures can oscillate/diverge.

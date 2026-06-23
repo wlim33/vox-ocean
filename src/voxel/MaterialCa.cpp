@@ -103,8 +103,8 @@ void MaterialCa::step(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
         thermal_sweep(cells, temp, d, tparams_, ambient_,
                       ax0_, ay0_, az0_, ax1_, ay1_, az1_, changed);
     if (combustion_)
-        combustion_sweep(cells, d, (uint32_t)phase_, seed_, cparams_,
-                         ax0_, ay0_, az0_, ax1_, ay1_, az1_, changed);
+        contact_sweep(cells, d, (uint32_t)phase_, seed_, cparams_,
+                      ax0_, ay0_, az0_, ax1_, ay1_, az1_, changed);
     // Phase schedule: alternate oy every step (continuous fall); cycle ox,oz so
     // piles can spread. 4-phase deterministic sequence keyed off the step counter.
     static const int OX[4] = {0, 1, 0, 1}, OY[4] = {0, 1, 0, 1}, OZ[4] = {0, 0, 1, 1};
@@ -178,7 +178,6 @@ inline float rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t s
                ^ (step * 2654435761u) ^ seed ^ (salt * 2246822519u);
     return (mix32(h) >> 8) * (1.0f / 16777216.0f);   // 24-bit mantissa -> [0,1)
 }
-inline bool is_fuel(uint8_t m) { return material_props((VoxMat)m).flammability > 0.0f; }
 inline bool is_hot(uint8_t m) { return m == (uint8_t)VoxMat::Fire || m == (uint8_t)VoxMat::Lava; }
 
 // --- Thermal threshold transitions -------------------------------------------
@@ -205,76 +204,84 @@ inline bool tmatch(const ThermalRule& r, uint8_t m) {
                                        : material_has_tag((VoxMat)m, (MatTag)r.key);
 }
 
-// --- Data-driven reaction table (SP3-IV) -------------------------------------
-// Each reaction is one row: an input matcher, a neighbour gate, a probability
-// source (member-pointer into CombustionParams; nullptr = deterministic, no RNG
-// draw), an optional flammability scale, a write target, and the resulting
-// material. The per-row `salt` reproduces SP3-I..III's exact RNG draws, so this
-// refactor is behaviour-preserving. Inputs are disjoint except Fire's 3-row
-// cluster, whose table order encodes priority: first success wins, and a failed
-// probability roll falls through to the next row.
-enum class InKind : uint8_t { Material, AnyFuel };   // AnyFuel matches is_fuel(cell)
-enum class NbCond : uint8_t { Any, HotPresent, HotAbsent, WaterPresent, AirPresent };
-enum class Target : uint8_t { Self, NeighborAir };
+// --- Data-driven contact-reaction table --------------------------------------
+// Each row is a Noita-style pair rule: reagent A is the cell, reagent B a face-
+// neighbour. A is matched by material id or tag (TMatch, shared with the thermal
+// table). B is matched by BMatch: a specific material, a tag, "Any" neighbour,
+// "Hot" (Fire/Lava), or "NoHot" (gate: fires only when NO neighbour is hot, with no
+// B target). `rate` is a member-pointer into CombustionParams (nullptr = always);
+// `scale_flam` multiplies the chance by the cell's flammability (ignite). Products:
+// a_out replaces the cell unless keep_a; b_out replaces the matched neighbour unless
+// keep_b. The per-row `salt` reproduces the original draws so this generalization is
+// behaviour-preserving (verified by the equivalence oracle in the tests).
+enum class BMatch : uint8_t { Material, Tag, Any, Hot, NoHot };
 
-struct Reaction {
-    InKind   in_kind;
-    VoxMat   in_mat;      // used when in_kind==Material (don't-care for AnyFuel)
-    NbCond   cond;
-    float CombustionParams::* rate;  // nullptr = deterministic (always; no RNG draw)
-    bool     scale_flam;             // chance *= cell flammability (ignite only)
-    Target   target;
-    VoxMat   output;
-    uint32_t salt;                   // unused when rate==nullptr
+struct ContactRule {
+    TMatch   a_match; uint32_t a_key;          // cell reagent (material id | tag bits)
+    BMatch   b_match; uint32_t b_key;          // neighbour reagent (key for Material/Tag)
+    float CombustionParams::* rate;            // nullptr = deterministic (no RNG draw)
+    bool     scale_flam;                       // chance *= cell flammability (ignite)
+    VoxMat   a_out;   bool keep_a;
+    VoxMat   b_out;   bool keep_b;
+    uint32_t salt;                             // unused when rate==nullptr
 };
 
-constexpr Reaction kReactions[] = {
+constexpr ContactRule kContacts[] = {
     // Fire cluster — table order = priority (water-extinguish > burn-out > smoke-emit).
-    { InKind::Material, VoxMat::Fire,  NbCond::WaterPresent, nullptr,
-      false, Target::Self,        VoxMat::Smoke, 0 },
-    { InKind::Material, VoxMat::Fire,  NbCond::Any,          &CombustionParams::burn_out_chance,
-      false, Target::Self,        VoxMat::Ash,   2 },
-    { InKind::Material, VoxMat::Fire,  NbCond::AirPresent,   &CombustionParams::smoke_chance,
-      false, Target::NeighborAir, VoxMat::Smoke, 3 },
-    // Single-outcome reactions (disjoint inputs — mutually order-free).
-    { InKind::AnyFuel,  VoxMat::Air,   NbCond::HotPresent,   &CombustionParams::ignite_scale,
-      true,  Target::Self,        VoxMat::Fire,  1 },
-    { InKind::Material, VoxMat::Smoke, NbCond::Any,          &CombustionParams::smoke_dissipate_chance,
-      false, Target::Self,        VoxMat::Air,   4 },
-    { InKind::Material, VoxMat::Water, NbCond::HotPresent,   &CombustionParams::boil_chance,
-      false, Target::Self,        VoxMat::Steam, 5 },
-    { InKind::Material, VoxMat::Steam, NbCond::HotAbsent,    &CombustionParams::condense_chance,
-      false, Target::Self,        VoxMat::Water, 6 },
-    { InKind::Material, VoxMat::Lava,  NbCond::WaterPresent, &CombustionParams::cool_chance,
-      false, Target::Self,        VoxMat::Rock,  7 },
+    { TMatch::Material,(uint32_t)VoxMat::Fire,  BMatch::Material,(uint32_t)VoxMat::Water,
+      nullptr, false, VoxMat::Smoke,false, VoxMat::Air,true, 0 },
+    { TMatch::Material,(uint32_t)VoxMat::Fire,  BMatch::Any,0,
+      &CombustionParams::burn_out_chance, false, VoxMat::Ash,false, VoxMat::Air,true, 2 },
+    { TMatch::Material,(uint32_t)VoxMat::Fire,  BMatch::Material,(uint32_t)VoxMat::Air,
+      &CombustionParams::smoke_chance, false, VoxMat::Fire,true, VoxMat::Smoke,false, 3 },
+    // Ignition: any Flammable cell next to a heat source.
+    { TMatch::Tag,(uint32_t)MatTag::Flammable,  BMatch::Hot,0,
+      &CombustionParams::ignite_scale, true, VoxMat::Fire,false, VoxMat::Air,true, 1 },
+    // Smoke dissipates.
+    { TMatch::Material,(uint32_t)VoxMat::Smoke, BMatch::Any,0,
+      &CombustionParams::smoke_dissipate_chance, false, VoxMat::Air,false, VoxMat::Air,true, 4 },
+    // Water boils next to a heat source.
+    { TMatch::Material,(uint32_t)VoxMat::Water, BMatch::Hot,0,
+      &CombustionParams::boil_chance, false, VoxMat::Steam,false, VoxMat::Air,true, 5 },
+    // Steam condenses when no heat source is adjacent (NoHot gate, self-only).
+    { TMatch::Material,(uint32_t)VoxMat::Steam, BMatch::NoHot,0,
+      &CombustionParams::condense_chance, false, VoxMat::Water,false, VoxMat::Air,true, 6 },
+    // Lava crusts to rock against water (water kept — thermodynamic steam handled
+    // by the thermal layer / future enhancement).
+    { TMatch::Material,(uint32_t)VoxMat::Lava,  BMatch::Material,(uint32_t)VoxMat::Water,
+      &CombustionParams::cool_chance, false, VoxMat::Rock,false, VoxMat::Air,true, 7 },
 };
 
-inline bool cond_holds(NbCond c, bool nbHot, bool nbWater, bool hasAir) {
-    switch (c) {
-        case NbCond::Any:          return true;
-        case NbCond::HotPresent:   return nbHot;
-        case NbCond::HotAbsent:    return !nbHot;
-        case NbCond::WaterPresent: return nbWater;
-        case NbCond::AirPresent:   return hasAir;
+inline bool a_matches(TMatch mt, uint32_t key, uint8_t m) {
+    return mt == TMatch::Material ? (m == (uint8_t)key)
+                                  : material_has_tag((VoxMat)m, (MatTag)key);
+}
+inline bool b_matches(BMatch bm, uint32_t key, uint8_t m) {
+    switch (bm) {
+        case BMatch::Any:      return true;
+        case BMatch::Hot:      return is_hot(m);
+        case BMatch::NoHot:    return !is_hot(m);
+        case BMatch::Material: return m == (uint8_t)key;
+        case BMatch::Tag:      return material_has_tag((VoxMat)m, (MatTag)key);
     }
     return false;
 }
 
-// Structural invariants (the SP3-IV "structural test", checked at compile time):
-// every output is a valid material id, and every Fire row precedes the first
-// non-Fire row so the priority cluster can never be reordered by a later edit.
-constexpr bool reactions_well_formed() {
+// Compile-time guard: valid outputs, and every Fire row precedes the first non-Fire
+// row so the priority cluster cannot be reordered by a later edit.
+constexpr bool contacts_well_formed() {
     bool seen_non_fire = false;
-    for (const Reaction& r : kReactions) {
-        if (static_cast<size_t>(r.output) >= static_cast<size_t>(kNumMaterials)) return false;
-        bool is_fire_row = (r.in_kind == InKind::Material && r.in_mat == VoxMat::Fire);
+    for (const ContactRule& r : kContacts) {
+        if ((size_t)r.a_out >= (size_t)kNumMaterials) return false;
+        if ((size_t)r.b_out >= (size_t)kNumMaterials) return false;
+        bool is_fire_row = (r.a_match == TMatch::Material && r.a_key == (uint32_t)VoxMat::Fire);
         if (!is_fire_row)       seen_non_fire = true;
-        else if (seen_non_fire) return false;   // a Fire row appeared after a non-Fire row
+        else if (seen_non_fire) return false;
     }
     return true;
 }
-static_assert(reactions_well_formed(),
-              "kReactions: invalid output id or Fire rows out of priority order");
+static_assert(contacts_well_formed(),
+              "kContacts: invalid output id or Fire rows out of priority order");
 }
 
 void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
@@ -333,10 +340,10 @@ void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
         }
 }
 
-void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                      uint32_t step, uint32_t seed, const CombustionParams& p,
-                      int x0, int y0, int z0, int x1, int y1, int z1,
-                      std::vector<uint32_t>& changed) {
+void contact_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
+                   uint32_t step, uint32_t seed, const CombustionParams& p,
+                   int x0, int y0, int z0, int x1, int y1, int z1,
+                   std::vector<uint32_t>& changed) {
     const std::vector<uint8_t> before = cells;   // pre-step snapshot (O(grid); halo-only is a future optimization)
     auto at = [&](int x, int y, int z) -> uint8_t {
         if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
@@ -349,25 +356,30 @@ void combustion_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
         for (int x = x0; x <= x1; ++x) {
             uint8_t m = at(x, y, z);
             int idx = ca_cell_index(d, x, y, z);
-            bool nbHot = false, nbWater = false, hasAir = false;
-            int ax = 0, ay = 0, az = 0;
-            for (int k = 0; k < 6; ++k) {
-                uint8_t nm = at(x + NX[k], y + NY[k], z + NZ[k]);
-                if (is_hot(nm))                   nbHot = true;
-                if (nm == (uint8_t)VoxMat::Water) nbWater = true;
-                if (!hasAir && nm == (uint8_t)VoxMat::Air) { hasAir = true; ax = x+NX[k]; ay = y+NY[k]; az = z+NZ[k]; }
-            }
-            for (const Reaction& r : kReactions) {
-                if (r.in_kind == InKind::Material ? (m != (uint8_t)r.in_mat) : !is_fuel(m)) continue;
-                if (!cond_holds(r.cond, nbHot, nbWater, hasAir)) continue;
+            for (const ContactRule& r : kContacts) {
+                if (!a_matches(r.a_match, r.a_key, m)) continue;
+                // Find the first face-neighbour satisfying B (in fixed NX/NY/NZ order).
+                // NoHot is a gate over all neighbours, not a per-neighbour target.
+                int bi = -1;
+                if (r.b_match == BMatch::NoHot) {
+                    bool any_hot = false;
+                    for (int k = 0; k < 6 && !any_hot; ++k)
+                        if (is_hot(at(x+NX[k], y+NY[k], z+NZ[k]))) any_hot = true;
+                    if (any_hot) continue;
+                } else {
+                    for (int k = 0; k < 6; ++k)
+                        if (b_matches(r.b_match, r.b_key, at(x+NX[k], y+NY[k], z+NZ[k]))) {
+                            bi = ca_cell_index(d, x+NX[k], y+NY[k], z+NZ[k]); break;
+                        }
+                    if (bi < 0) continue;                       // no matching neighbour
+                }
                 if (r.rate) {                                   // nullptr = deterministic
                     float chance = p.*r.rate;
                     if (r.scale_flam) chance *= material_props((VoxMat)m).flammability;
                     if (rnd01(x, y, z, step, seed, r.salt) >= chance) continue;   // roll fails -> next row
                 }
-                int t = (r.target == Target::NeighborAir) ? ca_cell_index(d, ax, ay, az) : idx;
-                cells[t] = (uint8_t)r.output;
-                changed.push_back((uint32_t)t);
+                if (!r.keep_a) { cells[idx] = (uint8_t)r.a_out; changed.push_back((uint32_t)idx); }
+                if (!r.keep_b && bi >= 0) { cells[bi] = (uint8_t)r.b_out; changed.push_back((uint32_t)bi); }
                 break;                                          // first success wins
             }
         }

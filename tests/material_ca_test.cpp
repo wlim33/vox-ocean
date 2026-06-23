@@ -336,7 +336,7 @@ TEST(MaterialCa, FlatOceanWithDisplacedSurfaceWaterSleeps) {
     EXPECT_EQ(count_of(g, VoxMat::Water), water_count);
 }
 
-// --- SP3-I combustion_sweep micro-tests (deterministic via forced rates) ---
+// --- SP3-I contact_sweep micro-tests (deterministic via forced rates) ---
 TEST(Combustion, FuelNextToFireIgnites) {
     using namespace vox;
     MaterialCaDims d{3, 3};
@@ -345,7 +345,7 @@ TEST(Combustion, FuelNextToFireIgnites) {
     g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Kelp;   // flammable (0.4)
     CombustionParams p; p.ignite_scale = 100.0f;          // force rand < flammability*scale
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, /*step*/0, /*seed*/7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, /*step*/0, /*seed*/7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,2,1,1)], (uint8_t)VoxMat::Fire);   // kelp ignited
 }
 
@@ -356,7 +356,7 @@ TEST(Combustion, FireBurnsOutToAsh) {
     g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
     CombustionParams p; p.burn_out_chance = 1.0f; p.smoke_chance = 0.0f;
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Ash);
 }
 
@@ -368,7 +368,7 @@ TEST(Combustion, FireNextToWaterBecomesSmoke) {
     g[ca_cell_index(d,1,0,1)] = (uint8_t)VoxMat::Water;
     CombustionParams p; p.burn_out_chance = 1.0f;        // would burn out, but water wins
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Smoke);
 }
 
@@ -379,7 +379,7 @@ TEST(Combustion, FireEmitsSmokeIntoAir) {
     g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Fire;
     CombustionParams p; p.burn_out_chance = 0.0f; p.smoke_chance = 1.0f;   // emit, don't burn out
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Fire);            // fire stays
     EXPECT_EQ(count_of(g, VoxMat::Smoke), 1);                              // one air -> smoke
 }
@@ -391,7 +391,7 @@ TEST(Combustion, SmokeDissipates) {
     g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Smoke;
     CombustionParams p; p.smoke_dissipate_chance = 1.0f;
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Air);
 }
 
@@ -403,7 +403,7 @@ TEST(Combustion, WaterNextToFireBoilsToSteam) {
     g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Fire;
     CombustionParams p; p.boil_chance = 1.0f;
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Steam);   // water boiled
 }
 
@@ -414,7 +414,7 @@ TEST(Combustion, SteamWithoutFireCondensesToWater) {
     g[ca_cell_index(d,1,1,1)] = (uint8_t)VoxMat::Steam;
     CombustionParams p; p.condense_chance = 1.0f;
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Water);   // condensed
 }
 
@@ -426,7 +426,7 @@ TEST(Combustion, SteamNextToFireDoesNotCondense) {
     g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Fire;
     CombustionParams p; p.condense_chance = 1.0f; p.burn_out_chance = 0.0f;
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Steam);   // still heated -> stays
 }
 
@@ -478,7 +478,7 @@ TEST(Combustion, LavaIgnitesAdjacentFuel) {
     g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Lava;
     CombustionParams p; p.ignite_scale = 4.0f;           // 0.4*4 >= 1 -> deterministic ignite
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Fire);
 }
 
@@ -490,7 +490,7 @@ TEST(Combustion, LavaBoilsAdjacentWater) {
     g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Lava;
     CombustionParams p; p.boil_chance = 1.0f; p.cool_chance = 0.0f;  // isolate the water side
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Steam);
 }
 
@@ -502,7 +502,7 @@ TEST(Combustion, LavaCoolsToRockNextToWater) {
     g[ca_cell_index(d,2,1,1)] = (uint8_t)VoxMat::Water;
     CombustionParams p; p.cool_chance = 1.0f; p.boil_chance = 0.0f;  // isolate the lava side
     std::vector<uint32_t> ch;
-    combustion_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
+    contact_sweep(g, d, 0, 7, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Rock);
 }
 
@@ -514,7 +514,7 @@ TEST(Combustion, LavaInAirNeverCools) {
     CombustionParams p; p.cool_chance = 1.0f;            // even at certainty, no water -> no cool
     for (uint32_t s = 0; s < 50; ++s) {
         std::vector<uint32_t> ch;
-        combustion_sweep(g, d, s, 7, p, 0,0,0, 2,2,2, ch);
+        contact_sweep(g, d, s, 7, p, 0,0,0, 2,2,2, ch);
     }
     EXPECT_EQ(g[ca_cell_index(d,1,1,1)], (uint8_t)VoxMat::Lava);
 }
@@ -580,7 +580,7 @@ TEST(Combustion, LavaPourBoilsCondensesAndSleeps) {
     EXPECT_EQ(stranded, 0);
 }
 
-// --- SP3-IV equivalence oracle: the live data-driven combustion_sweep must be
+// --- SP3-IV equivalence oracle: the live data-driven contact_sweep must be
 // byte-identical to the pre-refactor 8-arm logic. `reference_sweep` below is a
 // verbatim copy of that original logic; the test runs both over a seeded mixed
 // grid and asserts identical cells AND changed-lists every step. Default rates
@@ -599,7 +599,7 @@ inline bool ref_is_fuel(uint8_t m) { return vox::material_props((vox::VoxMat)m).
 inline bool ref_is_hot(uint8_t m) {
     return m == (uint8_t)vox::VoxMat::Fire || m == (uint8_t)vox::VoxMat::Lava;
 }
-// Verbatim pre-SP3-IV combustion_sweep (the equivalence oracle).
+// Verbatim pre-SP3-IV contact_sweep (the equivalence oracle).
 void reference_sweep(std::vector<uint8_t>& cells, const vox::MaterialCaDims& d,
                      uint32_t step, uint32_t seed, const vox::CombustionParams& p,
                      int x0, int y0, int z0, int x1, int y1, int z1,
@@ -694,7 +694,7 @@ TEST(Combustion, TableMatchesOriginalArmsOverRandomGrid) {
     for (uint32_t step = 0; step < 64; ++step) {
         std::vector<uint32_t> ca, cb;
         reference_sweep   (a, d, step, seed, p, 0,0,0, d.extent-1, d.height_cells-1, d.extent-1, ca);
-        combustion_sweep  (b, d, step, seed, p, 0,0,0, d.extent-1, d.height_cells-1, d.extent-1, cb);
+        contact_sweep  (b, d, step, seed, p, 0,0,0, d.extent-1, d.height_cells-1, d.extent-1, cb);
         ASSERT_EQ(a, b)   << "cells diverged at step " << step;
         ASSERT_EQ(ca, cb) << "changed-list diverged at step " << step;
     }
