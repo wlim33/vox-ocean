@@ -115,3 +115,93 @@ TEST(App, EnqueuePaintAndDigNoSelectionAreNoops) {
     app.enqueue_dig();
     EXPECT_TRUE(app.drain_pending_edits().empty());
 }
+
+// --- draw-by-default: active tool applied to the voxel under the cursor ---
+
+namespace {
+// Camera aimed steeply down at a 4x4 grid with a Rock floor at y=0, so the
+// centre ray hits the top face (mirrors EnqueuePaintTargetsSelectedCell).
+vox::App make_draw_app(vox::VoxelWorld& grid, std::vector<uint8_t>& mats) {
+    vox::App app{vox::Config{}};
+    app.camera().pitch_rad = 1.45f; app.camera().yaw_rad = 0.0f; app.camera().distance = 10.0f;
+    mats.assign((size_t)grid.cells(), (uint8_t)vox::VoxMat::Air);
+    for (int ix = 0; ix < 4; ++ix)
+        for (int iz = 0; iz < 4; ++iz)
+            mats[grid.cell_index(ix, 0, iz)] = (uint8_t)vox::VoxMat::Rock;
+    return app;
+}
+void push_draw(vox::App& app, float x, float y) {
+    vox::InputBridge bridge;
+    vox::InputEvent e; e.kind = vox::InputKind::Draw; e.x = x; e.y = y; bridge.push(e);
+    app.handle_input(bridge);
+}
+}  // namespace
+
+TEST(App, DrawPaintAppliesActiveMaterialToHitCell) {
+    vox::VoxelWorld grid({4, 4, 1.0f, 1.0f, 2.0f});
+    std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
+    app.set_tool(vox::EditTool::Paint);
+    app.set_material(vox::VoxMat::SandGrain);
+
+    push_draw(app, 50, 50);
+    app.resolve_draw(100, 100, grid, mats.data());
+
+    ASSERT_TRUE(app.selection().has_value());
+    auto edits = app.drain_pending_edits();
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].cell, app.selection()->linear_idx);
+    EXPECT_EQ(edits[0].mat, (uint8_t)vox::VoxMat::SandGrain);
+}
+
+TEST(App, DrawDigSetsHitCellToAir) {
+    vox::VoxelWorld grid({4, 4, 1.0f, 1.0f, 2.0f});
+    std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
+    app.set_tool(vox::EditTool::Dig);
+
+    push_draw(app, 50, 50);
+    app.resolve_draw(100, 100, grid, mats.data());
+
+    ASSERT_TRUE(app.selection().has_value());
+    auto edits = app.drain_pending_edits();
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].cell, app.selection()->linear_idx);
+    EXPECT_EQ(edits[0].mat, (uint8_t)vox::VoxMat::Air);
+}
+
+TEST(App, DrawBuildPlacesMaterialAtNeighbor) {
+    vox::VoxelWorld grid({4, 4, 1.0f, 1.0f, 2.0f});
+    std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
+    app.set_tool(vox::EditTool::Build);
+    app.set_material(vox::VoxMat::Rock);
+
+    push_draw(app, 50, 50);
+    app.resolve_draw(100, 100, grid, mats.data());
+
+    ASSERT_TRUE(app.selection().has_value());
+    ASSERT_TRUE(app.selection()->has_neighbor);
+    auto edits = app.drain_pending_edits();
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].cell, app.selection()->neighbor_idx);
+    EXPECT_EQ(edits[0].mat, (uint8_t)vox::VoxMat::Rock);
+}
+
+TEST(App, DrawMissEnqueuesNothing) {
+    vox::VoxelWorld grid({4, 4, 1.0f, 1.0f, 2.0f});
+    std::vector<uint8_t> mats((size_t)grid.cells(), (uint8_t)vox::VoxMat::Air);  // empty: ray hits nothing
+    vox::App app{vox::Config{}};
+    app.camera().pitch_rad = 1.45f; app.camera().yaw_rad = 0.0f; app.camera().distance = 10.0f;
+    app.set_tool(vox::EditTool::Paint);
+
+    push_draw(app, 50, 50);
+    app.resolve_draw(100, 100, grid, mats.data());
+
+    EXPECT_FALSE(app.selection().has_value());
+    EXPECT_TRUE(app.drain_pending_edits().empty());
+}
+
+TEST(App, DrawDefaultsArePaintRock) {
+    vox::App app{vox::Config{}};
+    EXPECT_EQ(app.tool(), vox::EditTool::Paint);
+    EXPECT_EQ(app.material(), vox::VoxMat::Rock);
+    EXPECT_FALSE(app.has_pending_draw());
+}

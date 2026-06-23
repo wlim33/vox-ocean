@@ -24,6 +24,9 @@ void App::handle_input(InputBridge& b) {
             case InputKind::Pick:
                 pending_pick_ = glm::vec2{e.x, e.y};
                 break;
+            case InputKind::Draw:
+                pending_draw_ = glm::vec2{e.x, e.y};
+                break;
             default: break;
         }
     }
@@ -39,6 +42,22 @@ void App::resolve_pick(int viewport_w, int viewport_h,
     glm::mat4 inv_vp = glm::inverse(camera_.view_proj());
     selection_ = pick(viewport_w, viewport_h, px.x, px.y, inv_vp,
                       camera_.position(), grid, materials, config_.march.max_steps);
+}
+
+void App::resolve_draw(int viewport_w, int viewport_h,
+                       const VoxelWorld& grid, const uint8_t* materials) {
+    if (!pending_draw_) return;
+    glm::vec2 px = *pending_draw_;
+    pending_draw_.reset();
+    glm::mat4 inv_vp = glm::inverse(camera_.view_proj());
+    selection_ = pick(viewport_w, viewport_h, px.x, px.y, inv_vp,
+                      camera_.position(), grid, materials, config_.march.max_steps);
+    if (!selection_) return;
+    switch (tool_) {
+        case EditTool::Paint: enqueue_paint(material_); break;
+        case EditTool::Dig:   enqueue_dig();            break;
+        case EditTool::Build: enqueue_build(material_); break;
+    }
 }
 
 void App::enqueue_build(VoxMat m) {
