@@ -180,27 +180,33 @@ TEST(Fish, SameSpeciesFlocksTowardNeighborsWithoutOverlap) {
 }
 
 // A small-species (Minnow) fish steers away from a large-species (Predator)
-// presence placed nearby.
+// presence placed nearby. Compared against a no-predator control run to ensure
+// active avoidance (not just incidental position).
 TEST(Fish, MinnowAvoidsPredatorPresence) {
     Config c = fish_cfg();
     c.fish.school_count = 1; c.fish.per_school = 1;
     World calm; calm.configure(c);
-    FishSchools minnow(Species_Minnow); minnow.rebuild(c, calm);
-    CreatureRegistry with_pred, without;
 
-    // First tick to get a position.
-    { auto ctx = make_ctx(c, calm, without, 1.0f/60.0f, 0.0f); minnow.update(ctx); }
-    glm::vec3 start = minnow.fish()[0].pos;
+    // Two identical schools: one sees a predator, one sees nothing.
+    FishSchools with_predator(Species_Minnow); with_predator.rebuild(c, calm);
+    FishSchools control(Species_Minnow);       control.rebuild(c, calm);
+    CreatureRegistry pred_reg, empty_reg;
 
-    // Place a large-species presence ~2m ahead along +x.
-    for (int i = 1; i < 40; ++i) {
-        with_pred.clear();
-        with_pred.add(CreaturePresence{ {start.x + 2.0f, start.y, start.z}, 0.0f, Species_Predator, 1 });
-        auto ctx = make_ctx(c, calm, with_pred, 1.0f/60.0f, i/60.0f);
-        minnow.update(ctx);
+    // Tick 0: resolve initial position (same for both, deterministic rebuild).
+    { auto ctx = make_ctx(c, calm, empty_reg, 1.0f/60.0f, 0.0f); with_predator.update(ctx); }
+    { auto ctx = make_ctx(c, calm, empty_reg, 1.0f/60.0f, 0.0f); control.update(ctx); }
+    glm::vec3 start = with_predator.fish()[0].pos;
+
+    // Ticks 1-79: with_predator sees a predator at start.x+2; control sees nothing.
+    for (int i = 1; i < 80; ++i) {
+        pred_reg.clear();
+        pred_reg.add(CreaturePresence{ {start.x + 2.0f, start.y, start.z}, 0.0f, Species_Predator, 1 });
+        { auto ctx = make_ctx(c, calm, pred_reg, 1.0f/60.0f, i/60.0f); with_predator.update(ctx); }
+        { auto ctx = make_ctx(c, calm, empty_reg, 1.0f/60.0f, i/60.0f); control.update(ctx); }
     }
-    // It should end up with a smaller x than the predator (moved away from +x).
-    EXPECT_LT(minnow.fish()[0].pos.x, start.x + 2.0f);
+    // The minnow that saw the predator must end up at a strictly smaller x than the
+    // control minnow — it actively steered away relative to the no-predator baseline.
+    EXPECT_LT(with_predator.fish()[0].pos.x, control.fish()[0].pos.x);
 }
 
 // Per-fish boldness is seeded at rebuild and is not uniform across individuals.
@@ -260,4 +266,36 @@ TEST(Fish, EatsKelpOnContactEmitsDurableEdit) {
     for (size_t k = 0; k < ed.idx.size(); ++k)
         if (ed.mat[k] == (uint8_t)VoxMat::Water) cleared = true;
     EXPECT_TRUE(cleared) << "Expected at least one edit setting VoxMat::Water";
+}
+
+// Fish over too-shallow water are invisible and must neither stamp occupancy cells
+// nor publish their presence.  This pins the !visible gate across both channels.
+TEST(Fish, ShallowWaterFishNeitherStampsNorPublishes) {
+    Config c = fish_cfg();
+    World w; w.configure(c);
+    FishSchools fh; fh.rebuild(c, w);
+
+    // water_surface returns a y so close to the floor that depth < kMinDepthCells * height_step_m
+    // everywhere.  With base_depth_m=10 and height_cells=64, the highest possible floor y is
+    // -10 + 64*0.25 = 6.0m; returning -9.9f gives depth <= 0.1m < 0.75m threshold for all cells.
+    auto shallow_surf = [](float, float) { return -9.9f; };
+
+    CreatureRegistry reg;
+    CreatureCtx ctx{ c, 1.0f/60.0f, 0.0f, w, w.grid(), shallow_surf, reg };
+    fh.update(ctx);
+
+    // Pre-condition: at least one fish must be invisible (i.e. the shallow gate fired).
+    bool any_invisible = false;
+    for (const auto& f : fh.fish()) if (!f.visible) { any_invisible = true; break; }
+    ASSERT_TRUE(any_invisible) << "No invisible fish — shallow_surf lambda did not trigger the gate";
+
+    // Channel 1: act() must produce zero occupancy cells.
+    StampList occ; EditList ed; CreatureActs acts{occ, ed};
+    fh.act(w.grid(), acts);
+    EXPECT_EQ(occ.count(), 0) << "Invisible fish stamped occupancy cells";
+
+    // Channel 2: publish_presence() must add zero entries.
+    CreatureRegistry pub;
+    fh.publish_presence(pub);
+    EXPECT_EQ(pub.size(), 0) << "Invisible fish published presence";
 }

@@ -39,6 +39,7 @@ private:
     std::vector<int>         school_of_;
     std::vector<float>       bob_phase_;
     std::vector<float>       boldness_;
+    std::vector<float>       school_boldness_;   // per-school mean boldness, precomputed in rebuild
     std::vector<Fish>        fish_;
     mutable std::vector<std::pair<uint32_t,uint8_t>> pending_edits_;  // kelp eaten this frame
 };

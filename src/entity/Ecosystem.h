@@ -27,7 +27,7 @@ public:
     // Advance boat + fish; refresh kelp sway. water_height = surface water y.
     void update(const Config& cfg, float dt, float t, const HeightFn& water_height,
                 const World& world);
-    // Append kelp, creatures, fish, then boat (boat last -> wins overlaps).
+    // Append kelp, then creatures (fish), then boat (boat last -> wins overlaps).
     void build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out);
     void add_creature(std::unique_ptr<ICreature> c);
     EditList& edits() { return creature_edits_; }

@@ -61,7 +61,8 @@ struct FishConfig {
     float depth_frac       = 0.5f;     // 0=floor .. 1=surface, clamp [0,1]
     float spread_m         = 2.5f;     // school formation radius, clamp [0,20]
     int   seed             = 202;
-    bool  predator_enabled = false;    // off by default — existing scenes unchanged
+    bool  predator_enabled = false;    // adds a 2nd (predator) species; flocking/sensing
+                                       // are always active for fish regardless of this flag
 };
 
 struct SandConfig {

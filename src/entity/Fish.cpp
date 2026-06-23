@@ -39,7 +39,7 @@ glm::vec2 FishSchools::steer(glm::vec2 fwd, glm::vec2 hazard, glm::vec2 food,
 }
 
 void FishSchools::rebuild(const Config& cfg, const World& /*world*/) {
-    centroids_.clear(); offset_.clear(); school_of_.clear(); bob_phase_.clear(); boldness_.clear(); fish_.clear();
+    centroids_.clear(); offset_.clear(); school_of_.clear(); bob_phase_.clear(); boldness_.clear(); school_boldness_.clear(); fish_.clear();
     if (!cfg.fish.enabled) return;
     int S = cfg.fish.school_count, per = cfg.fish.per_school;
     uint32_t seed = (uint32_t)cfg.fish.seed ^ ((uint32_t)species_ << 16);
@@ -60,18 +60,23 @@ void FishSchools::rebuild(const Config& cfg, const World& /*world*/) {
         }
     }
     fish_.resize(offset_.size());
+
+    // Precompute per-school mean boldness (boldness is seeded once and never changes).
+    school_boldness_.assign(centroids_.size(), 0.0f);
+    std::vector<int> school_counts(centroids_.size(), 0);
+    for (size_t i = 0; i < school_of_.size(); ++i) {
+        int s = school_of_[i];
+        school_boldness_[(size_t)s] += boldness_[i];
+        ++school_counts[(size_t)s];
+    }
+    for (size_t s = 0; s < centroids_.size(); ++s)
+        school_boldness_[s] = school_counts[s] > 0 ? school_boldness_[s] / (float)school_counts[s] : 0.5f;
 }
 
 void FishSchools::update(const CreatureCtx& ctx) {
     if (fish_.empty()) return;
     const Config& cfg = ctx.cfg;
     float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
-    auto school_mean_boldness = [&](int s)->float {
-        float sum = 0.0f; int n = 0;
-        for (size_t i = 0; i < school_of_.size(); ++i)
-            if (school_of_[i] == s) { sum += boldness_[i]; ++n; }
-        return n ? sum / n : 0.5f;
-    };
     for (size_t s = 0; s < centroids_.size(); ++s) {
         WanderState& c = centroids_[s];
         wander_step(c, ctx.dt, ctx.t, cfg.fish.speed_mps, half);
@@ -111,7 +116,7 @@ void FishSchools::update(const CreatureCtx& ctx) {
             cohesion /= (float)same; alignment /= (float)same;
             flock = cohesion * 0.6f + alignment * 0.3f + separation * 1.0f;
         }
-        float boldness = school_mean_boldness((int)s);
+        float boldness = school_boldness_.empty() ? 0.5f : school_boldness_[s];
         glm::vec2 bias = steer(fwd, hazard, food, flock, avoid, boldness);
         glm::vec2 nf = fwd + bias * ctx.dt * cfg.fish.speed_mps;
         float nlen = std::sqrt(nf.x*nf.x + nf.y*nf.y);
