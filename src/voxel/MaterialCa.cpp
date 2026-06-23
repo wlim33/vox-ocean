@@ -37,6 +37,12 @@ inline bool is_reactive_cell(const std::vector<uint8_t>& cells, const MaterialCa
     if (m == (uint8_t)VoxMat::Lava) return is_water_adjacent(cells, d, x, y, z);
     return false;
 }
+// A cell whose temperature is off ambient must keep the box awake so heat keeps
+// diffusing (and eventually snaps back to ambient, letting the box sleep).
+inline bool temp_active(const std::vector<uint8_t>& temp, const MaterialCaDims& d,
+                        int x, int y, int z, uint8_t ambient) {
+    return temp[ca_cell_index(d, x, y, z)] != ambient;
+}
 }
 
 // Density-ordered settle within one 2x2x2 block; ids in `mat`, local = lx+2*ly+4*lz, ly=0 lower.
@@ -84,7 +90,18 @@ void MaterialCa::wake_box(int x0, int y0, int z0, int x1, int y1, int z1) {
 
 void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                       std::vector<uint32_t>& changed) {
+    // Non-thermal callers forward to the thermal body with an unused buffer; thermal_
+    // is false here so `temp` is never read.
+    std::vector<uint8_t> unused;
+    step(cells, unused, d, changed);
+}
+
+void MaterialCa::step(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
+                      const MaterialCaDims& d, std::vector<uint32_t>& changed) {
     if (!awake()) return;
+    if (thermal_)
+        thermal_sweep(cells, temp, d, tparams_, ambient_,
+                      ax0_, ay0_, az0_, ax1_, ay1_, az1_, changed);
     if (combustion_)
         combustion_sweep(cells, d, (uint32_t)phase_, seed_, cparams_,
                          ax0_, ay0_, az0_, ax1_, ay1_, az1_, changed);
@@ -103,12 +120,15 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     // When combustion is enabled, reactive materials (Fire, Smoke) in the active box
     // will eventually change but may not on any given step due to stochastic rates.
     // Scan the box so a lucky run of no-RNG-fires doesn't prematurely sleep the CA.
+    // Heat in flight keeps the box awake too: a cell off ambient must keep diffusing.
     bool reactive_present = false;
-    if (combustion_ && changed.empty()) {
+    if ((combustion_ || thermal_) && changed.empty()) {
         for (int iz = az0_; iz <= az1_ && !reactive_present; ++iz)
             for (int iy = ay0_; iy <= ay1_ && !reactive_present; ++iy)
                 for (int ix = ax0_; ix <= ax1_ && !reactive_present; ++ix)
-                    if (is_reactive_cell(cells, d, ix, iy, iz)) reactive_present = true;
+                    if ((combustion_ && is_reactive_cell(cells, d, ix, iy, iz)) ||
+                        (thermal_ && temp_active(temp, d, ix, iy, iz, ambient_)))
+                        reactive_present = true;
     }
     if (changed.empty() && !reactive_present) {
         if (++quiet_ >= 4) clear_box();
@@ -130,11 +150,12 @@ void MaterialCa::step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
     // When combustion is active, scan the OLD box for Fire/Smoke that may not have
     // generated changes this step (stochastic rates) and fold them into the new box
     // so they remain covered on future steps.
-    if (combustion_) {
+    if (combustion_ || thermal_) {
         for (int iz = z0; iz <= z1; ++iz)
             for (int iy = y0; iy <= y1; ++iy)
                 for (int ix = x0; ix <= x1; ++ix)
-                    if (is_reactive_cell(cells, d, ix, iy, iz)) {
+                    if ((combustion_ && is_reactive_cell(cells, d, ix, iy, iz)) ||
+                        (thermal_ && temp_active(temp, d, ix, iy, iz, ambient_))) {
                         nx0 = std::min(nx0, ix - 1); nx1 = std::max(nx1, ix + 1);
                         ny0 = std::min(ny0, iy - 1); ny1 = std::max(ny1, iy + 1);
                         nz0 = std::min(nz0, iz - 1); nz1 = std::max(nz1, iz + 1);

@@ -78,6 +78,8 @@ void World::configure(const Config& cfg) {
                             cfg.fire.smoke_dissipate_chance, cfg.fire.ignite_scale,
                             cfg.fire.boil_chance, cfg.fire.condense_chance,
                             cfg.lava.cool_chance });
+    ca_.enable_thermal({}, kAmbientTemp);   // default ThermalParams; ambient baseline
+
     resync_ = true;
     prev_overlay_cells_.clear();
 
@@ -204,7 +206,7 @@ void World::step(const Config& cfg, float /*dt*/, const StampList& entities, Edi
 
     // 1. Advance the CA over material_ (dynamic sand only).
     std::vector<uint32_t> ca_changed;
-    if (ca_.awake()) ca_.step(material_, dims_, ca_changed);
+    if (ca_.awake()) ca_.step(material_, temp_, dims_, ca_changed);
 
     // 2. Dirty union: CA changes ∪ last frame's overlay ∪ this frame's overlay.
     dirty_.clear();

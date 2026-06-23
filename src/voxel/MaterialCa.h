@@ -71,13 +71,20 @@ void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
 // cells that changed (±1) and empties when nothing moves.
 class MaterialCa {
 public:
-    void reset() { phase_ = 0; quiet_ = 0; clear_box(); combustion_ = false; }
+    void reset() { phase_ = 0; quiet_ = 0; clear_box(); combustion_ = false; thermal_ = false; }
     void wake_box(int x0, int y0, int z0, int x1, int y1, int z1);
+    // Non-thermal step (no heat field). Requires thermal disabled.
     void step(std::vector<uint8_t>& cells, const MaterialCaDims& d,
               std::vector<uint32_t>& changed);
+    // Thermal step: diffuses `temp` and lets non-ambient heat keep the box awake.
+    void step(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
+              const MaterialCaDims& d, std::vector<uint32_t>& changed);
     bool awake() const { return ax1_ >= ax0_ && ay1_ >= ay0_ && az1_ >= az0_; }
     void enable_combustion(uint32_t seed, CombustionParams p) {
         combustion_ = true; seed_ = seed; cparams_ = p;
+    }
+    void enable_thermal(ThermalParams tp, uint8_t ambient) {
+        thermal_ = true; tparams_ = tp; ambient_ = ambient;
     }
 private:
     void clear_box() { ax0_ = ay0_ = az0_ = 1; ax1_ = ay1_ = az1_ = 0; }  // empty (min>max)
@@ -87,5 +94,8 @@ private:
     bool combustion_ = false;
     uint32_t seed_ = 0;
     CombustionParams cparams_{};
+    bool thermal_ = false;
+    uint8_t ambient_ = 0;
+    ThermalParams tparams_{};
 };
 }

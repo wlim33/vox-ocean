@@ -292,3 +292,19 @@ TEST(World, TemperatureArrayMatchesMaterialAndStartsAmbient) {
     EXPECT_EQ(w.temperature().size(), w.material().size());
     for (uint8_t t : w.temperature()) EXPECT_EQ(t, vox::kAmbientTemp);
 }
+
+TEST(World, HeatDiffusesButEditListCarriesNoTempOnlyChanges) {
+    vox::Config c = small_cfg();
+    vox::World w; w.configure(c);
+    vox::EditList out; vox::StampList none;
+    w.step(c, 0.f, none, out);                   // consume the resync frame
+    const auto& g = w.grid();
+    int hc = g.params().height_cells;
+    uint32_t src = (uint32_t)g.cell_index(8, hc - 2, 8);
+    uint32_t nbr = (uint32_t)g.cell_index(8, hc - 3, 8);  // directly below source
+    w.apply_user_edit(src, (uint8_t)vox::VoxMat::Lava);
+    for (int s = 0; s < 6; ++s) { out.clear(); w.step(c, 0.f, none, out); }
+    EXPECT_GT(w.temperature()[nbr], vox::kAmbientTemp);   // heat reached the neighbour
+    for (size_t i = 0; i < out.idx.size(); ++i)           // edits mirror material, never temp
+        EXPECT_EQ(out.mat[i], w.material()[out.idx[i]]);
+}
