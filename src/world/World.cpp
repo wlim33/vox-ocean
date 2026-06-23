@@ -210,17 +210,17 @@ void World::step(const Config& cfg, float /*dt*/, const StampList& entities, Edi
     dirty_.erase(std::unique(dirty_.begin(), dirty_.end()), dirty_.end());
 
     // 3. One composited edit per dirty cell: entity material if occupied, else material_.
-    //    Build the current overlay lookup once (last writer wins).
-    auto overlay_at = [&](uint32_t cell, uint8_t& mat) -> bool {
-        bool hit = false;
-        for (size_t i = 0; i < overlay_cells_.size(); ++i)
-            if (overlay_cells_[i] == cell) { mat = overlay_mats_[i]; hit = true; }  // last wins
-        return hit;
-    };
+    //    Build the overlay lookup ONCE (last writer wins), then resolve each dirty
+    //    cell in O(1). The previous form scanned overlay_cells_ per dirty cell, so
+    //    the pass was O(dirty x overlay) — quadratic in the entity count, which the
+    //    kelp bed (hundreds of stalks x ~12 cells) blew up to ~170 ms/frame.
+    overlay_lut_.clear();
+    for (size_t i = 0; i < overlay_cells_.size(); ++i)
+        overlay_lut_[overlay_cells_[i]] = overlay_mats_[i];  // last writer wins
     for (uint32_t cell : dirty_) {
         if (cell >= material_.size()) continue;     // ignore out-of-range overlay cells
-        uint8_t mat;
-        out.push(cell, overlay_at(cell, mat) ? mat : material_[cell]);
+        auto it = overlay_lut_.find(cell);
+        out.push(cell, it != overlay_lut_.end() ? it->second : material_[cell]);
     }
 
     // 4. Roll the overlay forward.

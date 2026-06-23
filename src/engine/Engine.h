@@ -17,6 +17,7 @@ void engine_resize(Engine* e, int width, int height);
 void engine_render(Engine* e);                        // call from MTKViewDelegate.draw
 void engine_push_input(Engine* e, InputEvent ev);
 bool engine_bench_should_exit(Engine* e);
+bool engine_wants_mouse(Engine* e);   // true when ImGui is capturing the cursor
 
 // Headless: render orthographic axis views of the settled scene to a contact-
 // sheet PNG (and optional per-view PNGs), then return 0 on success. Creates and

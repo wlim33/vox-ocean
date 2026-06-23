@@ -29,6 +29,10 @@ final class EngineRenderer: NSObject, MTKViewDelegate {
         guard let e = engine else { return }
         vox.engine_push_input(e, ev)
     }
+    func wantsMouse() -> Bool {
+        guard let e = engine else { return false }
+        return vox.engine_wants_mouse(e)
+    }
     func draw(in view: MTKView) {
         guard let e = engine else { return }
         vox.engine_render(e)

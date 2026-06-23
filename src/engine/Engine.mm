@@ -26,6 +26,8 @@
 #include "render/RendererFactory.h"
 #include "ui/ImGuiBackend.h"
 #include "ui/DebugPanel.h"
+#include "ui/ToolPalette.h"
+#include "imgui.h"
 #include "bench/BenchmarkHarness.h"
 #include "bench/BenchCameraPath.h"
 #import <MetalKit/MetalKit.h>
@@ -127,6 +129,10 @@ void engine_resize(Engine* e, int w, int h) {
 void engine_push_input(Engine* e, InputEvent ev) { e->input.push(ev); }
 bool engine_bench_should_exit(Engine* e) { return e->bench.should_exit(); }
 
+bool engine_wants_mouse(Engine* e) {
+    return e->imgui_ready && ImGui::GetIO().WantCaptureMouse;
+}
+
 // CPU-only work: evolve the simulation and voxelize the world into e->frame.
 // Camera-independent. `sim_time` is absolute seconds; `dt` is the step.
 // Shared by the live render loop and the headless snapshot.
@@ -202,7 +208,7 @@ void engine_render(Engine* e) {
     e->app->update();
 
     const bool ui = e->imgui_ready;
-    if (ui) { e->imgui.begin_frame((__bridge void*)view); draw_debug_panel(*e->app); }
+    if (ui) { e->imgui.begin_frame((__bridge void*)view); draw_debug_panel(*e->app); draw_tool_palette(*e->app); }
 
     CGSize dsz = view.drawableSize;
     e->renderer->resize(e->ctx, (int)dsz.width, (int)dsz.height, e->app->config());
@@ -212,9 +218,13 @@ void engine_render(Engine* e) {
     build_frame(e, sim_time, dt);
     consume_frame(e, cb);
 
-    if (e->world.configured() && e->app->has_pending_pick())
-        e->app->resolve_pick((int)dsz.width, (int)dsz.height,
-                             e->world.grid(), e->world.materialize_composite().data());
+    if (e->world.configured() && (e->app->has_pending_pick() || e->app->has_pending_draw())) {
+        const uint8_t* mats = e->world.materialize_composite().data();
+        if (e->app->has_pending_pick())
+            e->app->resolve_pick((int)dsz.width, (int)dsz.height, e->world.grid(), mats);
+        if (e->app->has_pending_draw())
+            e->app->resolve_draw((int)dsz.width, (int)dsz.height, e->world.grid(), mats);
+    }
 
     CameraView cam = e->app->camera().camera_view();
     cam.selected_cell = e->app->selection() ? (int)e->app->selection()->linear_idx : -1;
