@@ -66,12 +66,16 @@ void World::configure(const Config& cfg) {
     seed_bubble(cfg);       // submerged gas blob (rises on wake)
     seed_fire(cfg);         // ignite a region (no-op when disabled)
     seed_lava(cfg);         // lava blob above the waterline (sinks on wake)
-    if (cfg.fire.enabled || cfg.lava.enabled)
-        ca_.enable_combustion((uint32_t)cfg.voxel.floor_seed,
-                              { cfg.fire.burn_out_chance, cfg.fire.smoke_chance,
-                                cfg.fire.smoke_dissipate_chance, cfg.fire.ignite_scale,
-                                cfg.fire.boil_chance, cfg.fire.condense_chance,
-                                cfg.lava.cool_chance });
+    // Always enable combustion, not just for seeded fire/lava scenes: the user can
+    // *draw* lava/water/fire at any time via apply_user_edit, and those interactions
+    // (lava+water->rock/steam, ignition, ...) must still fire. combustion_sweep is a
+    // no-op whenever the awake box holds no reactive material, and the CA pays nothing
+    // while asleep, so this only costs work during active simulation.
+    ca_.enable_combustion((uint32_t)cfg.voxel.floor_seed,
+                          { cfg.fire.burn_out_chance, cfg.fire.smoke_chance,
+                            cfg.fire.smoke_dissipate_chance, cfg.fire.ignite_scale,
+                            cfg.fire.boil_chance, cfg.fire.condense_chance,
+                            cfg.lava.cool_chance });
     resync_ = true;
     prev_overlay_cells_.clear();
 

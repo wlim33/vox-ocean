@@ -237,6 +237,46 @@ TEST(World, ApplyUserEditEmitsEditAndUpdatesMaterial) {
     EXPECT_TRUE(found);                                      // the user edit reached the EditList
 }
 
+TEST(World, DrawnLavaReactsWithWaterEvenWhenLavaConfigDisabled) {
+    using namespace vox;
+    Config c = small_cfg();                 // fire AND lava disabled by default
+    World w; w.configure(c);
+    const auto& g = w.grid();
+    int extent = g.params().extent, hc = g.params().height_cells;
+    MaterialCaDims d{extent, hc};
+
+    StampList empty;
+    EditList e0; w.step(c, 1.0f / 60, empty, e0); ASSERT_TRUE(e0.resync);
+
+    // Find a submerged Water cell (a Water cell with a Water face-neighbour) so the
+    // lava we place is guaranteed adjacent to water.
+    auto is_water = [&](int x, int y, int z) {
+        return x >= 0 && x < extent && y >= 0 && y < hc && z >= 0 && z < extent &&
+               w.material()[ca_cell_index(d, x, y, z)] == (uint8_t)VoxMat::Water;
+    };
+    int tx = -1, ty = -1, tz = -1;
+    for (int z = 0; z < extent && tx < 0; ++z)
+        for (int y = 0; y < hc && tx < 0; ++y)
+            for (int x = 0; x < extent && tx < 0; ++x)
+                if (is_water(x, y, z) &&
+                    (is_water(x+1,y,z) || is_water(x-1,y,z) || is_water(x,y+1,z) ||
+                     is_water(x,y-1,z) || is_water(x,y,z+1) || is_water(x,y,z-1)))
+                    { tx = x; ty = y; tz = z; }
+    ASSERT_GE(tx, 0) << "expected submerged water in the default scene";
+
+    w.apply_user_edit((uint32_t)g.cell_index(tx, ty, tz), (uint8_t)VoxMat::Lava);
+
+    // Combustion must be wired for interactive edits: water next to the drawn lava
+    // boils to Steam. Without it, the reaction never fires and no steam appears.
+    bool saw_steam = false;
+    for (int i = 0; i < 800 && !saw_steam; ++i) {
+        EditList ei; w.step(c, 1.0f / 60, empty, ei);
+        if (std::count(w.material().begin(), w.material().end(), (uint8_t)VoxMat::Steam) > 0)
+            saw_steam = true;
+    }
+    EXPECT_TRUE(saw_steam) << "drawn lava did not react with adjacent water";
+}
+
 TEST(World, ApplyUserEditWakesCaForDynamicMaterial) {
     vox::Config c = small_cfg();
     vox::World w; w.configure(c);
