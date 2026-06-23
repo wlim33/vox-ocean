@@ -155,6 +155,68 @@ TEST(Fish, FleesNearbyHazard) {
     EXPECT_GT(d2xz(fh.fish()[0].pos), d2xz(fc.fish()[0].pos));
 }
 
+// Two lone same-species fish within sensing range drift toward each other
+// (cohesion) but never collapse to the same cell (separation).
+TEST(Fish, SameSpeciesFlocksTowardNeighborsWithoutOverlap) {
+    Config c = fish_cfg();
+    c.fish.school_count = 2; c.fish.per_school = 1; c.fish.spread_m = 1.0f;
+    // Use a small grid so the two centroids are close enough to fall within kSenseRadiusM=4m.
+    c.voxel.grid_extent = 16;
+    World w; w.configure(c);
+    FishSchools fh; fh.rebuild(c, w);
+    CreatureRegistry reg;
+    float start = -1.0f, end = -1.0f;
+    auto sep = [&](){ const auto& a = fh.fish()[0].pos; const auto& b = fh.fish()[1].pos;
+                      float dx=a.x-b.x, dz=a.z-b.z; return std::sqrt(dx*dx+dz*dz); };
+    {   auto ctx = make_ctx(c, w, reg, 1.0f/60.0f, 0.0f); fh.update(ctx); start = sep(); }
+    for (int i = 1; i < 120; ++i) {
+        reg.clear(); fh.publish_presence(reg);   // emulate Ecosystem publish pass
+        auto ctx = make_ctx(c, w, reg, 1.0f/60.0f, i/60.0f);
+        fh.update(ctx);
+    }
+    end = sep();
+    EXPECT_LT(end, start);          // cohesion pulled them closer
+    EXPECT_GT(end, 0.1f);           // separation kept them apart
+}
+
+// A small-species (Minnow) fish steers away from a large-species (Predator)
+// presence placed nearby.
+TEST(Fish, MinnowAvoidsPredatorPresence) {
+    Config c = fish_cfg();
+    c.fish.school_count = 1; c.fish.per_school = 1;
+    World calm; calm.configure(c);
+    FishSchools minnow(Species_Minnow); minnow.rebuild(c, calm);
+    CreatureRegistry with_pred, without;
+
+    // First tick to get a position.
+    { auto ctx = make_ctx(c, calm, without, 1.0f/60.0f, 0.0f); minnow.update(ctx); }
+    glm::vec3 start = minnow.fish()[0].pos;
+
+    // Place a large-species presence ~2m ahead along +x.
+    for (int i = 1; i < 40; ++i) {
+        with_pred.clear();
+        with_pred.add(CreaturePresence{ {start.x + 2.0f, start.y, start.z}, 0.0f, Species_Predator, 1 });
+        auto ctx = make_ctx(c, calm, with_pred, 1.0f/60.0f, i/60.0f);
+        minnow.update(ctx);
+    }
+    // It should end up with a smaller x than the predator (moved away from +x).
+    EXPECT_LT(minnow.fish()[0].pos.x, start.x + 2.0f);
+}
+
+// Per-fish boldness is seeded at rebuild and is not uniform across individuals.
+TEST(Fish, BoldnessVariesWithinSpecies) {
+    Config c = fish_cfg();
+    c.fish.school_count = 1; c.fish.per_school = 64;
+    World w; w.configure(c);
+    FishSchools fh; fh.rebuild(c, w);
+    // boldness array is per-fish; assert it is not uniform.
+    const std::vector<float>& b = fh.boldness_for_test();
+    ASSERT_GE(b.size(), 2u);
+    bool varied = false;
+    for (size_t i = 1; i < b.size(); ++i) if (std::abs(b[i] - b[0]) > 1e-3f) varied = true;
+    EXPECT_TRUE(varied);
+}
+
 // A visible fish whose body cell overlaps Kelp emits a durable edit clearing that cell to Water.
 TEST(Fish, EatsKelpOnContactEmitsDurableEdit) {
     // Use a full multi-fish config so at least one fish is likely visible.

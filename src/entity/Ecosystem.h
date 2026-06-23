@@ -46,5 +46,6 @@ private:
     bool  built_fish_enabled_ = false;
     int   built_school_count_ = -1, built_per_school_ = -1, built_fish_seed_ = 0;
     float built_fish_spread_ = -1.0f;
+    bool  built_fish_predator_ = false;
 };
 }

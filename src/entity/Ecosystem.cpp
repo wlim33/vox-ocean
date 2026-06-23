@@ -29,22 +29,29 @@ void Ecosystem::rebuild_if_dirty(const Config& cfg, const World& world) {
         built_kelp_seed_    = cfg.kelp.seed;
         built_kelp_step_    = cfg.voxel.height_step_m;
     }
-    if (cfg.fish.enabled         != built_fish_enabled_
-        || cfg.fish.school_count != built_school_count_
-        || cfg.fish.per_school   != built_per_school_
-        || cfg.fish.seed         != built_fish_seed_
-        || cfg.fish.spread_m     != built_fish_spread_) {
+    if (cfg.fish.enabled              != built_fish_enabled_
+        || cfg.fish.school_count      != built_school_count_
+        || cfg.fish.per_school        != built_per_school_
+        || cfg.fish.seed              != built_fish_seed_
+        || cfg.fish.spread_m          != built_fish_spread_
+        || cfg.fish.predator_enabled  != built_fish_predator_) {
         creatures_.clear();
         if (cfg.fish.enabled) {
-            auto minnow = std::make_unique<FishSchools>(Species_Minnow);
+            auto minnow = std::make_unique<FishSchools>(Species_Minnow, /*size*/0);
             minnow->rebuild(cfg, world);
             creatures_.push_back(std::move(minnow));
+            if (cfg.fish.predator_enabled) {
+                auto pred = std::make_unique<FishSchools>(Species_Predator, /*size*/1);
+                pred->rebuild(cfg, world);
+                creatures_.push_back(std::move(pred));
+            }
         }
-        built_fish_enabled_ = cfg.fish.enabled;
-        built_school_count_ = cfg.fish.school_count;
-        built_per_school_   = cfg.fish.per_school;
-        built_fish_seed_    = cfg.fish.seed;
-        built_fish_spread_  = cfg.fish.spread_m;
+        built_fish_enabled_   = cfg.fish.enabled;
+        built_school_count_   = cfg.fish.school_count;
+        built_per_school_     = cfg.fish.per_school;
+        built_fish_seed_      = cfg.fish.seed;
+        built_fish_spread_    = cfg.fish.spread_m;
+        built_fish_predator_  = cfg.fish.predator_enabled;
     }
 }
 

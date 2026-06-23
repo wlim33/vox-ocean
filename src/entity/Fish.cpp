@@ -24,16 +24,22 @@ bool is_hazard(VoxMat m) {
 constexpr float kSenseRadiusM = 4.0f;
 }
 
-glm::vec2 FishSchools::steer(glm::vec2 fwd, glm::vec2 hazard, glm::vec2 food, float boldness) {
-    // Provisional arbitration (finalized in Task 6): hazard repels hardest,
-    // food attracts, scaled by boldness (bold fish react less). Returned vector
-    // is added to the centroid heading direction by the caller.
-    glm::vec2 v = hazard * (2.0f - boldness) + food * (0.5f + boldness);
-    return v;
+glm::vec2 FishSchools::steer(glm::vec2 fwd, glm::vec2 hazard, glm::vec2 food,
+                             glm::vec2 flock, glm::vec2 avoid, float boldness) {
+    // === STEERING ARBITRATION — tune this to shape emergent behavior ===
+    // Inputs are unit-ish direction vectors in the xz-plane (may be zero):
+    //   fwd     current heading           hazard  away-from-danger
+    //   food    toward-kelp               flock   sep/align/cohere (same species)
+    //   avoid   away-from-larger-species  boldness in [0,1] (bold = reacts less)
+    // TODO(you): replace this gated-blend default with your preferred policy
+    //   (strict priority / weighted blend / gated blend). ~5-10 lines.
+    glm::vec2 hard = hazard * (2.0f - boldness) + avoid * (1.5f - boldness);
+    glm::vec2 soft = food * (0.5f + boldness) + flock;
+    return hard + soft * 0.5f;
 }
 
 void FishSchools::rebuild(const Config& cfg, const World& /*world*/) {
-    centroids_.clear(); offset_.clear(); school_of_.clear(); bob_phase_.clear(); fish_.clear();
+    centroids_.clear(); offset_.clear(); school_of_.clear(); bob_phase_.clear(); boldness_.clear(); fish_.clear();
     if (!cfg.fish.enabled) return;
     int S = cfg.fish.school_count, per = cfg.fish.per_school;
     uint32_t seed = (uint32_t)cfg.fish.seed ^ ((uint32_t)species_ << 16);
@@ -50,6 +56,7 @@ void FishSchools::rebuild(const Config& cfg, const World& /*world*/) {
                                 (h01(fk, 4u, seed) * 2.0f - 1.0f) * cfg.fish.spread_m });
             school_of_.push_back(s);
             bob_phase_.push_back(h01(fk, 5u, seed) * 6.2831853f);
+            boldness_.push_back(h01(fk, 6u, seed));
         }
     }
     fish_.resize(offset_.size());
@@ -59,6 +66,12 @@ void FishSchools::update(const CreatureCtx& ctx) {
     if (fish_.empty()) return;
     const Config& cfg = ctx.cfg;
     float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
+    auto school_mean_boldness = [&](int s)->float {
+        float sum = 0.0f; int n = 0;
+        for (size_t i = 0; i < school_of_.size(); ++i)
+            if (school_of_[i] == s) { sum += boldness_[i]; ++n; }
+        return n ? sum / n : 0.5f;
+    };
     for (size_t s = 0; s < centroids_.size(); ++s) {
         WanderState& c = centroids_[s];
         wander_step(c, ctx.dt, ctx.t, cfg.fish.speed_mps, half);
@@ -78,8 +91,28 @@ void FishSchools::update(const CreatureCtx& ctx) {
             float len = std::sqrt(to.x*to.x + to.y*to.y);
             if (len > 1e-3f) food = to / len;
         }
-        float boldness = h01((uint32_t)s, 9u, (uint32_t)cfg.fish.seed ^ ((uint32_t)species_ << 16));
-        glm::vec2 bias = steer(fwd, hazard, food, boldness);
+        glm::vec2 flock{0.0f}, avoid{0.0f};
+        glm::vec2 cohesion{0.0f}, alignment{0.0f}, separation{0.0f};
+        int same = 0;
+        ctx.for_each_neighbor(cpos, kSenseRadiusM, [&](const CreaturePresence& n) {
+            glm::vec2 d{ n.pos.x - cpos.x, n.pos.z - cpos.z };
+            float dist = std::sqrt(d.x*d.x + d.y*d.y);
+            if (dist < 1e-3f) return;
+            if (n.species_id == species_) {
+                cohesion += d / dist;
+                alignment += glm::vec2{ std::cos(n.yaw), std::sin(n.yaw) };
+                if (dist < 1.0f) separation -= d / (dist * dist);
+                ++same;
+            } else if (n.trait_bits > size_class_) {     // larger species
+                avoid -= d / (dist * dist);
+            }
+        });
+        if (same > 0) {
+            cohesion /= (float)same; alignment /= (float)same;
+            flock = cohesion * 0.6f + alignment * 0.3f + separation * 1.0f;
+        }
+        float boldness = school_mean_boldness((int)s);
+        glm::vec2 bias = steer(fwd, hazard, food, flock, avoid, boldness);
         glm::vec2 nf = fwd + bias * ctx.dt * cfg.fish.speed_mps;
         float nlen = std::sqrt(nf.x*nf.x + nf.y*nf.y);
         if (nlen > 1e-3f) c.yaw = std::atan2(nf.y / nlen, nf.x / nlen);
@@ -118,7 +151,7 @@ void FishSchools::update(const CreatureCtx& ctx) {
 
 void FishSchools::publish_presence(CreatureRegistry& reg) const {
     for (const auto& f : fish_)
-        if (f.visible) reg.add(CreaturePresence{ f.pos, f.yaw, species_, 0 });
+        if (f.visible) reg.add(CreaturePresence{ f.pos, f.yaw, species_, size_class_ });
 }
 
 void FishSchools::act(const VoxelWorld& grid, CreatureActs& out) const {

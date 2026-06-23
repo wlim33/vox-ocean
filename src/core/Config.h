@@ -54,13 +54,14 @@ struct KelpConfig {
 };
 
 struct FishConfig {
-    bool  enabled      = true;
-    int   school_count = 4;        // clamp [0,32]
-    int   per_school   = 40;       // clamp [0,256]
-    float speed_mps    = 2.0f;     // clamp [0,8]
-    float depth_frac   = 0.5f;     // 0=floor .. 1=surface, clamp [0,1]
-    float spread_m     = 2.5f;     // school formation radius, clamp [0,20]
-    int   seed         = 202;
+    bool  enabled          = true;
+    int   school_count     = 4;        // clamp [0,32]
+    int   per_school       = 40;       // clamp [0,256]
+    float speed_mps        = 2.0f;     // clamp [0,8]
+    float depth_frac       = 0.5f;     // 0=floor .. 1=surface, clamp [0,1]
+    float spread_m         = 2.5f;     // school formation radius, clamp [0,20]
+    int   seed             = 202;
+    bool  predator_enabled = false;    // off by default — existing scenes unchanged
 };
 
 struct SandConfig {
