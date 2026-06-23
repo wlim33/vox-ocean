@@ -104,60 +104,98 @@ TEST(Fish, PublishesOnePresencePerVisibleFish) {
     EXPECT_EQ(pub.size(), visible);
 }
 
-// A school centroid placed next to Fire should, after a tick, have its members'
-// average position move away from the hazard relative to a hazard-free run.
+// A school centroid placed next to Fire should, after many ticks, have its members'
+// average position farther from the hazard relative to a hazard-free run.
 TEST(Fish, FleesNearbyHazard) {
     Config c = fish_cfg();
     c.fish.school_count = 1; c.fish.per_school = 1; c.fish.speed_mps = 2.0f;
+
+    // Both worlds share the same config (same initial fish position after rebuild).
     World hazard; hazard.configure(c);
     World calm;   calm.configure(c);
 
-    // Seed a Fire cell near grid center in the hazard world.
-    const VoxelWorld& g = hazard.grid();
-    int ix = g.params().extent / 2, iy = g.params().height_cells / 2, iz = ix;
-    hazard.apply_user_edit((uint32_t)g.cell_index(ix, iy, iz), (uint8_t)VoxMat::Fire);
-
+    // Rebuild and run ONE tick on each to resolve the initial fish position.
     FishSchools fh; fh.rebuild(c, hazard);
     FishSchools fc; fc.rebuild(c, calm);
     CreatureRegistry rh, rc;
-    for (int i = 0; i < 30; ++i) {
+    {
+        auto ch = make_ctx(c, hazard, rh, 1.0f/60.0f, 0.0f);
+        auto cc = make_ctx(c, calm,   rc, 1.0f/60.0f, 0.0f);
+        fh.update(ch); fc.update(cc);
+    }
+
+    // Derive fire position from the fish's CURRENT xz, ~2 m offset along +x.
+    // Both schools are identical so fh.fish()[0].pos == fc.fish()[0].pos here.
+    const VoxelWorld& g = hazard.grid();
+    const auto& gp = g.params();
+    glm::vec3 fpos = fh.fish()[0].pos;
+    float fire_x = fpos.x + 2.0f;   // 2 m away along +x
+    float fire_z = fpos.z;
+    float ghalf  = 0.5f * gp.extent * gp.voxel_size_m;
+    int hix = std::clamp((int)std::floor((fire_x + ghalf) / gp.voxel_size_m), 0, gp.extent-1);
+    int hiz = std::clamp((int)std::floor((fire_z + ghalf) / gp.voxel_size_m), 0, gp.extent-1);
+    int hiy = std::clamp((int)std::floor((fpos.y  + gp.base_depth_m) / gp.height_step_m), 0, gp.height_cells-1);
+    hazard.apply_user_edit((uint32_t)g.cell_index(hix, hiy, hiz), (uint8_t)VoxMat::Fire);
+
+    // Record the Fire cell's world-space xz center (used as reference for both fish).
+    glm::vec2 fire_xz{ g.column_center_x(hix), g.column_center_z(hiz) };
+
+    // Run ~150 ticks so steering accumulates (start at tick 1 since we already did 0).
+    for (int i = 1; i < 150; ++i) {
         auto ch = make_ctx(c, hazard, rh, 1.0f/60.0f, i/60.0f);
         auto cc = make_ctx(c, calm,   rc, 1.0f/60.0f, i/60.0f);
         fh.update(ch); fc.update(cc);
     }
-    // Hazard-fleeing fish ends farther from the Fire cell center than the calm one.
-    glm::vec3 hazpos{ g.column_center_x(ix), g.cell_bottom_y(iy), g.column_center_z(iz) };
-    auto d2 = [&](const glm::vec3& p){ float dx=p.x-hazpos.x, dz=p.z-hazpos.z; return dx*dx+dz*dz; };
-    EXPECT_GT(d2(fh.fish()[0].pos), d2(fc.fish()[0].pos));
+
+    // Hazard-fleeing fish ends farther from the Fire cell than the calm one.
+    auto d2xz = [&](const glm::vec3& p) {
+        float dx = p.x - fire_xz.x, dz = p.z - fire_xz.y;
+        return dx*dx + dz*dz;
+    };
+    EXPECT_GT(d2xz(fh.fish()[0].pos), d2xz(fc.fish()[0].pos));
 }
 
-// A fish whose body cell overlaps Kelp emits a durable edit clearing that cell to Water.
+// A visible fish whose body cell overlaps Kelp emits a durable edit clearing that cell to Water.
 TEST(Fish, EatsKelpOnContactEmitsDurableEdit) {
-    Config c = fish_cfg();
-    c.fish.school_count = 1; c.fish.per_school = 1;
+    // Use a full multi-fish config so at least one fish is likely visible.
+    Config c = fish_cfg();   // school_count=3, per_school=10 from fish_cfg()
     World w; w.configure(c);
     FishSchools fh; fh.rebuild(c, w);
     CreatureRegistry reg;
-    auto ctx = make_ctx(c, w, reg, 1.0f/60.0f, 0.0f);
-    fh.update(ctx);
-    // Plant Kelp at the fish's current cell so the next update senses contact.
+    // One update to resolve positions (and visibility).
+    auto ctx0 = make_ctx(c, w, reg, 1.0f/60.0f, 0.0f);
+    fh.update(ctx0);
+
+    // Find the first visible fish — the kelp-contact guard requires visibility.
     const VoxelWorld& g = w.grid();
-    const Fish& f = fh.fish()[0];
-    int ix, iy, iz; // reuse the same world->cell mapping the ctx uses
-    {
-        float half = 0.5f * g.params().extent * g.params().voxel_size_m;
-        ix = (int)std::floor((f.pos.x + half) / g.params().voxel_size_m);
-        iz = (int)std::floor((f.pos.z + half) / g.params().voxel_size_m);
-        iy = (int)std::floor((f.pos.y + g.params().base_depth_m) / g.params().height_step_m);
+    const auto& gp = g.params();
+    float ghalf = 0.5f * gp.extent * gp.voxel_size_m;
+    int vis_idx = -1;
+    for (int i = 0; i < (int)fh.fish().size(); ++i) {
+        if (fh.fish()[i].visible) { vis_idx = i; break; }
     }
+    bool found_visible = (vis_idx >= 0);
+    ASSERT_TRUE(found_visible) << "No visible fish after one update — adjust config or seed";
+
+    // Plant Kelp at the visible fish's current cell (same mapping Fish.cpp uses).
+    const Fish& vf = fh.fish()[vis_idx];
+    int ix = (int)std::floor((vf.pos.x + ghalf) / gp.voxel_size_m);
+    int iz = (int)std::floor((vf.pos.z + ghalf) / gp.voxel_size_m);
+    int iy = (int)std::floor((vf.pos.y + gp.base_depth_m) / gp.height_step_m);
+    ix = std::clamp(ix, 0, gp.extent-1);
+    iz = std::clamp(iz, 0, gp.extent-1);
+    iy = std::clamp(iy, 0, gp.height_cells-1);
     w.apply_user_edit((uint32_t)g.cell_index(ix, iy, iz), (uint8_t)VoxMat::Kelp);
-    auto ctx2 = make_ctx(c, w, reg, 1.0f/60.0f, 1.0f/60.0f);
-    fh.update(ctx2);
+
+    // Second update: fish moves ~speed*dt = 0.033 m << 0.5 m voxel, so it stays in cell.
+    auto ctx1 = make_ctx(c, w, reg, 1.0f/60.0f, 1.0f/60.0f);
+    fh.update(ctx1);
+
     StampList occ; EditList ed; CreatureActs acts{occ, ed};
     fh.act(g, acts);
-    ASSERT_GE(ed.idx.size(), 1u);
+    ASSERT_GE(ed.idx.size(), 1u) << "No durable edits emitted";
     bool cleared = false;
     for (size_t k = 0; k < ed.idx.size(); ++k)
         if (ed.mat[k] == (uint8_t)VoxMat::Water) cleared = true;
-    EXPECT_TRUE(cleared);
+    EXPECT_TRUE(cleared) << "Expected at least one edit setting VoxMat::Water";
 }

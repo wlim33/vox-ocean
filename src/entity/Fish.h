@@ -35,7 +35,6 @@ private:
     std::vector<int>         school_of_;
     std::vector<float>       bob_phase_;
     std::vector<Fish>        fish_;
-    std::vector<glm::vec2>   steer_bias_;   // per-school accumulated avoidance/seek bias (xz)
     mutable std::vector<std::pair<uint32_t,uint8_t>> pending_edits_;  // kelp eaten this frame
 };
 }

@@ -21,7 +21,7 @@ constexpr float FISH_BOB_FREQ = 1.7f;
 bool is_hazard(VoxMat m) {
     return m == VoxMat::Fire || m == VoxMat::Lava || m == VoxMat::Acid;
 }
-constexpr float kSenseRadiusM = 10.0f;
+constexpr float kSenseRadiusM = 4.0f;
 }
 
 glm::vec2 FishSchools::steer(glm::vec2 fwd, glm::vec2 hazard, glm::vec2 food, float boldness) {
@@ -53,7 +53,6 @@ void FishSchools::rebuild(const Config& cfg, const World& /*world*/) {
         }
     }
     fish_.resize(offset_.size());
-    steer_bias_.assign(centroids_.size(), {0.0f,0.0f});
 }
 
 void FishSchools::update(const CreatureCtx& ctx) {
@@ -79,14 +78,11 @@ void FishSchools::update(const CreatureCtx& ctx) {
             float len = std::sqrt(to.x*to.x + to.y*to.y);
             if (len > 1e-3f) food = to / len;
         }
-        float boldness = h01((uint32_t)s, 9u, (uint32_t)cfg.fish.seed);
+        float boldness = h01((uint32_t)s, 9u, (uint32_t)cfg.fish.seed ^ ((uint32_t)species_ << 16));
         glm::vec2 bias = steer(fwd, hazard, food, boldness);
         glm::vec2 nf = fwd + bias * ctx.dt * cfg.fish.speed_mps;
         float nlen = std::sqrt(nf.x*nf.x + nf.y*nf.y);
         if (nlen > 1e-3f) c.yaw = std::atan2(nf.y / nlen, nf.x / nlen);
-        // Also displace centroid directly so the school body moves away from
-        // hazards / toward food regardless of which way the fish face.
-        c.pos += bias * ctx.dt * cfg.fish.speed_mps;
     }
     float margin = 2.0f * cfg.voxel.height_step_m;
     for (size_t i = 0; i < fish_.size(); ++i) {
@@ -108,6 +104,7 @@ void FishSchools::update(const CreatureCtx& ctx) {
     const auto& p = ctx.grid.params();
     float ghalf = 0.5f * p.extent * p.voxel_size_m;
     for (const auto& f : fish_) {
+        if (!f.visible) continue;
         int fix = (int)std::floor((f.pos.x + ghalf) / p.voxel_size_m);
         int fiz = (int)std::floor((f.pos.z + ghalf) / p.voxel_size_m);
         int fiy = (int)std::floor((f.pos.y + p.base_depth_m) / p.height_step_m);
