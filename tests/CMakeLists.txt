@@ -130,5 +130,10 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/entity/CreatureRegistry.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    creature_ctx_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/entity/Creature.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)
