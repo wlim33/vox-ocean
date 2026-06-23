@@ -733,3 +733,29 @@ TEST(ThermalSweep, RelaxesTowardAmbientWithoutSource) {
         thermal_sweep(cells,temp,d,tp,kAmbientTemp, 0,0,0,4,4,4, changed); }
     for (uint8_t t : temp) EXPECT_EQ(t, kAmbientTemp);
 }
+
+// --- Thermal-threshold transitions -------------------------------------------
+TEST(ThermalRules, WaterBoilsAndFlammableIgnitesAboveThreshold) {
+    MaterialCaDims d{3,3};
+    auto idx=[&](int x,int y,int z){ return ca_cell_index(d,x,y,z); };
+    std::vector<uint8_t> cells((size_t)3*3*3,(uint8_t)VoxMat::Air);
+    std::vector<uint8_t> temp(cells.size(), kAmbientTemp);
+    cells[idx(1,1,1)] = (uint8_t)VoxMat::Water; temp[idx(1,1,1)] = 200;  // hot water
+    cells[idx(0,1,1)] = (uint8_t)VoxMat::Boat;  temp[idx(0,1,1)] = 200;  // hot fuel
+    ThermalParams tp; std::vector<uint32_t> changed;
+    thermal_sweep(cells,temp,d,tp,kAmbientTemp, 0,0,0,2,2,2, changed);
+    EXPECT_EQ(cells[idx(1,1,1)], (uint8_t)VoxMat::Steam);   // boiled
+    EXPECT_EQ(cells[idx(0,1,1)], (uint8_t)VoxMat::Fire);    // ignited
+    EXPECT_FALSE(changed.empty());
+}
+
+TEST(ThermalRules, SteamCondensesBelowThreshold) {
+    MaterialCaDims d{3,3};
+    auto idx=[&](int x,int y,int z){ return ca_cell_index(d,x,y,z); };
+    std::vector<uint8_t> cells((size_t)3*3*3,(uint8_t)VoxMat::Air);
+    std::vector<uint8_t> temp(cells.size(), kAmbientTemp);   // ambient 25 < condense 80
+    cells[idx(1,1,1)] = (uint8_t)VoxMat::Steam;
+    ThermalParams tp; std::vector<uint32_t> changed;
+    thermal_sweep(cells,temp,d,tp,kAmbientTemp, 0,0,0,2,2,2, changed);
+    EXPECT_EQ(cells[idx(1,1,1)], (uint8_t)VoxMat::Water);    // condensed
+}

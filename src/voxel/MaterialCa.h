@@ -54,6 +54,10 @@ struct ThermalParams {
     float   diffuse_k     = 0.16f;   // <= 1/6
     float   ambient_bleed = 0.5f;    // heat units/step pulled toward ambient
     uint8_t snap_eps      = 1;       // |T-ambient| <= eps -> snap to ambient (lets blocks sleep)
+    uint8_t ignite_temp   = 150;     // Flammable-tagged -> Fire above this
+    uint8_t boil_temp     = 120;     // Water -> Steam above
+    uint8_t condense_temp = 80;      // Steam -> Water below
+    uint8_t melt_temp     = 40;      // Ice -> Water above (Ice added in P5)
 };
 
 // Conductivity-weighted heat diffusion over the inclusive box, then heat-source

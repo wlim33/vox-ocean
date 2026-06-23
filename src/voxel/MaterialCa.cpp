@@ -181,6 +181,30 @@ inline float rnd01(int x, int y, int z, uint32_t step, uint32_t seed, uint32_t s
 inline bool is_fuel(uint8_t m) { return material_props((VoxMat)m).flammability > 0.0f; }
 inline bool is_hot(uint8_t m) { return m == (uint8_t)VoxMat::Fire || m == (uint8_t)VoxMat::Lava; }
 
+// --- Thermal threshold transitions -------------------------------------------
+// A cell transforms when its own temperature crosses `threshold`. The matcher is a
+// specific material OR a tag (so any Flammable ignites). Heat-source materials
+// (Lava, Fire) are intentionally absent: they self-heat via emit_temp, so they
+// expire/solidify through contact rules, never here. TMatch/TCmp are reused by the
+// contact-reaction table below.
+enum class TMatch : uint8_t { Material, Tag };
+enum class TCmp   : uint8_t { Above, Below };
+struct ThermalRule {
+    TMatch  match; uint32_t key;            // VoxMat id, or MatTag bits
+    TCmp    cmp;   uint8_t ThermalParams::* threshold;
+    VoxMat  output;
+};
+constexpr ThermalRule kThermalRules[] = {
+    { TMatch::Tag,      (uint32_t)MatTag::Flammable, TCmp::Above, &ThermalParams::ignite_temp,   VoxMat::Fire  },
+    { TMatch::Material, (uint32_t)VoxMat::Water,     TCmp::Above, &ThermalParams::boil_temp,     VoxMat::Steam },
+    { TMatch::Material, (uint32_t)VoxMat::Steam,     TCmp::Below, &ThermalParams::condense_temp, VoxMat::Water },
+    // Ice melt row added in P5 (VoxMat::Ice does not exist yet).
+};
+inline bool tmatch(const ThermalRule& r, uint8_t m) {
+    return r.match == TMatch::Material ? (m == (uint8_t)r.key)
+                                       : material_has_tag((VoxMat)m, (MatTag)r.key);
+}
+
 // --- Data-driven reaction table (SP3-IV) -------------------------------------
 // Each reaction is one row: an input matcher, a neighbour gate, a probability
 // source (member-pointer into CombustionParams; nullptr = deterministic, no RNG
@@ -256,7 +280,7 @@ static_assert(reactions_well_formed(),
 void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
                    const MaterialCaDims& d, const ThermalParams& tp, uint8_t ambient,
                    int x0, int y0, int z0, int x1, int y1, int z1,
-                   std::vector<uint32_t>& /*changed*/) {
+                   std::vector<uint32_t>& changed) {
     const std::vector<uint8_t> before = temp;     // pre-step snapshot (order-independence)
     const float kAirCond = material_props(VoxMat::Air).conductivity;
     auto T = [&](int x, int y, int z) -> float {  // OOB temperature reads as ambient
@@ -296,6 +320,16 @@ void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
                 if (std::abs(nt - (float)ambient) <= (float)tp.snap_eps) nt = (float)ambient;
             }
             temp[i] = (uint8_t)std::clamp((int)std::lround(nt), 0, 255);
+            // Threshold transition against the just-written temperature.
+            for (const ThermalRule& r : kThermalRules) {
+                if (!tmatch(r, cells[i])) continue;
+                uint8_t thr = tp.*r.threshold;
+                bool hit = (r.cmp == TCmp::Above) ? temp[i] > thr : temp[i] < thr;
+                if (!hit) continue;
+                cells[i] = (uint8_t)r.output;
+                changed.push_back((uint32_t)i);
+                break;
+            }
         }
 }
 
