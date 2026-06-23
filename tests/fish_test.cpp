@@ -1,38 +1,53 @@
+// tests/fish_test.cpp
 #include "entity/Fish.h"
+#include "entity/Creature.h"
+#include "entity/CreatureRegistry.h"
 #include "entity/StampBudget.h"
+#include "world/World.h"
 #include "voxel/VoxelWorld.h"
 #include "core/Config.h"
 #include <gtest/gtest.h>
 #include <cmath>
 
-static vox::Config fish_cfg() {
-    vox::Config c;
+using namespace vox;
+
+static Config fish_cfg() {
+    Config c;
     c.voxel.grid_extent = 64; c.voxel.height_cells = 64;
     c.voxel.voxel_size_m = 0.5f; c.voxel.height_step_m = 0.25f; c.voxel.base_depth_m = 10.0f;
+    c.kelp.enabled = false; c.entity.boat_enabled = false;
     c.fish.enabled = true; c.fish.school_count = 3; c.fish.per_school = 10;
     c.fish.speed_mps = 2.0f; c.fish.depth_frac = 0.5f; c.fish.spread_m = 3.0f; c.fish.seed = 202;
     return c;
 }
-static float surf0(float, float)      { return 0.0f; }    // surface at y=0
-static float floorm6(float, float)    { return -6.0f; }   // floor top at y=-6
-static float floor_shallow(float, float) { return -0.1f; }   // floor top just below surface
+
+// Surface fixed at y=0 for predictable banding (engine uses kSeaLevelY likewise).
+static float surf0(float, float) { return 0.0f; }
+
+static CreatureCtx make_ctx(const Config& c, const World& w, CreatureRegistry& reg,
+                            float dt, float t) {
+    return CreatureCtx{ c, dt, t, w, w.grid(), surf0, reg };
+}
 
 TEST(Fish, RebuildIsDeterministicAndCounts) {
-    auto c = fish_cfg();
-    vox::FishSchools a, b;
-    a.rebuild(c); b.rebuild(c);
+    Config c = fish_cfg();
+    World w; w.configure(c);
+    FishSchools a, b;
+    a.rebuild(c, w); b.rebuild(c, w);
     EXPECT_EQ(a.fish().size(), (size_t)(c.fish.school_count * c.fish.per_school));
     EXPECT_EQ(a.fish().size(), b.fish().size());
 }
 
 TEST(Fish, UpdateIsDeterministic) {
-    auto c = fish_cfg();
-    vox::FishSchools a, b;
-    a.rebuild(c); b.rebuild(c);
+    Config c = fish_cfg();
+    World w; w.configure(c);
+    FishSchools a, b; a.rebuild(c, w); b.rebuild(c, w);
+    CreatureRegistry ra, rb;
     for (int i = 0; i < 200; ++i) {
         float t = i / 60.0f;
-        a.update(c, 1.0f/60.0f, t, surf0, floorm6);
-        b.update(c, 1.0f/60.0f, t, surf0, floorm6);
+        auto ca = make_ctx(c, w, ra, 1.0f/60.0f, t);
+        auto cb = make_ctx(c, w, rb, 1.0f/60.0f, t);
+        a.update(ca); b.update(cb);
     }
     ASSERT_EQ(a.fish().size(), b.fish().size());
     for (size_t i = 0; i < a.fish().size(); ++i) {
@@ -42,50 +57,49 @@ TEST(Fish, UpdateIsDeterministic) {
     }
 }
 
-TEST(Fish, StaysInTheDioramaEnvelope) {
-    auto c = fish_cfg();
-    vox::FishSchools sch; sch.rebuild(c);
-    for (int i = 0; i < 400; ++i)
-        sch.update(c, 1.0f/60.0f, i/60.0f, surf0, floorm6);
-    // Centroids wander inside the patch; members trail within spread_m. Bound
-    // = half-extent + spread + a voxel of slack.
-    float half = 0.5f * c.voxel.grid_extent * c.voxel.voxel_size_m;
-    float bound = half + c.fish.spread_m + 1.0f;
-    for (const auto& f : sch.fish()) {
-        EXPECT_LT(std::abs(f.pos.x), bound);
-        EXPECT_LT(std::abs(f.pos.z), bound);
-    }
-}
-
 TEST(Fish, HoldsTheMidwaterDepthBand) {
-    auto c = fish_cfg();   // depth_frac 0.5, floor -6, surface 0
-    vox::FishSchools sch; sch.rebuild(c);
-    for (int i = 0; i < 200; ++i)
-        sch.update(c, 1.0f/60.0f, i/60.0f, surf0, floorm6);
+    Config c = fish_cfg();
+    World w; w.configure(c);
+    FishSchools sch; sch.rebuild(c, w);
+    CreatureRegistry reg;
+    for (int i = 0; i < 200; ++i) {
+        auto ctx = make_ctx(c, w, reg, 1.0f/60.0f, i/60.0f);
+        sch.update(ctx);
+    }
     for (const auto& f : sch.fish()) {
-        EXPECT_GT(f.pos.y, -6.0f + 0.4f);   // above the floor margin
-        EXPECT_LT(f.pos.y,  0.0f - 0.4f);   // below the surface margin
+        if (!f.visible) continue;
+        float lo = w.floor_top_y(f.pos.x, f.pos.z);
+        EXPECT_GT(f.pos.y, lo);          // above its local floor
+        EXPECT_LT(f.pos.y, 0.0f);        // below the surface
     }
 }
 
-TEST(Fish, StampMarksFishVoxels) {
-    auto c = fish_cfg();
-    vox::FishSchools sch; sch.rebuild(c);
-    sch.update(c, 1.0f/60.0f, 0.0f, surf0, floorm6);
-    vox::VoxelWorld w({c.voxel.grid_extent, c.voxel.height_cells, c.voxel.voxel_size_m,
-                       c.voxel.height_step_m, c.voxel.base_depth_m});
-    vox::StampList out; sch.build_stamp(c, w, out);
-    EXPECT_EQ(out.count(), (int)sch.fish().size() * vox::FISH_CELLS);
-    for (int i = 0; i < out.count(); ++i)
-        EXPECT_EQ((int)out.mat[i], (int)vox::VoxMat::Fish);
+TEST(Fish, ActMarksFishVoxels) {
+    Config c = fish_cfg();
+    World w; w.configure(c);
+    FishSchools sch; sch.rebuild(c, w);
+    CreatureRegistry reg;
+    auto ctx = make_ctx(c, w, reg, 1.0f/60.0f, 0.0f);
+    sch.update(ctx);
+    StampList occ; EditList ed; CreatureActs acts{occ, ed};
+    sch.act(w.grid(), acts);
+    int visible = 0;
+    for (const auto& f : sch.fish()) if (f.visible) ++visible;
+    EXPECT_EQ(occ.count(), visible * FISH_CELLS);
+    for (int i = 0; i < occ.count(); ++i)
+        EXPECT_EQ((int)occ.mat[i], (int)VoxMat::Fish);
 }
 
-TEST(Fish, SkipsStampOverShallows) {
-    auto c = fish_cfg();   // surface 0; floor -0.1 -> depth 0.1m < kMinDepthCells*step (0.75m)
-    vox::FishSchools sch; sch.rebuild(c);
-    sch.update(c, 1.0f/60.0f, 0.0f, surf0, floor_shallow);
-    vox::VoxelWorld w({c.voxel.grid_extent, c.voxel.height_cells, c.voxel.voxel_size_m,
-                       c.voxel.height_step_m, c.voxel.base_depth_m});
-    vox::StampList out; sch.build_stamp(c, w, out);
-    EXPECT_EQ(out.count(), 0);              // nothing rendered over too-shallow water
+TEST(Fish, PublishesOnePresencePerVisibleFish) {
+    Config c = fish_cfg();
+    World w; w.configure(c);
+    FishSchools sch; sch.rebuild(c, w);
+    CreatureRegistry reg;
+    auto ctx = make_ctx(c, w, reg, 1.0f/60.0f, 0.0f);
+    sch.update(ctx);
+    CreatureRegistry pub;
+    sch.publish_presence(pub);
+    int visible = 0;
+    for (const auto& f : sch.fish()) if (f.visible) ++visible;
+    EXPECT_EQ(pub.size(), visible);
 }

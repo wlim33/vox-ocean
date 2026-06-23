@@ -34,7 +34,6 @@ public:
 private:
     Boat boat_;
     KelpBed kelp_;
-    FishSchools fish_;
     std::vector<std::unique_ptr<ICreature>> creatures_;
     CreatureRegistry registry_;
     EditList         creature_edits_;

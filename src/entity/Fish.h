@@ -2,34 +2,35 @@
 #include "voxel/VoxelWorld.h"
 #include "entity/Wander.h"
 #include "entity/StampBudget.h"
-#include <functional>
+#include "entity/Creature.h"
 #include <vector>
 #include <glm/glm.hpp>
 namespace vox {
 struct Config;
 
 struct Fish {
-    glm::vec3 pos {0.0f, 0.0f, 0.0f};   // world (x, y, z)
+    glm::vec3 pos {0.0f, 0.0f, 0.0f};
     float yaw = 0.0f;
-    bool  visible = true;               // false where water over the floor is too shallow
+    bool  visible = true;
 };
 
-// Several schools: each centroid wanders deterministically (shared Wander);
-// members hold formation by seeded offsets and trail at a mid-water depth.
-class FishSchools {
+class FishSchools : public ICreature {
 public:
-    using HeightFn = std::function<float(float, float)>;   // surface y at (x,z)
-    using FloorFn  = std::function<float(float, float)>;    // floor-top y at (x,z)
-    void rebuild(const Config& cfg);
-    void update(const Config& cfg, float dt, float t,
-                const HeightFn& surface, const FloorFn& floor_fn);
-    void build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out) const;
+    explicit FishSchools(uint16_t species_id = Species_Minnow) : species_(species_id) {}
+
+    void rebuild(const Config& cfg, const World& world) override;
+    uint16_t species_id() const override { return species_; }
+    void publish_presence(CreatureRegistry& reg) const override;
+    void update(const CreatureCtx& ctx) override;
+    void act(const VoxelWorld& grid, CreatureActs& out) const override;
+
     const std::vector<Fish>& fish() const { return fish_; }
 private:
-    std::vector<WanderState> centroids_;   // one per school
-    std::vector<glm::vec2>   offset_;      // per-fish school-local formation offset
-    std::vector<int>         school_of_;   // per-fish school index
-    std::vector<float>       bob_phase_;   // per-fish vertical bob phase
-    std::vector<Fish>        fish_;        // resolved world fish, refreshed each update
+    uint16_t species_ = Species_Minnow;
+    std::vector<WanderState> centroids_;
+    std::vector<glm::vec2>   offset_;
+    std::vector<int>         school_of_;
+    std::vector<float>       bob_phase_;
+    std::vector<Fish>        fish_;
 };
 }

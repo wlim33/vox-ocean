@@ -34,7 +34,12 @@ void Ecosystem::rebuild_if_dirty(const Config& cfg, const World& world) {
         || cfg.fish.per_school   != built_per_school_
         || cfg.fish.seed         != built_fish_seed_
         || cfg.fish.spread_m     != built_fish_spread_) {
-        fish_.rebuild(cfg);
+        creatures_.clear();
+        if (cfg.fish.enabled) {
+            auto minnow = std::make_unique<FishSchools>(Species_Minnow);
+            minnow->rebuild(cfg, world);
+            creatures_.push_back(std::move(minnow));
+        }
         built_fish_enabled_ = cfg.fish.enabled;
         built_school_count_ = cfg.fish.school_count;
         built_per_school_   = cfg.fish.per_school;
@@ -54,8 +59,6 @@ void Ecosystem::update(const Config& cfg, float dt, float t, const HeightFn& wat
         boat_.update(dt, t, water_height, cfg.entity.boat_speed_mps, half, cfg.voxel.voxel_size_m);
     }
     kelp_.update(cfg, t, water_height);
-    fish_.update(cfg, dt, t, water_height,
-                 [&](float x, float z) { return world.floor_top_y(x, z); });
     // --- creatures: publish all presences, THEN decide against the snapshot ---
     registry_.clear();
     for (auto& c : creatures_) c->publish_presence(registry_);
@@ -73,8 +76,7 @@ void Ecosystem::build_stamp(const Config& cfg, const VoxelWorld& w, StampList& o
     creature_edits_.resync = false;
     kelp_.build_stamp(cfg, w, out);
     CreatureActs acts{ out, creature_edits_ };
-    for (auto& c : creatures_) c->act(w, acts);   // creatures between kelp and fish/boat
-    fish_.build_stamp(cfg, w, out);
+    for (auto& c : creatures_) c->act(w, acts);   // creatures between kelp and boat
     if (cfg.entity.boat_enabled) {
         auto cells = boat_cells(boat_.state(), w);
         for (uint32_t c : cells) out.push(c, VoxMat::Boat);   // boat last: wins overlaps
