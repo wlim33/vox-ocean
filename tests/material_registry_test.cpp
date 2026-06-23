@@ -9,8 +9,8 @@ TEST(MaterialRegistry, TableSizeMatchesEnum) {
     EXPECT_EQ(kMaterials.size(), (size_t)kNumMaterials);
 }
 
-TEST(MaterialRegistry, EnumSizeIsFourteen) {
-    EXPECT_EQ((int)vox::kNumMaterials, 14);
+TEST(MaterialRegistry, EnumSizeIsNineteen) {
+    EXPECT_EQ((int)vox::kNumMaterials, 19);
 }
 
 TEST(MaterialRegistry, LavaSinksAndIsViscous) {
@@ -118,4 +118,18 @@ TEST(MaterialRegistry, NamesMatchEnumOrder) {
 TEST(MaterialRegistry, NamesCoverEveryMaterial) {
     for (int i = 0; i < vox::kNumMaterials; ++i)
         EXPECT_FALSE(vox::material_name((vox::VoxMat)i).empty());
+}
+
+TEST(MaterialRegistry, ThermalFieldsAndTags) {
+    using namespace vox;
+    for (int i = 0; i < kNumMaterials; ++i) {
+        EXPECT_GE(kMaterials[i].conductivity, 0.0f);
+        EXPECT_LE(kMaterials[i].conductivity, 1.0f);
+    }
+    EXPECT_GT(material_props(VoxMat::Lava).emit_temp, 0);
+    EXPECT_GT(material_props(VoxMat::Fire).emit_temp, 0);
+    EXPECT_EQ(material_props(VoxMat::Water).emit_temp, -1);
+    EXPECT_TRUE(material_has_tag(VoxMat::Boat, MatTag::Flammable));
+    EXPECT_FALSE(material_has_tag(VoxMat::Water, MatTag::Flammable));
+    EXPECT_TRUE(material_has_tag(VoxMat::Rock, MatTag::Corrodible));
 }
