@@ -1,6 +1,7 @@
 #include "entity/Fish.h"
 #include "entity/Creature.h"
 #include "entity/CreatureRegistry.h"
+#include "world/World.h"
 #include "core/Config.h"
 #include "voxel/FloorGen.h"   // kMinDepthCells
 #include <algorithm>
@@ -17,6 +18,18 @@ float h01(uint32_t a, uint32_t b, uint32_t seed) {
 }
 constexpr float FISH_BOB_AMP  = 0.2f;
 constexpr float FISH_BOB_FREQ = 1.7f;
+bool is_hazard(VoxMat m) {
+    return m == VoxMat::Fire || m == VoxMat::Lava || m == VoxMat::Acid;
+}
+constexpr float kSenseRadiusM = 10.0f;
+}
+
+glm::vec2 FishSchools::steer(glm::vec2 fwd, glm::vec2 hazard, glm::vec2 food, float boldness) {
+    // Provisional arbitration (finalized in Task 6): hazard repels hardest,
+    // food attracts, scaled by boldness (bold fish react less). Returned vector
+    // is added to the centroid heading direction by the caller.
+    glm::vec2 v = hazard * (2.0f - boldness) + food * (0.5f + boldness);
+    return v;
 }
 
 void FishSchools::rebuild(const Config& cfg, const World& /*world*/) {
@@ -40,14 +53,41 @@ void FishSchools::rebuild(const Config& cfg, const World& /*world*/) {
         }
     }
     fish_.resize(offset_.size());
+    steer_bias_.assign(centroids_.size(), {0.0f,0.0f});
 }
 
 void FishSchools::update(const CreatureCtx& ctx) {
     if (fish_.empty()) return;
     const Config& cfg = ctx.cfg;
     float half = 0.5f * cfg.voxel.grid_extent * cfg.voxel.voxel_size_m;
-    for (auto& c : centroids_)
+    for (size_t s = 0; s < centroids_.size(); ++s) {
+        WanderState& c = centroids_[s];
         wander_step(c, ctx.dt, ctx.t, cfg.fish.speed_mps, half);
+        glm::vec2 fwd { std::cos(c.yaw), std::sin(c.yaw) };
+        glm::vec3 cpos { c.pos.x,
+                         0.5f * (ctx.floor_top_y(c.pos.x, c.pos.y) + ctx.water_surface(c.pos.x, c.pos.y)),
+                         c.pos.y };
+        glm::vec2 hazard{0.0f, 0.0f}, food{0.0f, 0.0f};
+        if (auto h = ctx.find_nearest(cpos, kSenseRadiusM, is_hazard)) {
+            glm::vec2 away{ cpos.x - h->x, cpos.z - h->z };
+            float len = std::sqrt(away.x*away.x + away.y*away.y);
+            if (len > 1e-3f) hazard = away / len;
+        }
+        if (auto k = ctx.find_nearest(cpos, kSenseRadiusM,
+                                      [](VoxMat m){ return m == VoxMat::Kelp; })) {
+            glm::vec2 to{ k->x - cpos.x, k->z - cpos.z };
+            float len = std::sqrt(to.x*to.x + to.y*to.y);
+            if (len > 1e-3f) food = to / len;
+        }
+        float boldness = h01((uint32_t)s, 9u, (uint32_t)cfg.fish.seed);
+        glm::vec2 bias = steer(fwd, hazard, food, boldness);
+        glm::vec2 nf = fwd + bias * ctx.dt * cfg.fish.speed_mps;
+        float nlen = std::sqrt(nf.x*nf.x + nf.y*nf.y);
+        if (nlen > 1e-3f) c.yaw = std::atan2(nf.y / nlen, nf.x / nlen);
+        // Also displace centroid directly so the school body moves away from
+        // hazards / toward food regardless of which way the fish face.
+        c.pos += bias * ctx.dt * cfg.fish.speed_mps;
+    }
     float margin = 2.0f * cfg.voxel.height_step_m;
     for (size_t i = 0; i < fish_.size(); ++i) {
         const WanderState& c = centroids_[school_of_[i]];
@@ -63,6 +103,19 @@ void FishSchools::update(const CreatureCtx& ctx) {
         fish_[i].yaw = c.yaw;
         float depth = ctx.water_surface(xz.x, xz.y) - ctx.floor_top_y(xz.x, xz.y);
         fish_[i].visible = depth >= (float)kMinDepthCells * cfg.voxel.height_step_m;
+    }
+    pending_edits_.clear();
+    const auto& p = ctx.grid.params();
+    float ghalf = 0.5f * p.extent * p.voxel_size_m;
+    for (const auto& f : fish_) {
+        int fix = (int)std::floor((f.pos.x + ghalf) / p.voxel_size_m);
+        int fiz = (int)std::floor((f.pos.z + ghalf) / p.voxel_size_m);
+        int fiy = (int)std::floor((f.pos.y + p.base_depth_m) / p.height_step_m);
+        if (fix < 0 || fix >= p.extent || fiz < 0 || fiz >= p.extent
+            || fiy < 0 || fiy >= p.height_cells) continue;
+        uint32_t cell = (uint32_t)ctx.grid.cell_index(fix, fiy, fiz);
+        if ((VoxMat)ctx.world.material()[cell] == VoxMat::Kelp)
+            pending_edits_.push_back({ cell, (uint8_t)VoxMat::Water });
     }
 }
 
@@ -90,5 +143,7 @@ void FishSchools::act(const VoxelWorld& grid, CreatureActs& out) const {
             }
         }
     }
+    for (const auto& e : pending_edits_)
+        out.edits.push(e.first, e.second);
 }
 }

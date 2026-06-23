@@ -3,6 +3,7 @@
 #include "entity/Wander.h"
 #include "entity/StampBudget.h"
 #include "entity/Creature.h"
+#include <utility>
 #include <vector>
 #include <glm/glm.hpp>
 namespace vox {
@@ -26,11 +27,15 @@ public:
 
     const std::vector<Fish>& fish() const { return fish_; }
 private:
+    // Combine world-derived steering vectors into one heading nudge (per school).
+    static glm::vec2 steer(glm::vec2 fwd, glm::vec2 hazard, glm::vec2 food, float boldness);
     uint16_t species_ = Species_Minnow;
     std::vector<WanderState> centroids_;
     std::vector<glm::vec2>   offset_;
     std::vector<int>         school_of_;
     std::vector<float>       bob_phase_;
     std::vector<Fish>        fish_;
+    std::vector<glm::vec2>   steer_bias_;   // per-school accumulated avoidance/seek bias (xz)
+    mutable std::vector<std::pair<uint32_t,uint8_t>> pending_edits_;  // kelp eaten this frame
 };
 }

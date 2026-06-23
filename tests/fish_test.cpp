@@ -103,3 +103,61 @@ TEST(Fish, PublishesOnePresencePerVisibleFish) {
     for (const auto& f : sch.fish()) if (f.visible) ++visible;
     EXPECT_EQ(pub.size(), visible);
 }
+
+// A school centroid placed next to Fire should, after a tick, have its members'
+// average position move away from the hazard relative to a hazard-free run.
+TEST(Fish, FleesNearbyHazard) {
+    Config c = fish_cfg();
+    c.fish.school_count = 1; c.fish.per_school = 1; c.fish.speed_mps = 2.0f;
+    World hazard; hazard.configure(c);
+    World calm;   calm.configure(c);
+
+    // Seed a Fire cell near grid center in the hazard world.
+    const VoxelWorld& g = hazard.grid();
+    int ix = g.params().extent / 2, iy = g.params().height_cells / 2, iz = ix;
+    hazard.apply_user_edit((uint32_t)g.cell_index(ix, iy, iz), (uint8_t)VoxMat::Fire);
+
+    FishSchools fh; fh.rebuild(c, hazard);
+    FishSchools fc; fc.rebuild(c, calm);
+    CreatureRegistry rh, rc;
+    for (int i = 0; i < 30; ++i) {
+        auto ch = make_ctx(c, hazard, rh, 1.0f/60.0f, i/60.0f);
+        auto cc = make_ctx(c, calm,   rc, 1.0f/60.0f, i/60.0f);
+        fh.update(ch); fc.update(cc);
+    }
+    // Hazard-fleeing fish ends farther from the Fire cell center than the calm one.
+    glm::vec3 hazpos{ g.column_center_x(ix), g.cell_bottom_y(iy), g.column_center_z(iz) };
+    auto d2 = [&](const glm::vec3& p){ float dx=p.x-hazpos.x, dz=p.z-hazpos.z; return dx*dx+dz*dz; };
+    EXPECT_GT(d2(fh.fish()[0].pos), d2(fc.fish()[0].pos));
+}
+
+// A fish whose body cell overlaps Kelp emits a durable edit clearing that cell to Water.
+TEST(Fish, EatsKelpOnContactEmitsDurableEdit) {
+    Config c = fish_cfg();
+    c.fish.school_count = 1; c.fish.per_school = 1;
+    World w; w.configure(c);
+    FishSchools fh; fh.rebuild(c, w);
+    CreatureRegistry reg;
+    auto ctx = make_ctx(c, w, reg, 1.0f/60.0f, 0.0f);
+    fh.update(ctx);
+    // Plant Kelp at the fish's current cell so the next update senses contact.
+    const VoxelWorld& g = w.grid();
+    const Fish& f = fh.fish()[0];
+    int ix, iy, iz; // reuse the same world->cell mapping the ctx uses
+    {
+        float half = 0.5f * g.params().extent * g.params().voxel_size_m;
+        ix = (int)std::floor((f.pos.x + half) / g.params().voxel_size_m);
+        iz = (int)std::floor((f.pos.z + half) / g.params().voxel_size_m);
+        iy = (int)std::floor((f.pos.y + g.params().base_depth_m) / g.params().height_step_m);
+    }
+    w.apply_user_edit((uint32_t)g.cell_index(ix, iy, iz), (uint8_t)VoxMat::Kelp);
+    auto ctx2 = make_ctx(c, w, reg, 1.0f/60.0f, 1.0f/60.0f);
+    fh.update(ctx2);
+    StampList occ; EditList ed; CreatureActs acts{occ, ed};
+    fh.act(g, acts);
+    ASSERT_GE(ed.idx.size(), 1u);
+    bool cleared = false;
+    for (size_t k = 0; k < ed.idx.size(); ++k)
+        if (ed.mat[k] == (uint8_t)VoxMat::Water) cleared = true;
+    EXPECT_TRUE(cleared);
+}
