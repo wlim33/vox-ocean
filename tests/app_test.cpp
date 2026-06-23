@@ -139,7 +139,10 @@ void push_draw(vox::App& app, float x, float y) {
 }
 }  // namespace
 
-TEST(App, DrawPaintAppliesActiveMaterialToHitCell) {
+TEST(App, DrawPlaceIntoSolidIsNoopAdditive) {
+    // Additive placement: drawing a (non-Air) material never overwrites an occupied
+    // cell, so painting Sand straight onto a solid Rock hit deposits nothing. This is
+    // the fix for "placing sand on stone punches holes": the brush can't carve solids.
     vox::VoxelWorld grid({4, 4, 1.0f, 1.0f, 2.0f});
     std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
     app.set_tool(vox::EditTool::Paint);
@@ -149,10 +152,27 @@ TEST(App, DrawPaintAppliesActiveMaterialToHitCell) {
     app.resolve_draw(100, 100, grid, mats.data());
 
     ASSERT_TRUE(app.selection().has_value());
+    EXPECT_EQ(app.selection()->material, (uint8_t)vox::VoxMat::Rock);   // hit a solid
+    EXPECT_TRUE(app.drain_pending_edits().empty());                     // nothing overwritten
+}
+
+TEST(App, DrawPlacementNeverOverwritesExistingSolids) {
+    // A radius brush over a solid floor must deposit only into the empty cells of the
+    // ball; the Rock cells it overlaps are left intact (no holes once the sand falls).
+    vox::VoxelWorld grid({8, 8, 1.0f, 1.0f, 2.0f});
+    std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);  // Rock floor at y=0
+    app.set_tool(vox::EditTool::Build);
+    app.set_material(vox::VoxMat::SandGrain);
+    app.set_brush_radius(2);
+
+    push_draw(app, 50, 50);
+    app.resolve_draw(100, 100, grid, mats.data());
+    ASSERT_TRUE(app.selection().has_value());
+
     auto edits = app.drain_pending_edits();
-    ASSERT_EQ(edits.size(), 1u);
-    EXPECT_EQ(edits[0].cell, app.selection()->linear_idx);
-    EXPECT_EQ(edits[0].mat, (uint8_t)vox::VoxMat::SandGrain);
+    ASSERT_GT(edits.size(), 0u);                                  // sand was deposited into air
+    for (const auto& e : edits)
+        EXPECT_EQ(mats[e.cell], (uint8_t)vox::VoxMat::Air);       // and only ever into air
 }
 
 TEST(App, DrawDigSetsHitCellToAir) {
@@ -201,9 +221,9 @@ TEST(App, DrawMissEnqueuesNothing) {
     EXPECT_TRUE(app.drain_pending_edits().empty());
 }
 
-TEST(App, DrawDefaultsArePaintRock) {
+TEST(App, DrawDefaultsAreBuildRock) {
     vox::App app{vox::Config{}};
-    EXPECT_EQ(app.tool(), vox::EditTool::Paint);
+    EXPECT_EQ(app.tool(), vox::EditTool::Build);   // additive placement is the default draw
     EXPECT_EQ(app.material(), vox::VoxMat::Rock);
     EXPECT_FALSE(app.has_pending_draw());
 }
@@ -216,35 +236,36 @@ TEST(App, BrushRadiusClampsToRange) {
     app.set_brush_radius(3);   EXPECT_EQ(app.brush_radius(), 3);
 }
 
-TEST(App, DrawPaintRadiusFillsSphereOfActiveMaterial) {
+TEST(App, DrawPaintRadiusFillsOnlyEmptySphereCells) {
     vox::VoxelWorld grid({8, 8, 1.0f, 1.0f, 2.0f});
     std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
     app.set_tool(vox::EditTool::Paint);
     app.set_material(vox::VoxMat::SandGrain);
-    app.set_brush_radius(1);
+    app.set_brush_radius(2);
 
     push_draw(app, 50, 50);
     app.resolve_draw(100, 100, grid, mats.data());
     ASSERT_TRUE(app.selection().has_value());
 
     auto edits = app.drain_pending_edits();
-    std::vector<uint32_t> expected;
-    vox::sphere_cells(grid, app.selection()->linear_idx, 1, expected);
-    EXPECT_EQ(edits.size(), expected.size());               // one edit per sphere cell
-    EXPECT_GT(edits.size(), 1u);                            // genuinely a volume
-    for (const auto& e : edits) EXPECT_EQ(e.mat, (uint8_t)vox::VoxMat::SandGrain);
-    // the centre (hit) cell is in the edit set
-    bool has_center = false;
-    for (const auto& e : edits) if (e.cell == app.selection()->linear_idx) has_center = true;
-    EXPECT_TRUE(has_center);
+    std::vector<uint32_t> sphere;
+    vox::sphere_cells(grid, app.selection()->linear_idx, 2, sphere);
+    size_t air_cells = 0;
+    for (uint32_t c : sphere) if (mats[c] == (uint8_t)vox::VoxMat::Air) ++air_cells;
+    EXPECT_GT(air_cells, 0u);
+    EXPECT_EQ(edits.size(), air_cells);                     // only the empty cells of the ball
+    for (const auto& e : edits) {
+        EXPECT_EQ(e.mat, (uint8_t)vox::VoxMat::SandGrain);
+        EXPECT_EQ(mats[e.cell], (uint8_t)vox::VoxMat::Air); // the Rock floor it overlaps is spared
+    }
 }
 
-TEST(App, DrawBuildRadiusFillsSphereAtNeighbor) {
+TEST(App, DrawBuildRadiusFillsOnlyEmptySphereAtNeighbor) {
     vox::VoxelWorld grid({8, 8, 1.0f, 1.0f, 2.0f});
     std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
     app.set_tool(vox::EditTool::Build);
     app.set_material(vox::VoxMat::Rock);
-    app.set_brush_radius(1);
+    app.set_brush_radius(2);
 
     push_draw(app, 50, 50);
     app.resolve_draw(100, 100, grid, mats.data());
@@ -252,8 +273,13 @@ TEST(App, DrawBuildRadiusFillsSphereAtNeighbor) {
     ASSERT_TRUE(app.selection()->has_neighbor);
 
     auto edits = app.drain_pending_edits();
-    std::vector<uint32_t> expected;
-    vox::sphere_cells(grid, app.selection()->neighbor_idx, 1, expected);
-    EXPECT_EQ(edits.size(), expected.size());               // ball centred on the neighbour
-    for (const auto& e : edits) EXPECT_EQ(e.mat, (uint8_t)vox::VoxMat::Rock);
+    std::vector<uint32_t> sphere;
+    vox::sphere_cells(grid, app.selection()->neighbor_idx, 2, sphere);
+    size_t air_cells = 0;
+    for (uint32_t c : sphere) if (mats[c] == (uint8_t)vox::VoxMat::Air) ++air_cells;
+    EXPECT_EQ(edits.size(), air_cells);                     // ball minus the rock floor it overlaps
+    for (const auto& e : edits) {
+        EXPECT_EQ(e.mat, (uint8_t)vox::VoxMat::Rock);
+        EXPECT_EQ(mats[e.cell], (uint8_t)vox::VoxMat::Air);
+    }
 }

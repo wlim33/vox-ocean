@@ -65,7 +65,7 @@ private:
     std::optional<glm::vec2> pending_draw_;  // screen px of an unresolved Draw
     std::optional<PickHit>   selection_;     // last resolved hit (cleared on miss)
     std::vector<UserEdit>    pending_edits_;
-    EditTool tool_     = EditTool::Paint;
+    EditTool tool_     = EditTool::Build;   // additive placement (fills empty space)
     VoxMat   material_ = VoxMat::Rock;
     int brush_radius_ = 0;                         // 0 = single voxel
     std::vector<uint32_t> draw_cells_;             // resolve_draw scratch (sphere cells)

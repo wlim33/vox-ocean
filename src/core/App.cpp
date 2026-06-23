@@ -66,8 +66,15 @@ void App::resolve_draw(int viewport_w, int viewport_h,
             center = selection_->neighbor_idx; mat = material_;                   break;
     }
     sphere_cells(grid, center, brush_radius_, draw_cells_);
-    for (uint32_t cell : draw_cells_)
+    // Additive placement: a placed (non-Air) material only fills empty cells, so the
+    // brush never carves existing voxels (placing sand on stone piles on top instead
+    // of overwriting stone and leaving holes once the granular sand falls away). Dig
+    // (mat == Air) is exempt — it must be able to clear occupied cells.
+    const bool placing = (mat != VoxMat::Air);
+    for (uint32_t cell : draw_cells_) {
+        if (placing && materials[cell] != (uint8_t)VoxMat::Air) continue;
         pending_edits_.push_back({cell, (uint8_t)mat});
+    }
 }
 
 void App::set_brush_radius(int r) { brush_radius_ = std::clamp(r, 0, kMaxBrushRadius); }
