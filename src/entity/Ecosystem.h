@@ -3,8 +3,13 @@
 #include "entity/Kelp.h"
 #include "entity/Fish.h"
 #include "entity/StampBudget.h"
+#include "entity/Creature.h"
+#include "entity/CreatureRegistry.h"
 #include "voxel/VoxelWorld.h"
+#include "world/EditList.h"
 #include <functional>
+#include <memory>
+#include <vector>
 namespace vox {
 struct Config;
 class World;
@@ -22,12 +27,17 @@ public:
     // Advance boat + fish; refresh kelp sway. water_height = surface water y.
     void update(const Config& cfg, float dt, float t, const HeightFn& water_height,
                 const World& world);
-    // Append kelp, then fish, then boat (boat last -> wins overlaps).
-    void build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out) const;
+    // Append kelp, creatures, fish, then boat (boat last -> wins overlaps).
+    void build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out);
+    void add_creature(std::unique_ptr<ICreature> c);
+    EditList& edits() { return creature_edits_; }
 private:
     Boat boat_;
     KelpBed kelp_;
     FishSchools fish_;
+    std::vector<std::unique_ptr<ICreature>> creatures_;
+    CreatureRegistry registry_;
+    EditList         creature_edits_;
     int   built_extent_ = -1, built_height_cells_ = -1, built_floor_seed_ = 0;
     float built_floor_base_depth_ = -1.0f, built_floor_step_ = -1.0f;
     bool  built_kelp_enabled_ = false;

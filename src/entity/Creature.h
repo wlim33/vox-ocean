@@ -49,4 +49,16 @@ struct CreatureCtx {
         const std::function<void(const CreaturePresence&)>& fn) const;
 };
 
+// One species/population of living creatures. The manager IS the creature
+// (Approach A) — one virtual call per species per frame over its SoA arrays.
+class ICreature {
+public:
+    virtual ~ICreature() = default;
+    virtual void rebuild(const Config& cfg, const World& world) = 0;
+    virtual uint16_t species_id() const = 0;
+    virtual void publish_presence(CreatureRegistry& reg) const = 0;
+    virtual void update(const CreatureCtx& ctx) = 0;
+    virtual void act(const VoxelWorld& grid, CreatureActs& out) const = 0;
+};
+
 }

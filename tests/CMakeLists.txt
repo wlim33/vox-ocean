@@ -135,5 +135,9 @@ target_sources(vox-ocean-tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src/entity/Creature.cpp
 )
 
+target_sources(vox-ocean-tests PRIVATE
+    creature_contract_test.cpp
+)
+
 include(GoogleTest)
 gtest_discover_tests(vox-ocean-tests)

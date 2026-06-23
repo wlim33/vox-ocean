@@ -43,6 +43,10 @@ void Ecosystem::rebuild_if_dirty(const Config& cfg, const World& world) {
     }
 }
 
+void Ecosystem::add_creature(std::unique_ptr<ICreature> c) {
+    creatures_.push_back(std::move(c));
+}
+
 void Ecosystem::update(const Config& cfg, float dt, float t, const HeightFn& water_height,
                        const World& world) {
     if (cfg.entity.boat_enabled) {
@@ -52,11 +56,24 @@ void Ecosystem::update(const Config& cfg, float dt, float t, const HeightFn& wat
     kelp_.update(cfg, t, water_height);
     fish_.update(cfg, dt, t, water_height,
                  [&](float x, float z) { return world.floor_top_y(x, z); });
+    // --- creatures: publish all presences, THEN decide against the snapshot ---
+    registry_.clear();
+    for (auto& c : creatures_) c->publish_presence(registry_);
+    const VoxelWorld& g = world.grid();
+    for (auto& c : creatures_) {
+        CreatureCtx ctx{ cfg, dt, t, world, g, water_height, registry_ };
+        c->update(ctx);
+    }
 }
 
-void Ecosystem::build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out) const {
+void Ecosystem::build_stamp(const Config& cfg, const VoxelWorld& w, StampList& out) {
     out.clear();
+    creature_edits_.idx.clear();
+    creature_edits_.mat.clear();
+    creature_edits_.resync = false;
     kelp_.build_stamp(cfg, w, out);
+    CreatureActs acts{ out, creature_edits_ };
+    for (auto& c : creatures_) c->act(w, acts);   // creatures between kelp and fish/boat
     fish_.build_stamp(cfg, w, out);
     if (cfg.entity.boat_enabled) {
         auto cells = boat_cells(boat_.state(), w);
