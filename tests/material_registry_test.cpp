@@ -22,6 +22,18 @@ TEST(MaterialRegistry, LavaSinksAndIsViscous) {
     EXPECT_LT(l.fluidity, 0.5f);                                 // repose -> viscous mound
 }
 
+TEST(MaterialRegistry, LavaIsDarkRedNotYellow) {
+    using namespace vox;
+    // The renderer draws lava emissively (palette * glow, then ACES). A green channel
+    // anywhere near the red channel tonemaps to yellow/orange, so the palette column
+    // must be a strongly red-dominant dark red for lava to read as dark red on screen.
+    const MaterialProps& l = material_props(VoxMat::Lava);
+    EXPECT_GT(l.r, 0.30f);            // a visible red
+    EXPECT_LT(l.g, 0.12f);            // little green  -> not yellow/orange
+    EXPECT_LT(l.b, 0.12f);            // little blue
+    EXPECT_GT(l.r, 2.5f * l.g);       // red strongly dominates green
+}
+
 TEST(MaterialRegistry, SteamIsRisingGas) {
     using namespace vox;
     const MaterialProps& s = material_props(VoxMat::Steam);

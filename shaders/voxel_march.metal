@@ -151,8 +151,11 @@ fragment float4 march_fs(
     }
 
     // Emissive fire: full-bright, ignores sun shading and the water path so it glows.
+    // Lava uses a much gentler boost (1.25) than fire (3.0): a strong boost would push
+    // the dark-red palette up the ACES shoulder until the green channel lifts and the
+    // colour tonemaps to yellow. The faint boost keeps it a self-lit dark red.
     if (mat == MAT_FIRE) return float4(aces_tonemap(U.palette[MAT_FIRE] * 3.0), 1.0);
-    if (mat == MAT_LAVA) return float4(aces_tonemap(U.palette[MAT_LAVA] * 3.0), 1.0);
+    if (mat == MAT_LAVA) return float4(aces_tonemap(U.palette[MAT_LAVA] * 1.25), 1.0);
 
     if (mat != MAT_WATER) {
         // Dry terrain (island above the waterline).
@@ -199,7 +202,7 @@ fragment float4 march_fs(
     if (end_mat == MAT_FIRE)
         return float4(aces_tonemap(U.palette[MAT_FIRE] * 3.0), 1.0);   // fire glows through water
     if (end_mat == MAT_LAVA)
-        return float4(aces_tonemap(U.palette[MAT_LAVA] * 3.0), 1.0);   // lava glows through water
+        return float4(aces_tonemap(U.palette[MAT_LAVA] * 1.25), 1.0);  // lava glows (dark red) through water
 
     // Background behind the water along the refracted path.
     float3 bg;
