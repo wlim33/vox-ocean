@@ -700,6 +700,26 @@ TEST(Combustion, TableMatchesOriginalArmsOverRandomGrid) {
     }
 }
 
+// The out-of-grid halo is an inert "Rock" wall for READS (gates, hot/water checks)
+// but must never be a writable B target. Rock carries the Corrodible tag, so Acid
+// on a grid face used to "match" the wall and write cells[ca_cell_index(-1,..)] —
+// an index outside the box (negative -> crash, or wrapping -> silent corruption).
+TEST(Combustion, AcidDoesNotCorrodeOutOfGridWall) {
+    using namespace vox;
+    MaterialCaDims d{4, 4};
+    const size_t n = (size_t)d.extent * d.extent * d.height_cells;
+    std::vector<uint8_t> cells(n, (uint8_t)VoxMat::Air);   // Air is not Corrodible
+    const int acid = ca_cell_index(d, 0, 1, 1);            // -x neighbour is OOB
+    cells[acid] = (uint8_t)VoxMat::Acid;
+    CombustionParams p; p.acid_chance = 1.0f;              // force the dissolve roll
+    std::vector<uint32_t> changed;
+    contact_sweep(cells, d, /*step*/0, /*seed*/0, p,
+                  0, 0, 0, d.extent - 1, d.height_cells - 1, d.extent - 1, changed);
+    EXPECT_EQ(cells[acid], (uint8_t)VoxMat::Acid);         // acid stays put (no real B)
+    EXPECT_TRUE(changed.empty());                          // nothing reacted
+    for (uint8_t c : cells) EXPECT_NE(c, (uint8_t)VoxMat::FlammableGas);  // no stray write
+}
+
 // --- Heat diffusion (thermal_sweep) ------------------------------------------
 TEST(ThermalSweep, HeatSourceWarmsNeighbourAndConductivityOrders) {
     MaterialCaDims d{5,5};

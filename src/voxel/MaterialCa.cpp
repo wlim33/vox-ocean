@@ -401,10 +401,17 @@ void contact_sweep(std::vector<uint8_t>& cells, const MaterialCaDims& d,
                         if (is_hot(at(x+NX[k], y+NY[k], z+NZ[k]))) any_hot = true;
                     if (any_hot) continue;
                 } else {
-                    for (int k = 0; k < 6; ++k)
-                        if (b_matches(r.b_match, r.b_key, at(x+NX[k], y+NY[k], z+NZ[k]))) {
-                            bi = ca_cell_index(d, x+NX[k], y+NY[k], z+NZ[k]); break;
+                    // The OOB halo is an inert wall: a valid READ sentinel for gates,
+                    // but never a writable B target (Rock is Corrodible, so Acid would
+                    // otherwise "dissolve" the wall and write outside the grid).
+                    for (int k = 0; k < 6; ++k) {
+                        int nx = x+NX[k], ny = y+NY[k], nz = z+NZ[k];
+                        if (nx < 0 || nx >= d.extent || ny < 0 || ny >= d.height_cells ||
+                            nz < 0 || nz >= d.extent) continue;
+                        if (b_matches(r.b_match, r.b_key, at(nx, ny, nz))) {
+                            bi = ca_cell_index(d, nx, ny, nz); break;
                         }
+                    }
                     if (bi < 0) continue;                       // no matching neighbour
                 }
                 if (r.rate) {                                   // nullptr = deterministic
