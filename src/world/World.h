@@ -6,6 +6,7 @@
 #include "world/EditList.h"
 #include <optional>
 #include <vector>
+#include <unordered_map>
 #include <cstdint>
 #include "core/Config.h"
 namespace vox {
@@ -55,6 +56,7 @@ private:
     std::vector<uint32_t>     prev_overlay_cells_; // last frame
     mutable std::vector<uint8_t> composite_;       // materialize_composite scratch
     std::vector<uint32_t>     dirty_;              // step() scratch
+    std::unordered_map<uint32_t, uint8_t> overlay_lut_;  // step() scratch: cell -> overlay mat (last wins)
     std::vector<uint32_t>     user_edited_;       // cells written by apply_user_edit this frame
 
     bool  resync_ = true;
