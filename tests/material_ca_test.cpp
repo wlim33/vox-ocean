@@ -759,3 +759,28 @@ TEST(ThermalRules, SteamCondensesBelowThreshold) {
     thermal_sweep(cells,temp,d,tp,kAmbientTemp, 0,0,0,2,2,2, changed);
     EXPECT_EQ(cells[idx(1,1,1)], (uint8_t)VoxMat::Water);    // condensed
 }
+
+// --- New materials (P5): acid dissolves corrodible; ice melts ----------------
+TEST(ContactRules, AcidDissolvesCorrodibleIntoFlammableGas) {
+    MaterialCaDims d{3,3};
+    auto idx=[&](int x,int y,int z){ return ca_cell_index(d,x,y,z); };
+    std::vector<uint8_t> cells((size_t)3*3*3,(uint8_t)VoxMat::Air);
+    cells[idx(1,1,1)] = (uint8_t)VoxMat::Acid;
+    cells[idx(0,1,1)] = (uint8_t)VoxMat::Rock;     // Corrodible-tagged
+    CombustionParams p; p.acid_chance = 1.0f;       // force the dissolve
+    std::vector<uint32_t> ch;
+    contact_sweep(cells, d, 0, 1, p, 0,0,0, 2,2,2, ch);
+    EXPECT_EQ(cells[idx(0,1,1)], (uint8_t)VoxMat::FlammableGas);  // rock dissolved
+    EXPECT_EQ(cells[idx(1,1,1)], (uint8_t)VoxMat::Acid);          // acid persists
+}
+
+TEST(ThermalRules, IceMeltsAboveThreshold) {
+    MaterialCaDims d{3,3};
+    auto idx=[&](int x,int y,int z){ return ca_cell_index(d,x,y,z); };
+    std::vector<uint8_t> cells((size_t)3*3*3,(uint8_t)VoxMat::Air);
+    std::vector<uint8_t> temp(cells.size(), kAmbientTemp);
+    cells[idx(1,1,1)] = (uint8_t)VoxMat::Ice; temp[idx(1,1,1)] = 200;
+    ThermalParams tp; std::vector<uint32_t> changed;
+    thermal_sweep(cells,temp,d,tp,kAmbientTemp,0,0,0,2,2,2,changed);
+    EXPECT_EQ(cells[idx(1,1,1)], (uint8_t)VoxMat::Water);
+}

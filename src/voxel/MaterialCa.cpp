@@ -197,7 +197,7 @@ constexpr ThermalRule kThermalRules[] = {
     { TMatch::Tag,      (uint32_t)MatTag::Flammable, TCmp::Above, &ThermalParams::ignite_temp,   VoxMat::Fire  },
     { TMatch::Material, (uint32_t)VoxMat::Water,     TCmp::Above, &ThermalParams::boil_temp,     VoxMat::Steam },
     { TMatch::Material, (uint32_t)VoxMat::Steam,     TCmp::Below, &ThermalParams::condense_temp, VoxMat::Water },
-    // Ice melt row added in P5 (VoxMat::Ice does not exist yet).
+    { TMatch::Material, (uint32_t)VoxMat::Ice,       TCmp::Above, &ThermalParams::melt_temp,     VoxMat::Water },
 };
 inline bool tmatch(const ThermalRule& r, uint8_t m) {
     return r.match == TMatch::Material ? (m == (uint8_t)r.key)
@@ -250,6 +250,9 @@ constexpr ContactRule kContacts[] = {
     // by the thermal layer / future enhancement).
     { TMatch::Material,(uint32_t)VoxMat::Lava,  BMatch::Material,(uint32_t)VoxMat::Water,
       &CombustionParams::cool_chance, false, VoxMat::Rock,false, VoxMat::Air,true, 7 },
+    // Acid dissolves any [Corrodible] neighbour into flammable gas (acid persists).
+    { TMatch::Material,(uint32_t)VoxMat::Acid,  BMatch::Tag,(uint32_t)MatTag::Corrodible,
+      &CombustionParams::acid_chance, false, VoxMat::Acid,true, VoxMat::FlammableGas,false, 8 },
 };
 
 inline bool a_matches(TMatch mt, uint32_t key, uint8_t m) {

@@ -49,6 +49,11 @@ inline constexpr std::array<MaterialProps, kNumMaterials> kMaterials = {{
     /* Ash       */ { Phase::Granular, 0.16f,0.15f,0.14f, 1700.0f, 0.2f, true,  0.0f, 0.20f,  -1, 0 }, // falls + repose
     /* Steam     */ { Phase::Gas,      0.85f,0.88f,0.92f,    0.6f, 1.0f, true,  0.0f, 0.10f,  -1, 0 }, // condensed steam; rises
     /* Lava      */ { Phase::Liquid,   0.42f,0.04f,0.03f, 3100.0f, 0.3f, true,  0.0f, 0.60f, 255, 0 }, // emissive dark red; dense->sinks; heat source
+    /* Wood      */ { Phase::Solid,    0.55f,0.38f,0.20f,  650.0f, 0.0f, false, 0.5f, 0.12f,  -1, (uint32_t)MatTag::Flammable | (uint32_t)MatTag::Corrodible },
+    /* Oil       */ { Phase::Liquid,   0.20f,0.18f,0.10f,  900.0f, 1.0f, true,  0.8f, 0.10f,  -1, (uint32_t)MatTag::Flammable },
+    /* Acid      */ { Phase::Liquid,   0.55f,0.85f,0.20f, 1100.0f, 1.0f, true,  0.0f, 0.20f,  -1, 0 },
+    /* Ice       */ { Phase::Solid,    0.70f,0.85f,0.95f,  917.0f, 0.0f, false, 0.0f, 0.40f,  -1, 0 },
+    /* FlamGas   */ { Phase::Gas,      0.60f,0.70f,0.30f,    0.5f, 1.0f, true,  0.6f, 0.08f,  -1, (uint32_t)MatTag::Flammable },
 }};
 
 static_assert(kMaterials.size() == (size_t)kNumMaterials, "registry size must match VoxMat count");
@@ -65,7 +70,8 @@ constexpr bool material_has_tag(VoxMat m, MatTag t) {
 constexpr std::string_view material_name(VoxMat m) {
     constexpr std::array<std::string_view, kNumMaterials> kNames = {
         "Air", "Water", "Sand", "Rock", "Boat", "Kelp", "Fish",
-        "SandGrain", "Bubble", "Fire", "Smoke", "Ash", "Steam", "Lava"
+        "SandGrain", "Bubble", "Fire", "Smoke", "Ash", "Steam", "Lava",
+        "Wood", "Oil", "Acid", "Ice", "FlammableGas"
     };
     return kNames[std::to_underlying(m)];
 }

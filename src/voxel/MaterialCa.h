@@ -37,6 +37,7 @@ struct CombustionParams {
     float boil_chance = 0.5f;             // P(Water -> Steam | Fire neighbor) per step
     float condense_chance = 0.10f;        // P(Steam -> Water | no Fire neighbor) per step
     float cool_chance = 0.15f;            // P(Lava -> Rock | Water neighbor) per step
+    float acid_chance = 0.25f;            // P(Acid dissolves a [Corrodible] neighbor) per step
 };
 
 // Data-driven contact-reaction pass over the inclusive box: a Noita-style table of

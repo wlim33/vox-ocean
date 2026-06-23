@@ -8,8 +8,8 @@ namespace vox {
 // Material IDs stored in the world grid (one byte per cell).
 // Lockstep mirror of the MAT_* constants in shaders/shader_types.h
 // (static_asserted in voxel_world_test.cpp).
-enum class VoxMat : uint8_t { Air = 0, Water = 1, Sand = 2, Rock = 3, Boat = 4, Kelp = 5, Fish = 6, SandGrain = 7, Bubble = 8, Fire = 9, Smoke = 10, Ash = 11, Steam = 12, Lava = 13 };
-inline constexpr int kNumMaterials = 14;  // == NUM_MATERIALS in shaders/shader_types.h
+enum class VoxMat : uint8_t { Air = 0, Water = 1, Sand = 2, Rock = 3, Boat = 4, Kelp = 5, Fish = 6, SandGrain = 7, Bubble = 8, Fire = 9, Smoke = 10, Ash = 11, Steam = 12, Lava = 13, Wood = 14, Oil = 15, Acid = 16, Ice = 17, FlammableGas = 18 };
+inline constexpr int kNumMaterials = 19;  // == NUM_MATERIALS in shaders/shader_types.h
 
 // Ambient temperature baseline for the per-cell heat field (abstract heat units,
 // not °C). Cells initialise here; thermal sweeps relax toward it. CPU-only — never

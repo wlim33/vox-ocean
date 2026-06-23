@@ -9,8 +9,8 @@ TEST(MaterialRegistry, TableSizeMatchesEnum) {
     EXPECT_EQ(kMaterials.size(), (size_t)kNumMaterials);
 }
 
-TEST(MaterialRegistry, EnumSizeIsFourteen) {
-    EXPECT_EQ((int)vox::kNumMaterials, 14);
+TEST(MaterialRegistry, EnumSizeIsNineteen) {
+    EXPECT_EQ((int)vox::kNumMaterials, 19);
 }
 
 TEST(MaterialRegistry, LavaSinksAndIsViscous) {

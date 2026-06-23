@@ -24,6 +24,9 @@ void draw_tool_palette(App& app) {
     const struct { const char* label; VoxMat mat; } palette[] = {
         {"Rock",  VoxMat::Rock},      {"Sand", VoxMat::SandGrain},
         {"Water", VoxMat::Water},     {"Lava", VoxMat::Lava},
+        {"Fire",  VoxMat::Fire},      {"Wood", VoxMat::Wood},
+        {"Oil",   VoxMat::Oil},       {"Acid", VoxMat::Acid},
+        {"Ice",   VoxMat::Ice},
     };
     VoxMat mat = app.material();
     for (size_t i = 0; i < std::size(palette); ++i) {
