@@ -44,11 +44,10 @@ std::optional<glm::vec3> CreatureCtx::find_nearest(
     int iy1 = clampi((int)std::floor((from.y + radius + p.base_depth_m) / p.height_step_m), 0, p.height_cells - 1);
     const float r2 = radius * radius;
     bool found = false;
-    float best2 = r2;
+    float best2 = 0.0f;
     glm::vec3 best{0.0f};
     const auto& mats = world.material();
-    // Iterate in ascending cell-index order (x fastest, then y, then z) so ties
-    // resolve to the lowest index deterministically.
+    // Closed ball: a cell center exactly at radius is included; ties resolve to the lowest cell index (ascending iteration + strict <).
     for (int iz = iz0; iz <= iz1; ++iz)
         for (int iy = iy0; iy <= iy1; ++iy)
             for (int ix = ix0; ix <= ix1; ++ix) {
@@ -58,7 +57,9 @@ std::optional<glm::vec3> CreatureCtx::find_nearest(
                 float cy = grid.cell_bottom_y(iy) + 0.5f * p.height_step_m;
                 float dx = cx - from.x, dy = cy - from.y, dz = cz - from.z;
                 float d2 = dx * dx + dy * dy + dz * dz;
-                if (d2 < best2) { best2 = d2; best = {cx, cy, cz}; found = true; }
+                if (d2 <= r2 && (!found || d2 < best2)) {
+                    best2 = d2; best = {cx, cy, cz}; found = true;
+                }
             }
     if (found) return best;
     return std::nullopt;

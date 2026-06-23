@@ -25,7 +25,6 @@ TEST(CreatureCtx, SampleReturnsSeededMaterialAndAirOutOfBounds) {
     world.apply_user_edit((uint32_t)g.cell_index(ix, iy, iz), (uint8_t)VoxMat::Fire);
 
     CreatureRegistry reg;
-    StampList occ; EditList ed;
     CreatureCtx ctx{ c, 1.0f/60.0f, 0.0f, world, g,
                      [](float,float){ return 0.0f; }, reg };
 
