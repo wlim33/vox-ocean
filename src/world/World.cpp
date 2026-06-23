@@ -40,6 +40,7 @@ void World::configure(const Config& cfg) {
         dims_ = { v.grid_extent, v.height_cells };
         int extent = v.grid_extent, hc = v.height_cells;
         material_.assign((size_t)extent * extent * hc, (uint8_t)VoxMat::Air);
+        temp_.assign(material_.size(), kAmbientTemp);
         for (int iz = 0; iz < extent; ++iz)
             for (int ix = 0; ix < extent; ++ix) {
                 const FloorColumn& fc = floor_[(size_t)iz * extent + ix];
@@ -51,6 +52,7 @@ void World::configure(const Config& cfg) {
         // Same grid, sand toggled: rebuild material_ from terrain to clear old sand.
         int extent = v.grid_extent, hc = v.height_cells;
         std::fill(material_.begin(), material_.end(), (uint8_t)VoxMat::Air);
+        std::fill(temp_.begin(), temp_.end(), kAmbientTemp);
         for (int iz = 0; iz < extent; ++iz)
             for (int ix = 0; ix < extent; ++ix) {
                 const FloorColumn& fc = floor_[(size_t)iz * extent + ix];

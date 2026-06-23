@@ -286,3 +286,9 @@ TEST(World, ApplyUserEditWakesCaForDynamicMaterial) {
     w.apply_user_edit(cell, (uint8_t)vox::VoxMat::SandGrain);
     EXPECT_TRUE(w.ca_awake());                               // placed sand will fall
 }
+
+TEST(World, TemperatureArrayMatchesMaterialAndStartsAmbient) {
+    vox::World w; w.configure(small_cfg());
+    EXPECT_EQ(w.temperature().size(), w.material().size());
+    for (uint8_t t : w.temperature()) EXPECT_EQ(t, vox::kAmbientTemp);
+}

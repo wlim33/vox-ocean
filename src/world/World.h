@@ -31,6 +31,7 @@ public:
     const std::vector<uint8_t>& materialize_composite() const;
 
     const std::vector<uint8_t>& material() const { return material_; }
+    const std::vector<uint8_t>& temperature() const { return temp_; }
     const std::vector<FloorColumn>& floor() const { return floor_; }
     float floor_top_y(float x, float z) const;
     const VoxelWorld& grid() const { return *grid_; }
@@ -47,6 +48,7 @@ private:
     std::optional<VoxelWorld> grid_;
     std::vector<FloorColumn>  floor_;
     std::vector<uint8_t>      material_;      // THE dense grid (terrain + water + sand)
+    std::vector<uint8_t>      temp_;          // CPU-only per-cell temperature, parallel to material_
     MaterialCa                ca_;
     MaterialCaDims            dims_{0, 0};
 
