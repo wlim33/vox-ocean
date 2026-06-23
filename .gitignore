@@ -1,5 +1,6 @@
 # build artifacts
 build/
+build-app/
 *.xcodeproj/
 DerivedData/
 *.xcuserdatad/
@@ -19,3 +20,4 @@ apps/ios/Info.plist
 # snapshot CLI output (generated artifacts)
 snapshot*.png
 snap*.png
+sp2i-ocean.png
