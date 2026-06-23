@@ -107,6 +107,11 @@ target_sources(vox-ocean-tests PRIVATE material_registry_test.cpp)
 
 target_sources(vox-ocean-tests PRIVATE march_palette_test.cpp)
 
+target_sources(vox-ocean-tests PRIVATE
+    brush_test.cpp
+    ${CMAKE_SOURCE_DIR}/src/voxel/Brush.cpp
+)
+
 target_sources(vox-ocean-tests PRIVATE grid_view_test.cpp)
 
 target_sources(vox-ocean-tests PRIVATE
