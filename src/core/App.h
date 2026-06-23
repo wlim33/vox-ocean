@@ -45,6 +45,10 @@ public:
     EditTool tool() const             { return tool_; }
     VoxMat   material() const         { return material_; }
 
+    static constexpr int kMaxBrushRadius = 8;
+    void set_brush_radius(int r);                 // clamped to [0, kMaxBrushRadius]
+    int  brush_radius() const { return brush_radius_; }
+
     const OrbitCamera& camera() const { return camera_; }
     OrbitCamera&       camera()       { return camera_; }
     const Config&      config() const { return config_; }
@@ -63,5 +67,7 @@ private:
     std::vector<UserEdit>    pending_edits_;
     EditTool tool_     = EditTool::Paint;
     VoxMat   material_ = VoxMat::Rock;
+    int brush_radius_ = 0;                         // 0 = single voxel
+    std::vector<uint32_t> draw_cells_;             // resolve_draw scratch (sphere cells)
 };
 }

@@ -1,6 +1,7 @@
 #include "core/App.h"
 #include "core/InputBridge.h"
 #include "voxel/VoxelWorld.h"
+#include "voxel/Brush.h"
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -125,8 +126,9 @@ vox::App make_draw_app(vox::VoxelWorld& grid, std::vector<uint8_t>& mats) {
     vox::App app{vox::Config{}};
     app.camera().pitch_rad = 1.45f; app.camera().yaw_rad = 0.0f; app.camera().distance = 10.0f;
     mats.assign((size_t)grid.cells(), (uint8_t)vox::VoxMat::Air);
-    for (int ix = 0; ix < 4; ++ix)
-        for (int iz = 0; iz < 4; ++iz)
+    int ext = grid.params().extent;
+    for (int ix = 0; ix < ext; ++ix)
+        for (int iz = 0; iz < ext; ++iz)
             mats[grid.cell_index(ix, 0, iz)] = (uint8_t)vox::VoxMat::Rock;
     return app;
 }
@@ -204,4 +206,54 @@ TEST(App, DrawDefaultsArePaintRock) {
     EXPECT_EQ(app.tool(), vox::EditTool::Paint);
     EXPECT_EQ(app.material(), vox::VoxMat::Rock);
     EXPECT_FALSE(app.has_pending_draw());
+}
+
+TEST(App, BrushRadiusClampsToRange) {
+    vox::App app{vox::Config{}};
+    EXPECT_EQ(app.brush_radius(), 0);                       // default single voxel
+    app.set_brush_radius(100); EXPECT_EQ(app.brush_radius(), vox::App::kMaxBrushRadius);
+    app.set_brush_radius(-5);  EXPECT_EQ(app.brush_radius(), 0);
+    app.set_brush_radius(3);   EXPECT_EQ(app.brush_radius(), 3);
+}
+
+TEST(App, DrawPaintRadiusFillsSphereOfActiveMaterial) {
+    vox::VoxelWorld grid({8, 8, 1.0f, 1.0f, 2.0f});
+    std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
+    app.set_tool(vox::EditTool::Paint);
+    app.set_material(vox::VoxMat::SandGrain);
+    app.set_brush_radius(1);
+
+    push_draw(app, 50, 50);
+    app.resolve_draw(100, 100, grid, mats.data());
+    ASSERT_TRUE(app.selection().has_value());
+
+    auto edits = app.drain_pending_edits();
+    std::vector<uint32_t> expected;
+    vox::sphere_cells(grid, app.selection()->linear_idx, 1, expected);
+    EXPECT_EQ(edits.size(), expected.size());               // one edit per sphere cell
+    EXPECT_GT(edits.size(), 1u);                            // genuinely a volume
+    for (const auto& e : edits) EXPECT_EQ(e.mat, (uint8_t)vox::VoxMat::SandGrain);
+    // the centre (hit) cell is in the edit set
+    bool has_center = false;
+    for (const auto& e : edits) if (e.cell == app.selection()->linear_idx) has_center = true;
+    EXPECT_TRUE(has_center);
+}
+
+TEST(App, DrawBuildRadiusFillsSphereAtNeighbor) {
+    vox::VoxelWorld grid({8, 8, 1.0f, 1.0f, 2.0f});
+    std::vector<uint8_t> mats; vox::App app = make_draw_app(grid, mats);
+    app.set_tool(vox::EditTool::Build);
+    app.set_material(vox::VoxMat::Rock);
+    app.set_brush_radius(1);
+
+    push_draw(app, 50, 50);
+    app.resolve_draw(100, 100, grid, mats.data());
+    ASSERT_TRUE(app.selection().has_value());
+    ASSERT_TRUE(app.selection()->has_neighbor);
+
+    auto edits = app.drain_pending_edits();
+    std::vector<uint32_t> expected;
+    vox::sphere_cells(grid, app.selection()->neighbor_idx, 1, expected);
+    EXPECT_EQ(edits.size(), expected.size());               // ball centred on the neighbour
+    for (const auto& e : edits) EXPECT_EQ(e.mat, (uint8_t)vox::VoxMat::Rock);
 }
