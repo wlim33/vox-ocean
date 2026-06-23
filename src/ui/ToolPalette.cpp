@@ -2,6 +2,7 @@
 #include "core/App.h"
 #include "voxel/MaterialRegistry.h"
 #include "imgui.h"
+#include <iterator>
 
 namespace vox {
 void draw_tool_palette(App& app) {
@@ -25,7 +26,7 @@ void draw_tool_palette(App& app) {
         {"Water", VoxMat::Water},     {"Lava", VoxMat::Lava},
     };
     VoxMat mat = app.material();
-    for (int i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < std::size(palette); ++i) {
         if (ImGui::RadioButton(palette[i].label, mat == palette[i].mat))
             app.set_material(palette[i].mat);
         if (i % 2 == 0) ImGui::SameLine();   // two per row
