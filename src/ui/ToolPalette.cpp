@@ -32,6 +32,11 @@ void draw_tool_palette(App& app) {
         if (i % 2 == 0) ImGui::SameLine();   // two per row
     }
     ImGui::EndDisabled();
+
+    ImGui::Separator();
+    int r = app.brush_radius();
+    if (ImGui::SliderInt("Brush size", &r, 0, App::kMaxBrushRadius)) app.set_brush_radius(r);
+
     ImGui::End();
 }
 }
