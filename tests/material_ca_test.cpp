@@ -754,6 +754,31 @@ TEST(ThermalSweep, RelaxesTowardAmbientWithoutSource) {
     for (uint8_t t : temp) EXPECT_EQ(t, kAmbientTemp);
 }
 
+// Order-independence across mid-sweep transitions: a Water cell hot enough to
+// boil flips to Steam (conductivity 0.30 -> 0.10) the moment the sweep visits it.
+// A neighbour's diffusion weight must read the PRE-STEP material, not the live
+// grid, or the result depends on x-visit order. Symmetry probe: the same scene
+// mirrored in x puts the boiling cell before the probe in one run and after it
+// in the other — any live-read leak shows up as probe-temperature asymmetry.
+TEST(ThermalSweep, MidSweepTransitionDoesNotSkewNeighbourDiffusion) {
+    MaterialCaDims d{4, 3};
+    auto idx = [&](int x,int y,int z){ return ca_cell_index(d,x,y,z); };
+    ThermalParams tp;
+    auto probe_temp = [&](int boil_x, int probe_x) {
+        std::vector<uint8_t> cells((size_t)4*4*3, (uint8_t)VoxMat::Air);
+        std::vector<uint8_t> temp(cells.size(), kAmbientTemp);
+        cells[idx(boil_x,1,1)]  = (uint8_t)VoxMat::Water; temp[idx(boil_x,1,1)] = 200; // boils this sweep
+        cells[idx(probe_x,1,1)] = (uint8_t)VoxMat::Water;                              // stays water
+        std::vector<uint32_t> changed;
+        thermal_sweep(cells, temp, d, tp, kAmbientTemp, 0,0,0, 3,2,3, changed);
+        EXPECT_EQ(cells[idx(boil_x,1,1)], (uint8_t)VoxMat::Steam);   // transition really fired
+        return temp[idx(probe_x,1,1)];
+    };
+    uint8_t boil_first = probe_temp(/*boil_x*/0, /*probe_x*/1);  // boiler visited before probe
+    uint8_t boil_last  = probe_temp(/*boil_x*/3, /*probe_x*/2);  // boiler visited after probe
+    EXPECT_EQ(boil_first, boil_last);
+}
+
 // --- Thermal-threshold transitions -------------------------------------------
 TEST(ThermalRules, WaterBoilsAndFlammableIgnitesAboveThreshold) {
     MaterialCaDims d{3,3};
@@ -792,6 +817,38 @@ TEST(ContactRules, AcidDissolvesCorrodibleIntoFlammableGas) {
     contact_sweep(cells, d, 0, 1, p, 0,0,0, 2,2,2, ch);
     EXPECT_EQ(cells[idx(0,1,1)], (uint8_t)VoxMat::FlammableGas);  // rock dissolved
     EXPECT_EQ(cells[idx(1,1,1)], (uint8_t)VoxMat::Acid);          // acid persists
+}
+
+// Acid mid-dissolve must not let the CA sleep: the dissolve roll is stochastic
+// (acid_chance), so a quiet run of failed rolls looks like "settled" to the
+// motion-based sleep logic. Mirrors LavaTouchingWaterKeepsCaAwake — rate 0 makes
+// the contact persist forever with no motion, isolating the awake/asleep decision.
+TEST(ContactRules, AcidTouchingCorrodibleKeepsCaAwake) {
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,0,1)] = (uint8_t)VoxMat::Acid;   // on the floor: liquid, no downhill
+    g[ca_cell_index(d,2,0,1)] = (uint8_t)VoxMat::Wood;   // Corrodible-tagged, pinned
+    MaterialCa ca;
+    CombustionParams p; p.acid_chance = 0.0f;            // contact persists, nothing changes
+    ca.enable_combustion(7, p);
+    ca.wake_box(0,0,0, 2,2,2);
+    for (int s = 0; s < 12; ++s) { std::vector<uint32_t> ch; ca.step(g, d, ch); }
+    EXPECT_TRUE(ca.awake());   // pending dissolve keeps the box alive despite no motion
+}
+
+// Neighbour-aware counterpart (the LavaInAirSleeps analogue): acid with nothing
+// to corrode is inert and must not keep the CA awake forever.
+TEST(ContactRules, AcidWithNoCorrodibleNeighborSleeps) {
+    MaterialCaDims d{3, 3};
+    std::vector<uint8_t> g((size_t)d.extent*d.extent*d.height_cells, (uint8_t)VoxMat::Air);
+    g[ca_cell_index(d,1,0,1)] = (uint8_t)VoxMat::Acid;   // resting on the floor, all-Air around
+    MaterialCa ca;
+    CombustionParams p; p.acid_chance = 1.0f;            // even at certainty: no target -> inert
+    ca.enable_combustion(7, p);
+    ca.wake_box(0,0,0, 2,2,2);
+    for (int s = 0; s < 30 && ca.awake(); ++s) { std::vector<uint32_t> ch; ca.step(g, d, ch); }
+    EXPECT_FALSE(ca.awake());
+    EXPECT_EQ(g[ca_cell_index(d,1,0,1)], (uint8_t)VoxMat::Acid);
 }
 
 TEST(ThermalRules, IceMeltsAboveThreshold) {

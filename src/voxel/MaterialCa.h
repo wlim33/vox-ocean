@@ -65,10 +65,11 @@ struct ThermalParams {
 };
 
 // Conductivity-weighted heat diffusion over the inclusive box, then heat-source
-// re-assertion (emit_temp) and an ambient bleed. Reads a pre-step snapshot of
-// `temp` so the result is order-independent. OOB neighbours read as ambient with
-// Air conductivity. Writes `temp` in place; appends any material transitions to
-// `changed` (none until thermal rules land).
+// re-assertion (emit_temp) and an ambient bleed. Reads pre-step snapshots of
+// `temp` AND `cells` (for conductivity) so the result is order-independent even
+// when a threshold transition fires mid-sweep. OOB neighbours read as ambient
+// with Air conductivity. Writes `temp` in place; appends threshold transitions
+// (kThermalRules: ignite/boil/condense/melt) to `changed`.
 void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
                    const MaterialCaDims& d, const ThermalParams& tp, uint8_t ambient,
                    int x0, int y0, int z0, int x1, int y1, int z1,

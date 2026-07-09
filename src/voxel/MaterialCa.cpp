@@ -14,27 +14,36 @@ inline bool  ca_levels (uint8_t m) { return kFluidity[m] >= 0.5f; }
 inline bool  can_sink  (uint8_t a, uint8_t b) {
     return ca_movable(a) && ca_movable(b) && ca_density(a) > ca_density(b);
 }
-// True if any of the 6 face-neighbours of (x,y,z) is Water (OOB reads as not-water).
-inline bool is_water_adjacent(const std::vector<uint8_t>& cells, const MaterialCaDims& d,
-                              int x, int y, int z) {
+// True if any of the 6 face-neighbours of (x,y,z) satisfies `pred`. OOB cells are
+// skipped: the out-of-grid wall is a read sentinel for the sweeps, never a
+// reaction participant, so it must not keep the CA awake either.
+template <class Pred>
+inline bool any_face_neighbour(const std::vector<uint8_t>& cells, const MaterialCaDims& d,
+                               int x, int y, int z, Pred pred) {
     static const int NX[6]={1,-1,0,0,0,0}, NY[6]={0,0,1,-1,0,0}, NZ[6]={0,0,0,0,1,-1};
     for (int k = 0; k < 6; ++k) {
         int nx=x+NX[k], ny=y+NY[k], nz=z+NZ[k];
         if (nx<0||nx>=d.extent||ny<0||ny>=d.height_cells||nz<0||nz>=d.extent) continue;
-        if (cells[ca_cell_index(d, nx, ny, nz)] == (uint8_t)VoxMat::Water) return true;
+        if (pred(cells[ca_cell_index(d, nx, ny, nz)])) return true;
     }
     return false;
 }
-// True if a cell holds a material that must keep the CA awake under combustion:
-// Fire/Smoke/Steam unconditionally; Lava only while touching Water (settled
-// lava-in-air is allowed to sleep). Mirrors the reactive set in combustion_sweep
-// and is the single source of the predicate the two step() scans share.
+// True if a cell holds a material that must keep the CA awake under contact
+// reactions: Fire/Smoke/Steam unconditionally; Lava only while touching Water,
+// Acid only while touching a [Corrodible] neighbour (settled lava-in-air and
+// inert acid are allowed to sleep). Mirrors the reactive rows of kContacts and
+// is the single source of the predicate the two step() scans share.
 inline bool is_reactive_cell(const std::vector<uint8_t>& cells, const MaterialCaDims& d,
                              int x, int y, int z) {
     uint8_t m = cells[ca_cell_index(d, x, y, z)];
     if (m == (uint8_t)VoxMat::Fire || m == (uint8_t)VoxMat::Smoke || m == (uint8_t)VoxMat::Steam)
         return true;
-    if (m == (uint8_t)VoxMat::Lava) return is_water_adjacent(cells, d, x, y, z);
+    if (m == (uint8_t)VoxMat::Lava)
+        return any_face_neighbour(cells, d, x, y, z,
+                                  [](uint8_t n) { return n == (uint8_t)VoxMat::Water; });
+    if (m == (uint8_t)VoxMat::Acid)
+        return any_face_neighbour(cells, d, x, y, z,
+                                  [](uint8_t n) { return material_has_tag((VoxMat)n, MatTag::Corrodible); });
     return false;
 }
 // A cell whose temperature is off ambient must keep the box awake so heat keeps
@@ -322,7 +331,9 @@ void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
                    const MaterialCaDims& d, const ThermalParams& tp, uint8_t ambient,
                    int x0, int y0, int z0, int x1, int y1, int z1,
                    std::vector<uint32_t>& changed) {
-    const HaloSnapshot before(temp, d, x0, y0, z0, x1, y1, z1);  // box+halo (order-independence)
+    const HaloSnapshot before(temp, d, x0, y0, z0, x1, y1, z1);   // box+halo (order-independence)
+    const HaloSnapshot mats(cells, d, x0, y0, z0, x1, y1, z1);    // pre-step materials: a threshold
+    // transition earlier in the sweep must not change the conductivity later cells see.
     const float kAirCond = kConductivity[(uint8_t)VoxMat::Air];
     auto T = [&](int x, int y, int z) -> float {  // OOB temperature reads as ambient
         if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
@@ -332,7 +343,7 @@ void thermal_sweep(std::vector<uint8_t>& cells, std::vector<uint8_t>& temp,
     auto C = [&](int x, int y, int z) -> float {  // OOB conductivity reads as Air
         if (x < 0 || x >= d.extent || y < 0 || y >= d.height_cells || z < 0 || z >= d.extent)
             return kAirCond;
-        return kConductivity[cells[ca_cell_index(d, x, y, z)]];
+        return kConductivity[mats.at(x, y, z)];
     };
     const int NX[6] = {1,-1,0,0,0,0}, NY[6] = {0,0,1,-1,0,0}, NZ[6] = {0,0,0,0,1,-1};
     for (int z = z0; z <= z1; ++z)
